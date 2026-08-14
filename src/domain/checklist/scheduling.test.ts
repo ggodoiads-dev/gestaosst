@@ -1,19 +1,23 @@
 import { describe, expect, it } from "vitest";
+import { formatInTimeZone } from "date-fns-tz";
 import { getScheduledTimeForDate, computeDelayMinutes, isLate } from "./scheduling";
+
+const SP_TZ = "America/Sao_Paulo";
 
 describe("getScheduledTimeForDate", () => {
   it("retorna o horário previsto todos os dias para periodicidade diária", () => {
     const schedule = { periodicity: "DIARIO" as const, timeOfDay: "07:00", daysOfWeek: null };
-    const result = getScheduledTimeForDate(schedule, new Date("2026-08-10T12:00:00"));
+    // 15:00 UTC = meio-dia em São Paulo (evita ambiguidade de fuso na entrada do teste)
+    const result = getScheduledTimeForDate(schedule, new Date("2026-08-10T15:00:00Z"));
 
-    expect(result?.getHours()).toBe(7);
-    expect(result?.getMinutes()).toBe(0);
+    expect(result).not.toBeNull();
+    expect(formatInTimeZone(result!, SP_TZ, "HH:mm")).toBe("07:00");
   });
 
   it("só gera ocorrência nos dias da semana configurados para periodicidade semanal", () => {
     const schedule = { periodicity: "SEMANAL" as const, timeOfDay: "08:00", daysOfWeek: "1,3,5" }; // seg, qua, sex
-    const monday = new Date("2026-08-10T00:00:00"); // segunda-feira
-    const tuesday = new Date("2026-08-11T00:00:00"); // terça-feira
+    const monday = new Date("2026-08-10T15:00:00Z"); // segunda-feira em São Paulo
+    const tuesday = new Date("2026-08-11T15:00:00Z"); // terça-feira em São Paulo
 
     expect(getScheduledTimeForDate(schedule, monday)).not.toBeNull();
     expect(getScheduledTimeForDate(schedule, tuesday)).toBeNull();
@@ -22,9 +26,9 @@ describe("getScheduledTimeForDate", () => {
   it("só gera ocorrência nos dias do mês configurados para periodicidade mensal", () => {
     const schedule = { periodicity: "MENSAL" as const, timeOfDay: "09:00", daysOfWeek: "1,15" };
 
-    expect(getScheduledTimeForDate(schedule, new Date("2026-08-01T00:00:00"))).not.toBeNull();
-    expect(getScheduledTimeForDate(schedule, new Date("2026-08-02T00:00:00"))).toBeNull();
-    expect(getScheduledTimeForDate(schedule, new Date("2026-08-15T00:00:00"))).not.toBeNull();
+    expect(getScheduledTimeForDate(schedule, new Date("2026-08-01T15:00:00Z"))).not.toBeNull();
+    expect(getScheduledTimeForDate(schedule, new Date("2026-08-02T15:00:00Z"))).toBeNull();
+    expect(getScheduledTimeForDate(schedule, new Date("2026-08-15T15:00:00Z"))).not.toBeNull();
   });
 });
 
