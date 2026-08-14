@@ -1,9 +1,9 @@
 import "server-only";
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import { db } from "@/server/db";
 import type { Criticality } from "@/generated/prisma/enums";
 
-const MODEL = "claude-sonnet-5";
+const MODEL = "gpt-4o";
 
 const SUPPORTED_MEDIA_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"] as const;
 type SupportedMediaType = (typeof SUPPORTED_MEDIA_TYPES)[number];
@@ -18,27 +18,30 @@ export type PhotoFinding = {
   rawResponse: string;
 };
 
-const FINDING_TOOL: Anthropic.Tool = {
-  name: "reportar_achado",
-  description: "Reporta o achado da análise visual da foto de inspeção de segurança.",
-  input_schema: {
-    type: "object",
-    properties: {
-      severity: {
-        type: "string",
-        enum: [...SEVERITIES],
-        description: "Severidade do problema identificado na foto para a segurança/operação do equipamento.",
+const FINDING_TOOL: OpenAI.Chat.Completions.ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: "reportar_achado",
+    description: "Reporta o achado da análise visual da foto de inspeção de segurança.",
+    parameters: {
+      type: "object",
+      properties: {
+        severity: {
+          type: "string",
+          enum: [...SEVERITIES],
+          description: "Severidade do problema identificado na foto para a segurança/operação do equipamento.",
+        },
+        summary: {
+          type: "string",
+          description: "Resumo objetivo em 1-2 frases do que foi identificado na foto.",
+        },
+        suggestedAction: {
+          type: "string",
+          description: "Sugestão de ação corretiva, quando aplicável.",
+        },
       },
-      summary: {
-        type: "string",
-        description: "Resumo objetivo em 1-2 frases do que foi identificado na foto.",
-      },
-      suggestedAction: {
-        type: "string",
-        description: "Sugestão de ação corretiva, quando aplicável.",
-      },
+      required: ["severity", "summary"],
     },
-    required: ["severity", "summary"],
   },
 };
 
@@ -55,27 +58,23 @@ export async function analyzePhotoFinding(params: {
   questionTitle: string;
   answerComment: string | null;
 }): Promise<PhotoFinding | null> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return null;
   if (!SUPPORTED_MEDIA_TYPES.includes(params.mimeType as SupportedMediaType)) return null;
 
   try {
-    const client = new Anthropic({ apiKey });
+    const client = new OpenAI({ apiKey });
     const base64 = params.imageBuffer.toString("base64");
 
-    const response = await client.messages.create({
+    const response = await client.chat.completions.create({
       model: MODEL,
       max_tokens: 500,
       tools: [FINDING_TOOL],
-      tool_choice: { type: "tool", name: FINDING_TOOL.name },
+      tool_choice: { type: "function", function: { name: "reportar_achado" } },
       messages: [
         {
           role: "user",
           content: [
-            {
-              type: "image",
-              source: { type: "base64", media_type: params.mimeType as SupportedMediaType, data: base64 },
-            },
             {
               type: "text",
               text: [
@@ -87,17 +86,23 @@ export async function analyzePhotoFinding(params: {
                 "Analise a foto e reporte o que for relevante para segurança ou manutenção — dano, desgaste, condição insegura — ou confirme que está tudo normal. Seja objetivo e específico sobre o que vê na imagem, sem especular além do que é visível.",
               ].join("\n"),
             },
+            {
+              type: "image_url",
+              image_url: { url: `data:${params.mimeType};base64,${base64}` },
+            },
           ],
         },
       ],
     });
 
-    const toolUse = response.content.find(
-      (block): block is Anthropic.ToolUseBlock => block.type === "tool_use",
-    );
-    if (!toolUse) return null;
+    const toolCall = response.choices[0]?.message.tool_calls?.[0];
+    if (!toolCall || toolCall.type !== "function") return null;
 
-    const input = toolUse.input as { severity?: string; summary?: string; suggestedAction?: string };
+    const input = JSON.parse(toolCall.function.arguments) as {
+      severity?: string;
+      summary?: string;
+      suggestedAction?: string;
+    };
     if (!input.summary || !SEVERITIES.includes(input.severity as Criticality)) return null;
 
     return {

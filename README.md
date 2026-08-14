@@ -115,7 +115,7 @@ Veja `.env.example`. Resumo:
 | `STORAGE_DRIVER` | `local` (padrão, disco — usado em dev) ou `blob` (Vercel Blob — usado em produção). |
 | `STORAGE_DIR` | Só usado com `STORAGE_DRIVER=local`: diretório onde fotos/anexos são salvos. |
 | `BLOB_READ_WRITE_TOKEN` | Só usado com `STORAGE_DRIVER=blob`: gerado automaticamente pelo Vercel ao conectar um Blob Store ao projeto. |
-| `ANTHROPIC_API_KEY` | Opcional — ativa o Copiloto de Inspeção (ver seção própria abaixo). Gere em [console.anthropic.com](https://console.anthropic.com). |
+| `OPENAI_API_KEY` | Opcional — ativa o Copiloto de Inspeção (ver seção própria abaixo). Gere em [platform.openai.com](https://platform.openai.com). |
 
 Nenhum segredo fica no código-fonte.
 
@@ -280,11 +280,11 @@ nunca um gráfico solto (seção 12).
 
 ## Copiloto de Inspeção (IA)
 
-Diferencial opcional: quando `ANTHROPIC_API_KEY` está configurada, toda foto
+Diferencial opcional: quando `OPENAI_API_KEY` está configurada, toda foto
 anexada a uma resposta crítica de checklist (a mesma foto já exigida pela
 regra da pergunta — seção 62) passa por análise de visão computacional
-(`src/server/services/ai-vision.service.ts`, Claude com tool use forçado
-pra devolver severidade/resumo/sugestão estruturados). O achado aparece na
+(`src/server/services/ai-vision.service.ts`, GPT-4o com function calling
+forçado pra devolver severidade/resumo/sugestão estruturados). O achado aparece na
 hora pro colaborador durante o preenchimento e é salvo como
 `AiInspectionFinding`, vinculado ao anexo.
 
