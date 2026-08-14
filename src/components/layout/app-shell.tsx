@@ -32,6 +32,7 @@ import {
   CheckCircle2,
   HardHat,
   Fingerprint,
+  Sparkles,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -73,6 +74,7 @@ const ICONS: Record<NavIconKey, LucideIcon> = {
   myPresence: CheckCircle2,
   epi: HardHat,
   jobFunctions: Fingerprint,
+  rico: Sparkles,
 };
 
 export function AppShell({

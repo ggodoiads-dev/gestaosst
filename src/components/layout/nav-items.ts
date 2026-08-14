@@ -30,7 +30,8 @@ export type NavIconKey =
   | "checklistCompliance"
   | "myPresence"
   | "epi"
-  | "jobFunctions";
+  | "jobFunctions"
+  | "rico";
 
 export type NavItem = {
   href: string;
@@ -47,7 +48,10 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
   const p = user.permissions;
   const groups: NavGroup[] = [];
 
-  const principal: NavItem[] = [{ href: "/inicio", label: "Início", icon: "dashboard" }];
+  const principal: NavItem[] = [
+    { href: "/inicio", label: "Início", icon: "dashboard" },
+    { href: "/rico", label: "Rico", icon: "rico" },
+  ];
   if (p.has(PERMISSIONS.CHECKLIST_EXECUTE)) {
     principal.push({ href: "/checklist/realizar", label: "Realizar Checklist", icon: "checklist" });
   }
