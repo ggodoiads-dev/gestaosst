@@ -1,22 +1,28 @@
-import { format, formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { formatInTimeZone } from "date-fns-tz";
 
-/** Fuso horário de referência da aplicação (seção 60 do documento: operação no Brasil). */
+/**
+ * Fuso horário de referência da aplicação (seção 60 do documento: operação no Brasil).
+ * Toda formatação de data/hora exibida ao usuário passa por ele explicitamente — o
+ * runtime do servidor roda em UTC em produção (Vercel), então formatar sem fixar o
+ * fuso mostraria a hora errada (ex: 16:00 UTC em vez de 13:00 em São Paulo).
+ */
 export const APP_TIMEZONE = "America/Sao_Paulo";
 
 export function formatDateTime(date: Date | string | null | undefined): string {
   if (!date) return "—";
-  return format(new Date(date), "dd/MM/yyyy HH:mm", { locale: ptBR });
+  return formatInTimeZone(new Date(date), APP_TIMEZONE, "dd/MM/yyyy HH:mm", { locale: ptBR });
 }
 
 export function formatDate(date: Date | string | null | undefined): string {
   if (!date) return "—";
-  return format(new Date(date), "dd/MM/yyyy", { locale: ptBR });
+  return formatInTimeZone(new Date(date), APP_TIMEZONE, "dd/MM/yyyy", { locale: ptBR });
 }
 
 export function formatTime(date: Date | string | null | undefined): string {
   if (!date) return "—";
-  return format(new Date(date), "HH:mm", { locale: ptBR });
+  return formatInTimeZone(new Date(date), APP_TIMEZONE, "HH:mm", { locale: ptBR });
 }
 
 export function formatRelative(date: Date | string | null | undefined): string {
