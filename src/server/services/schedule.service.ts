@@ -1,0 +1,260 @@
+import "server-only";
+import { db } from "@/server/db";
+import { recordAudit } from "@/server/services/audit";
+import { getDayStatus, type ScheduleDayComputedStatus } from "@/domain/schedule/schedule-calendar";
+import type { CurrentUser } from "@/server/auth/current-user";
+import { requirePermission } from "@/server/auth/current-user";
+import { PERMISSIONS } from "@/domain/shared/permissions";
+import type { ScheduleDayNoteStatus } from "@/generated/prisma/enums";
+
+export type ScheduleTypeInput = {
+  name: string;
+  workDays: number;
+  restDays: number;
+};
+
+export function listScheduleTypes(user: CurrentUser) {
+  requirePermission(user, PERMISSIONS.SCHEDULE_MANAGE);
+  return db.scheduleType.findMany({ orderBy: { name: "asc" } });
+}
+
+export async function createScheduleType(user: CurrentUser, data: ScheduleTypeInput) {
+  requirePermission(user, PERMISSIONS.SCHEDULE_MANAGE);
+  const type = await db.scheduleType.create({ data });
+  await recordAudit({
+    userId: user.id,
+    action: "CREATE",
+    entityType: "ScheduleType",
+    entityId: type.id,
+    newValue: data,
+  });
+  return type;
+}
+
+export async function updateScheduleType(user: CurrentUser, id: string, data: ScheduleTypeInput) {
+  requirePermission(user, PERMISSIONS.SCHEDULE_MANAGE);
+  const before = await db.scheduleType.findUniqueOrThrow({ where: { id } });
+  const type = await db.scheduleType.update({ where: { id }, data });
+  await recordAudit({
+    userId: user.id,
+    action: "UPDATE",
+    entityType: "ScheduleType",
+    entityId: id,
+    previousValue: before,
+    newValue: data,
+  });
+  return type;
+}
+
+export async function setScheduleTypeActive(user: CurrentUser, id: string, active: boolean) {
+  requirePermission(user, PERMISSIONS.SCHEDULE_MANAGE);
+  const before = await db.scheduleType.findUniqueOrThrow({ where: { id } });
+  const type = await db.scheduleType.update({ where: { id }, data: { active } });
+  await recordAudit({
+    userId: user.id,
+    action: active ? "UPDATE" : "CANCEL",
+    entityType: "ScheduleType",
+    entityId: id,
+    previousValue: { active: before.active },
+    newValue: { active },
+  });
+  return type;
+}
+
+export type TurnoInput = {
+  name: string;
+  scheduleTypeId: string;
+  startDate: Date;
+  startTime?: string | null;
+  endTime?: string | null;
+};
+
+/** Turnos ativos, com o tipo de escala já carregado — usado tanto na grade quanto no formulário de colaborador. */
+export function listTurnos(user: CurrentUser) {
+  requirePermission(user, PERMISSIONS.SCHEDULE_MANAGE);
+  return db.turno.findMany({ where: { active: true }, include: { scheduleType: true }, orderBy: { name: "asc" } });
+}
+
+export async function createTurno(user: CurrentUser, data: TurnoInput) {
+  requirePermission(user, PERMISSIONS.SCHEDULE_MANAGE);
+
+  const turno = await db.$transaction(async (tx) => {
+    const created = await tx.turno.create({ data: { ...data, createdById: user.id } });
+    await recordAudit(
+      { userId: user.id, action: "CREATE", entityType: "Turno", entityId: created.id, newValue: data },
+      tx,
+    );
+    return created;
+  });
+
+  return turno;
+}
+
+export async function updateTurno(user: CurrentUser, id: string, data: TurnoInput) {
+  requirePermission(user, PERMISSIONS.SCHEDULE_MANAGE);
+  const before = await db.turno.findUniqueOrThrow({ where: { id } });
+
+  const turno = await db.$transaction(async (tx) => {
+    const updated = await tx.turno.update({ where: { id }, data });
+    await recordAudit(
+      { userId: user.id, action: "UPDATE", entityType: "Turno", entityId: id, previousValue: before, newValue: data },
+      tx,
+    );
+    return updated;
+  });
+
+  return turno;
+}
+
+/** Atribui (ou remove, com turnoId null) o turno de um colaborador — usado no atalho da grade de escalas. */
+export async function setCollaboratorTurno(user: CurrentUser, collaboratorId: string, turnoId: string | null) {
+  requirePermission(user, PERMISSIONS.SCHEDULE_MANAGE);
+  const before = await db.collaborator.findUniqueOrThrow({ where: { id: collaboratorId } });
+  const collaborator = await db.collaborator.update({ where: { id: collaboratorId }, data: { turnoId } });
+  await recordAudit({
+    userId: user.id,
+    action: "UPDATE",
+    entityType: "Collaborator",
+    entityId: collaboratorId,
+    previousValue: { turnoId: before.turnoId },
+    newValue: { turnoId },
+  });
+  return collaborator;
+}
+
+export type ScheduleDayNoteInput = {
+  collaboratorId: string;
+  date: Date;
+  overrideStatus: ScheduleDayComputedStatus;
+  status?: ScheduleDayNoteStatus | null;
+  notes: string;
+};
+
+export async function upsertScheduleDayNote(user: CurrentUser, data: ScheduleDayNoteInput) {
+  requirePermission(user, PERMISSIONS.SCHEDULE_MANAGE);
+
+  return db.scheduleDayNote.upsert({
+    where: { collaboratorId_date: { collaboratorId: data.collaboratorId, date: data.date } },
+    update: { overrideStatus: data.overrideStatus, status: data.status, notes: data.notes },
+    create: {
+      collaboratorId: data.collaboratorId,
+      date: data.date,
+      overrideStatus: data.overrideStatus,
+      status: data.status,
+      notes: data.notes,
+      createdById: user.id,
+    },
+  });
+}
+
+export async function deleteScheduleDayNote(user: CurrentUser, id: string) {
+  requirePermission(user, PERMISSIONS.SCHEDULE_MANAGE);
+  await db.scheduleDayNote.delete({ where: { id } });
+}
+
+/** Anexa um arquivo (ex: atestado) a uma observação de dia — mantém histórico, nunca substitui. */
+export async function attachScheduleDayNoteFile(
+  user: CurrentUser,
+  dayNoteId: string,
+  file: { filename: string; path: string; mimeType: string; size: number },
+) {
+  requirePermission(user, PERMISSIONS.SCHEDULE_MANAGE);
+  return db.attachment.create({
+    data: {
+      filename: file.filename,
+      path: file.path,
+      mimeType: file.mimeType,
+      size: file.size,
+      context: "ESCALA",
+      scheduleDayNoteId: dayNoteId,
+      uploadedById: user.id,
+    },
+  });
+}
+
+export type DayCell = {
+  date: Date;
+  computed: ScheduleDayComputedStatus;
+  note:
+    | {
+        id: string;
+        status: ScheduleDayNoteStatus | null;
+        notes: string;
+        overrideStatus: ScheduleDayComputedStatus;
+        attachments: { id: string; filename: string; path: string }[];
+      }
+    | null;
+};
+
+/** Chave local (não UTC) de um dia, para casar `ScheduleDayNote.date` com os dias da grade
+ * independente do horário-do-dia gravado — evita o off-by-one de `toISOString()` em fusos
+ * atrás de UTC (mesmo cuidado de `parseDateOnly` em `src/lib/dates.ts`). */
+function localDateKey(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+/** Grade mensal: para cada colaborador ativo, o status do turno (ou a exceção lançada) de cada dia do mês. */
+export async function getScheduleGrid(user: CurrentUser, params: { month: number; year: number; areaId?: string }) {
+  requirePermission(user, PERMISSIONS.SCHEDULE_MANAGE);
+
+  const monthStart = new Date(params.year, params.month - 1, 1);
+  const daysInMonth = new Date(params.year, params.month, 0).getDate();
+  const nextMonthStart = new Date(params.year, params.month, 1); // limite exclusivo
+
+  const collaborators = await db.collaborator.findMany({
+    where: { active: true, areaId: params.areaId || undefined },
+    include: { turno: { include: { scheduleType: true } } },
+    orderBy: { name: "asc" },
+  });
+
+  const collaboratorIds = collaborators.map((c) => c.id);
+
+  const notes =
+    collaboratorIds.length > 0
+      ? await db.scheduleDayNote.findMany({
+          where: { collaboratorId: { in: collaboratorIds }, date: { gte: monthStart, lt: nextMonthStart } },
+          include: { attachments: { orderBy: { uploadedAt: "desc" } } },
+        })
+      : [];
+
+  const notesByKey = new Map<string, (typeof notes)[number]>();
+  for (const note of notes) {
+    notesByKey.set(`${note.collaboratorId}-${localDateKey(note.date)}`, note);
+  }
+
+  const rows = collaborators.map((collaborator) => {
+    const days: DayCell[] = [];
+    for (let day = 1; day <= daysInMonth; day++) {
+      const date = new Date(params.year, params.month - 1, day);
+      const note = notesByKey.get(`${collaborator.id}-${localDateKey(date)}`) ?? null;
+      const computed = collaborator.turno
+        ? getDayStatus(
+            date,
+            collaborator.turno.startDate,
+            collaborator.turno.scheduleType.workDays,
+            collaborator.turno.scheduleType.restDays,
+          )
+        : "FOLGA";
+      days.push({
+        date,
+        computed: note ? note.overrideStatus : computed,
+        note: note
+          ? {
+              id: note.id,
+              status: note.status,
+              notes: note.notes,
+              overrideStatus: note.overrideStatus,
+              attachments: note.attachments.map((a) => ({ id: a.id, filename: a.filename, path: a.path })),
+            }
+          : null,
+      });
+    }
+
+    return { collaborator, turno: collaborator.turno, days };
+  });
+
+  return { rows, daysInMonth };
+}

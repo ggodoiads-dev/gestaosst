@@ -1,0 +1,328 @@
+import "server-only";
+import { addDays, addMonths, startOfDay, startOfMonth } from "date-fns";
+import { db } from "@/server/db";
+import { recordAudit } from "@/server/services/audit";
+import { getDayStatus } from "@/domain/schedule/schedule-calendar";
+import type { CurrentUser } from "@/server/auth/current-user";
+import { requirePermission, ForbiddenError } from "@/server/auth/current-user";
+import { PERMISSIONS } from "@/domain/shared/permissions";
+
+export type ProductivityEntryInput = {
+  collaboratorId: string;
+  date: Date;
+  activityId: string;
+  quantity?: number | null;
+  notes?: string | null;
+};
+
+/** Colaborador vinculado ao usuário logado (via `Collaborator.userId`), se houver. */
+export function getMyCollaboratorProfile(user: CurrentUser) {
+  return db.collaborator.findUnique({ where: { userId: user.id } });
+}
+
+/** Libera acesso a dados de produtividade de `collaboratorId` pra quem gerencia produtividade
+ * de qualquer colaborador (`PRODUCTIVITY_MANAGE`) OU pro próprio colaborador logado lançando a
+ * própria produção (`PRODUCTIVITY_SELF_LOG`, só quando o registro é o dele mesmo). */
+async function assertProductivityAccess(user: CurrentUser, collaboratorId: string) {
+  if (user.permissions.has(PERMISSIONS.PRODUCTIVITY_MANAGE)) return;
+  if (user.permissions.has(PERMISSIONS.PRODUCTIVITY_SELF_LOG)) {
+    const own = await getMyCollaboratorProfile(user);
+    if (own?.id === collaboratorId) return;
+  }
+  throw new ForbiddenError();
+}
+
+export async function createProductivityEntry(user: CurrentUser, data: ProductivityEntryInput) {
+  await assertProductivityAccess(user, data.collaboratorId);
+
+  const entry = await db.$transaction(async (tx) => {
+    const created = await tx.productivityEntry.create({ data: { ...data, createdById: user.id } });
+    await recordAudit(
+      { userId: user.id, action: "CREATE", entityType: "ProductivityEntry", entityId: created.id, newValue: data },
+      tx,
+    );
+    return created;
+  });
+
+  return entry;
+}
+
+export async function deleteProductivityEntry(user: CurrentUser, id: string) {
+  const entry = await db.productivityEntry.findUniqueOrThrow({ where: { id }, select: { collaboratorId: true } });
+  await assertProductivityAccess(user, entry.collaboratorId);
+  await db.productivityEntry.delete({ where: { id } });
+}
+
+function localDateKey(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+/** Monta a grade de dias (trabalho/folga + lançamentos) de um colaborador entre duas datas
+ * (ambas inclusive), sem checar permissão — usado pelas funções públicas abaixo. */
+async function buildCollaboratorDays(collaboratorId: string, from: Date, toInclusive: Date) {
+  const rangeStart = startOfDay(from);
+  const rangeEndExclusive = addDays(startOfDay(toInclusive), 1);
+
+  const [collaborator, notes, entries] = await Promise.all([
+    db.collaborator.findUniqueOrThrow({
+      where: { id: collaboratorId },
+      include: { turno: { include: { scheduleType: true } } },
+    }),
+    db.scheduleDayNote.findMany({
+      where: { collaboratorId, date: { gte: rangeStart, lt: rangeEndExclusive } },
+    }),
+    db.productivityEntry.findMany({
+      where: { collaboratorId, date: { gte: rangeStart, lt: rangeEndExclusive } },
+      include: { activity: true },
+      orderBy: { createdAt: "asc" },
+    }),
+  ]);
+
+  const notesByKey = new Map(notes.map((n) => [localDateKey(n.date), n]));
+  const entriesByKey = new Map<string, typeof entries>();
+  for (const entry of entries) {
+    const key = localDateKey(entry.date);
+    entriesByKey.set(key, [...(entriesByKey.get(key) ?? []), entry]);
+  }
+
+  const days = [];
+  for (let date = rangeStart; date < rangeEndExclusive; date = addDays(date, 1)) {
+    const key = localDateKey(date);
+    const note = notesByKey.get(key) ?? null;
+    const computed = collaborator.turno
+      ? getDayStatus(date, collaborator.turno.startDate, collaborator.turno.scheduleType.workDays, collaborator.turno.scheduleType.restDays)
+      : "FOLGA";
+    days.push({
+      date,
+      status: note ? note.overrideStatus : computed,
+      entries: entriesByKey.get(key) ?? [],
+    });
+  }
+
+  return { collaborator, days };
+}
+
+/** Relatório de um colaborador num intervalo qualquer (dia/semana/mês, à escolha da tela) —
+ * o que ele fez (lançamentos) e o que não fez (dias de trabalho sem nenhum lançamento). */
+export async function getProductivityRange(
+  user: CurrentUser,
+  params: { collaboratorId: string; from: Date; to: Date },
+) {
+  await assertProductivityAccess(user, params.collaboratorId);
+  const { collaborator, days } = await buildCollaboratorDays(params.collaboratorId, params.from, params.to);
+
+  const workDays = days.filter((d) => d.status === "TRABALHO");
+  const daysWithEntries = workDays.filter((d) => d.entries.length > 0);
+
+  return {
+    collaborator,
+    days,
+    summary: {
+      workDays: workDays.length,
+      daysWithEntries: daysWithEntries.length,
+      daysMissing: workDays.length - daysWithEntries.length,
+      totalEntries: days.reduce((sum, d) => sum + d.entries.length, 0),
+    },
+  };
+}
+
+type PeriodStats = {
+  workDays: number;
+  collaboratorsScheduled: number;
+  collaboratorsLogged: number;
+  totalEntries: number;
+  byActivity: { activityId: string; activityName: string; unit: string | null; count: number; totalQuantity: number }[];
+  missingCollaborators: { id: string; name: string }[];
+};
+
+async function computePeriodStats(from: Date, toInclusive: Date): Promise<PeriodStats> {
+  const rangeStart = startOfDay(from);
+  const rangeEndExclusive = addDays(startOfDay(toInclusive), 1);
+
+  const [collaborators, notes, entries] = await Promise.all([
+    db.collaborator.findMany({
+      where: { active: true },
+      include: { turno: { include: { scheduleType: true } } },
+    }),
+    db.scheduleDayNote.findMany({ where: { date: { gte: rangeStart, lt: rangeEndExclusive } } }),
+    db.productivityEntry.findMany({
+      where: { date: { gte: rangeStart, lt: rangeEndExclusive } },
+      include: { activity: true },
+    }),
+  ]);
+
+  const notesByKey = new Map(notes.map((n) => [`${n.collaboratorId}|${localDateKey(n.date)}`, n]));
+
+  let workDays = 0;
+  const scheduledCollaboratorIds = new Set<string>();
+  for (const c of collaborators) {
+    for (let date = rangeStart; date < rangeEndExclusive; date = addDays(date, 1)) {
+      const note = notesByKey.get(`${c.id}|${localDateKey(date)}`);
+      const status = note
+        ? note.overrideStatus
+        : c.turno
+          ? getDayStatus(date, c.turno.startDate, c.turno.scheduleType.workDays, c.turno.scheduleType.restDays)
+          : "FOLGA";
+      if (status === "TRABALHO") {
+        workDays++;
+        scheduledCollaboratorIds.add(c.id);
+      }
+    }
+  }
+
+  const byActivityMap = new Map<string, PeriodStats["byActivity"][number]>();
+  for (const e of entries) {
+    const acc = byActivityMap.get(e.activityId) ?? {
+      activityId: e.activity.id,
+      activityName: e.activity.name,
+      unit: e.activity.unit,
+      count: 0,
+      totalQuantity: 0,
+    };
+    acc.count += 1;
+    acc.totalQuantity += e.quantity ?? 0;
+    byActivityMap.set(e.activityId, acc);
+  }
+
+  const loggedCollaboratorIds = new Set(entries.map((e) => e.collaboratorId));
+
+  return {
+    workDays,
+    collaboratorsScheduled: scheduledCollaboratorIds.size,
+    collaboratorsLogged: loggedCollaboratorIds.size,
+    totalEntries: entries.length,
+    byActivity: Array.from(byActivityMap.values()).sort((a, b) => b.count - a.count),
+    missingCollaborators: collaborators
+      .filter((c) => scheduledCollaboratorIds.has(c.id) && !loggedCollaboratorIds.has(c.id))
+      .map((c) => ({ id: c.id, name: c.name })),
+  };
+}
+
+/** Visão geral de produtividade (hoje + mês corrente) entre todos os colaboradores ativos —
+ * quantos estavam escalados pra trabalhar, quantos lançaram alguma produção, e o total por
+ * atividade. Base dos cartões e da tabela no topo da tela de Produtividade. */
+export async function getProductivityDashboard(user: CurrentUser, params: { date?: Date } = {}) {
+  requirePermission(user, PERMISSIONS.PRODUCTIVITY_MANAGE);
+  const date = params.date ?? new Date();
+  const dayStart = startOfDay(date);
+  const monthStart = startOfMonth(date);
+  const monthEndInclusive = addDays(startOfMonth(addMonths(date, 1)), -1);
+
+  const [today, month] = await Promise.all([
+    computePeriodStats(dayStart, dayStart),
+    computePeriodStats(monthStart, monthEndInclusive),
+  ]);
+
+  return { date: dayStart, today, month };
+}
+
+// =========================================================================
+// Metas mensais
+// =========================================================================
+
+export type ProductivityGoalInput = {
+  collaboratorId: string;
+  activityId: string;
+  month: number;
+  year: number;
+  targetQuantity: number;
+};
+
+/** Cria ou atualiza a meta do colaborador pra aquela atividade naquele mês (uma por combinação). */
+export async function upsertProductivityGoal(user: CurrentUser, data: ProductivityGoalInput) {
+  requirePermission(user, PERMISSIONS.PRODUCTIVITY_MANAGE);
+
+  const goal = await db.$transaction(async (tx) => {
+    const upserted = await tx.productivityGoal.upsert({
+      where: {
+        collaboratorId_activityId_month_year: {
+          collaboratorId: data.collaboratorId,
+          activityId: data.activityId,
+          month: data.month,
+          year: data.year,
+        },
+      },
+      create: { ...data, createdById: user.id },
+      update: { targetQuantity: data.targetQuantity },
+    });
+    await recordAudit(
+      { userId: user.id, action: "CREATE", entityType: "ProductivityGoal", entityId: upserted.id, newValue: data },
+      tx,
+    );
+    return upserted;
+  });
+
+  return goal;
+}
+
+export async function deleteProductivityGoal(user: CurrentUser, id: string) {
+  requirePermission(user, PERMISSIONS.PRODUCTIVITY_MANAGE);
+  await db.productivityGoal.delete({ where: { id } });
+}
+
+/** Soma os lançamentos de um colaborador por atividade dentro do mês — usado pra calcular
+ * o progresso das metas (nunca gravado como valor fixo, sempre recalculado dos lançamentos). */
+async function sumEntriesByActivity(month: number, year: number, collaboratorId?: string) {
+  const monthStart = new Date(year, month - 1, 1);
+  const nextMonthStart = new Date(year, month, 1);
+  const grouped = await db.productivityEntry.groupBy({
+    by: ["collaboratorId", "activityId"],
+    where: { collaboratorId, date: { gte: monthStart, lt: nextMonthStart } },
+    _sum: { quantity: true },
+  });
+  return new Map(grouped.map((g) => [`${g.collaboratorId}|${g.activityId}`, g._sum.quantity ?? 0]));
+}
+
+/** Metas do mês de um único colaborador, já com o progresso (quanto ele produziu de cada
+ * atividade no mês vs. a meta definida). */
+export async function getProductivityGoalsProgress(
+  user: CurrentUser,
+  params: { collaboratorId: string; month: number; year: number },
+) {
+  await assertProductivityAccess(user, params.collaboratorId);
+
+  const [goals, achievedByKey] = await Promise.all([
+    db.productivityGoal.findMany({
+      where: { collaboratorId: params.collaboratorId, month: params.month, year: params.year },
+      include: { activity: true },
+      orderBy: { activity: { name: "asc" } },
+    }),
+    sumEntriesByActivity(params.month, params.year, params.collaboratorId),
+  ]);
+
+  return goals.map((goal) => {
+    const achieved = achievedByKey.get(`${goal.collaboratorId}|${goal.activityId}`) ?? 0;
+    return {
+      goal,
+      achieved,
+      percent: goal.targetQuantity > 0 ? Math.round((achieved / goal.targetQuantity) * 100) : 0,
+    };
+  });
+}
+
+/** Metas do mês de todos os colaboradores, com progresso — base da tabela "Metas do mês" no
+ * topo da tela de Produtividade (visão consolidada, sem precisar escolher um colaborador). */
+export async function getAllProductivityGoalsProgress(user: CurrentUser, params: { month: number; year: number }) {
+  requirePermission(user, PERMISSIONS.PRODUCTIVITY_MANAGE);
+
+  const [goals, achievedByKey] = await Promise.all([
+    db.productivityGoal.findMany({
+      where: { month: params.month, year: params.year },
+      include: { activity: true, collaborator: true },
+      orderBy: [{ collaborator: { name: "asc" } }, { activity: { name: "asc" } }],
+    }),
+    sumEntriesByActivity(params.month, params.year),
+  ]);
+
+  return goals.map((goal) => {
+    const achieved = achievedByKey.get(`${goal.collaboratorId}|${goal.activityId}`) ?? 0;
+    return {
+      goal,
+      achieved,
+      percent: goal.targetQuantity > 0 ? Math.round((achieved / goal.targetQuantity) * 100) : 0,
+    };
+  });
+}

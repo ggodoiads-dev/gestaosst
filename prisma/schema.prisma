@@ -1,0 +1,1125 @@
+// Schema do Sistema de Gestão de Checklists, Inspeções e Equipamentos.
+// PostgreSQL (Railway em produção; também usado em desenvolvimento — ver README).
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// Contador atômico para geração de códigos amigáveis (PE-001, NC-000001, EXE-000001).
+model Sequence {
+  key   String @id
+  value Int    @default(0)
+}
+
+// =========================================================================
+// Identidade, perfis e permissões
+// =========================================================================
+
+model Role {
+  id          String  @id @default(uuid())
+  key         String  @unique // ex: COLABORADOR, LIDER_SUPERVISOR, GESTOR, ADMINISTRADOR
+  name        String
+  description String?
+
+  users           User[]
+  rolePermissions RolePermission[]
+
+  createdAt DateTime @default(now())
+}
+
+model Permission {
+  id          String @id @default(uuid())
+  key         String @unique // ex: equipment.manage, checklist.execute
+  description String
+
+  rolePermissions RolePermission[]
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+}
+
+model User {
+  id           String    @id @default(uuid())
+  name         String
+  email        String    @unique
+  passwordHash String
+  roleId       String
+  unitId       String?
+  active       Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  lastLoginAt  DateTime?
+
+  role Role  @relation(fields: [roleId], references: [id])
+  unit Unit? @relation(fields: [unitId], references: [id])
+
+  userAreas UserArea[]
+
+  responsibleEquipments  Equipment[]            @relation("EquipmentResponsible")
+  registeredEquipments   Equipment[]            @relation("EquipmentRegisteredBy")
+  areaTransfersMade      EquipmentAreaHistory[]
+  checklistTemplates     ChecklistTemplate[]    @relation("TemplateCreatedBy")
+  checklistVersionsPub   ChecklistVersion[]     @relation("VersionPublishedBy")
+  checklistExecutions    ChecklistExecution[]   @relation("ExecutionExecutedBy")
+  invalidatedExecutions  ChecklistExecution[]   @relation("ExecutionInvalidatedBy")
+  identifiedNC           Nonconformity[]        @relation("NCIdentifiedBy")
+  responsibleNC          Nonconformity[]        @relation("NCResponsible")
+  createdActionPlans     ActionPlan[]           @relation("ActionPlanCreatedBy")
+  responsibleActionItems ActionItem[]           @relation("ActionItemResponsible")
+  completedActionItems   ActionItem[]           @relation("ActionItemCompletedBy")
+  validatedActionItems   ActionItem[]           @relation("ActionItemValidatedBy")
+  equipmentEvents        EquipmentEvent[]       @relation("EventUser")
+  auditLogs              AuditLog[]
+  uploadedAttachments    Attachment[]
+
+  accidentsInvestigated       Accident[]            @relation("AccidentInvestigatedBy")
+  accidentsReported           Accident[]            @relation("AccidentReportedBy")
+  accidentActionsResponsible  AccidentAction[]      @relation("AccidentActionResponsibleUser")
+  qualificationRecordsCreated QualificationRecord[] @relation("QualificationCreatedBy")
+  turnosCreated               Turno[]               @relation("TurnoCreatedBy")
+  scheduleDayNotesCreated     ScheduleDayNote[]     @relation("ScheduleDayNoteCreatedBy")
+  productivityEntriesCreated  ProductivityEntry[]   @relation("ProductivityCreatedBy")
+  productivityGoalsCreated    ProductivityGoal[]    @relation("ProductivityGoalCreatedBy")
+  epiDeliveriesCreated        EpiDelivery[]         @relation("EpiDeliveryCreatedBy")
+  collaboratorProfile         Collaborator?
+
+  @@index([roleId])
+}
+
+model UserArea {
+  userId String
+  areaId String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  area Area @relation(fields: [areaId], references: [id], onDelete: Cascade)
+
+  @@id([userId, areaId])
+}
+
+// =========================================================================
+// Estrutura organizacional
+// =========================================================================
+
+model Unit {
+  id     String  @id @default(uuid())
+  name   String
+  code   String  @unique
+  active Boolean @default(true)
+
+  areas      Area[]
+  users      User[]
+  equipments Equipment[]
+  createdAt  DateTime    @default(now())
+}
+
+model Area {
+  id     String  @id @default(uuid())
+  unitId String
+  name   String
+  code   String  @unique
+  sector String?
+  active Boolean @default(true)
+
+  unit Unit @relation(fields: [unitId], references: [id])
+
+  userAreas       UserArea[]
+  equipments      Equipment[]
+  areaHistoryFrom EquipmentAreaHistory[] @relation("AreaFrom")
+  areaHistoryTo   EquipmentAreaHistory[] @relation("AreaTo")
+  nonconformities Nonconformity[]
+  collaborators   Collaborator[]
+  accidents       Accident[]
+
+  createdAt DateTime @default(now())
+
+  @@index([unitId])
+}
+
+// =========================================================================
+// Equipamentos
+// =========================================================================
+
+model EquipmentType {
+  id          String  @id @default(uuid())
+  name        String
+  code        String  @unique
+  description String?
+
+  equipments         Equipment[]
+  checklistTemplates ChecklistTemplate[]
+
+  createdAt DateTime @default(now())
+}
+
+enum EquipmentStatus {
+  LIBERADO
+  LIBERADO_COM_OBSERVACAO
+  RESTRITO
+  BLOQUEADO
+  EM_MANUTENCAO
+  INATIVO
+}
+
+enum Criticality {
+  BAIXA
+  MEDIA
+  ALTA
+  CRITICA
+}
+
+model Equipment {
+  id             String          @id @default(uuid())
+  code           String          @unique // código amigável, ex: PE-001
+  assetTag       String? // patrimônio
+  name           String
+  typeId         String
+  manufacturer   String?
+  model          String?
+  serialNumber   String?
+  unitId         String
+  areaId         String
+  sector         String?
+  responsibleId  String?
+  status         EquipmentStatus @default(LIBERADO)
+  criticality    Criticality     @default(MEDIA)
+  active         Boolean         @default(true)
+  qrToken        String          @unique @default(uuid())
+  notes          String?
+  registeredById String
+  registeredAt   DateTime        @default(now())
+
+  type         EquipmentType @relation(fields: [typeId], references: [id])
+  unit         Unit          @relation(fields: [unitId], references: [id])
+  area         Area          @relation(fields: [areaId], references: [id])
+  responsible  User?         @relation("EquipmentResponsible", fields: [responsibleId], references: [id])
+  registeredBy User          @relation("EquipmentRegisteredBy", fields: [registeredById], references: [id])
+
+  areaHistory     EquipmentAreaHistory[]
+  assignments     EquipmentChecklistAssignment[]
+  schedules       ChecklistSchedule[]
+  executions      ChecklistExecution[]
+  nonconformities Nonconformity[]
+  events          EquipmentEvent[]
+  attachments     Attachment[]
+
+  @@index([typeId])
+  @@index([areaId])
+  @@index([status])
+  @@index([criticality])
+}
+
+model EquipmentAreaHistory {
+  id             String   @id @default(uuid())
+  equipmentId    String
+  previousAreaId String?
+  newAreaId      String
+  changedById    String
+  changedAt      DateTime @default(now())
+  reason         String?
+
+  equipment    Equipment @relation(fields: [equipmentId], references: [id])
+  previousArea Area?     @relation("AreaFrom", fields: [previousAreaId], references: [id])
+  newArea      Area      @relation("AreaTo", fields: [newAreaId], references: [id])
+  changedBy    User      @relation(fields: [changedById], references: [id])
+
+  @@index([equipmentId])
+}
+
+// =========================================================================
+// Modelos de checklist, versionamento e perguntas
+// =========================================================================
+
+enum TemplateStatus {
+  RASCUNHO
+  PUBLICADO
+  ARQUIVADO
+}
+
+model ChecklistTemplate {
+  id              String         @id @default(uuid())
+  name            String
+  description     String?
+  equipmentTypeId String
+  status          TemplateStatus @default(RASCUNHO)
+  createdById     String
+  createdAt       DateTime       @default(now())
+
+  equipmentType EquipmentType @relation(fields: [equipmentTypeId], references: [id])
+  createdBy     User          @relation("TemplateCreatedBy", fields: [createdById], references: [id])
+
+  versions    ChecklistVersion[]
+  assignments EquipmentChecklistAssignment[]
+  schedules   ChecklistSchedule[]
+
+  @@index([equipmentTypeId])
+}
+
+enum Periodicity {
+  POR_TURNO
+  DIARIO
+  SEMANAL
+  MENSAL
+  ANTES_DO_USO
+  DEPOIS_DO_USO
+  PERSONALIZADO
+}
+
+enum VersionStatus {
+  RASCUNHO
+  ATIVA
+  RETIRADA
+}
+
+model ChecklistVersion {
+  id            String        @id @default(uuid())
+  templateId    String
+  versionNumber Int
+  periodicity   Periodicity
+  status        VersionStatus @default(RASCUNHO)
+  effectiveFrom DateTime?
+  publishedById String?
+  publishedAt   DateTime?
+  createdAt     DateTime      @default(now())
+
+  template    ChecklistTemplate @relation(fields: [templateId], references: [id])
+  publishedBy User?             @relation("VersionPublishedBy", fields: [publishedById], references: [id])
+
+  questions  ChecklistQuestion[]
+  executions ChecklistExecution[]
+  schedules  ChecklistSchedule[]
+
+  @@unique([templateId, versionNumber])
+  @@index([templateId])
+}
+
+enum QuestionType {
+  CONFORME_NAO_CONFORME
+  SIM_NAO
+  BOM_REGULAR_RUIM
+  MULTIPLA_ESCOLHA
+  SELECAO_UNICA
+  TEXTO_CURTO
+  TEXTO_LONGO
+  NUMERO
+  DATA
+  FOTO
+  CONFIRMACAO
+}
+
+model ChecklistQuestion {
+  id                 String       @id @default(uuid())
+  versionId          String
+  order              Int
+  title              String
+  description        String?
+  type               QuestionType
+  required           Boolean      @default(true)
+  allowNotApplicable Boolean      @default(false)
+  guidance           String?
+
+  version ChecklistVersion @relation(fields: [versionId], references: [id])
+
+  options ChecklistQuestionOption[]
+  rules   QuestionRule[]
+  answers ChecklistAnswer[]
+
+  @@index([versionId])
+}
+
+model ChecklistQuestionOption {
+  id         String @id @default(uuid())
+  questionId String
+  label      String
+  value      String
+  order      Int
+
+  question ChecklistQuestion @relation(fields: [questionId], references: [id])
+  rules    QuestionRule[]
+
+  @@index([questionId])
+}
+
+model QuestionRule {
+  id                   String           @id @default(uuid())
+  questionId           String
+  triggerValue         String // valor de resposta (ou id de opção) que dispara a regra
+  triggerOptionId      String?
+  isCritical           Boolean          @default(false)
+  requiresComment      Boolean          @default(false)
+  requiresPhoto        Boolean          @default(false)
+  createsNonconformity Boolean          @default(false)
+  blocksEquipment      Boolean          @default(false)
+  newEquipmentStatus   EquipmentStatus?
+  severity             Criticality?
+  faultCategoryId      String?
+
+  question      ChecklistQuestion        @relation(fields: [questionId], references: [id])
+  triggerOption ChecklistQuestionOption? @relation(fields: [triggerOptionId], references: [id])
+  faultCategory FaultCategory?           @relation(fields: [faultCategoryId], references: [id])
+
+  @@index([questionId])
+}
+
+model FaultCategory {
+  id          String  @id @default(uuid())
+  name        String  @unique
+  description String?
+
+  rules           QuestionRule[]
+  nonconformities Nonconformity[]
+}
+
+// =========================================================================
+// Vínculo equipamento x checklist, agenda/periodicidade
+// =========================================================================
+
+model EquipmentChecklistAssignment {
+  id          String  @id @default(uuid())
+  equipmentId String
+  templateId  String
+  active      Boolean @default(true)
+
+  equipment Equipment         @relation(fields: [equipmentId], references: [id])
+  template  ChecklistTemplate @relation(fields: [templateId], references: [id])
+
+  @@unique([equipmentId, templateId])
+}
+
+model ChecklistSchedule {
+  id          String      @id @default(uuid())
+  equipmentId String
+  templateId  String
+  versionId   String
+  periodicity Periodicity
+  timeOfDay   String? // HH:mm, horário previsto no dia
+  daysOfWeek  String? // CSV de 0-6 quando semanal/personalizado
+  active      Boolean     @default(true)
+
+  equipment Equipment         @relation(fields: [equipmentId], references: [id])
+  template  ChecklistTemplate @relation(fields: [templateId], references: [id])
+  version   ChecklistVersion  @relation(fields: [versionId], references: [id])
+
+  @@index([equipmentId])
+}
+
+// =========================================================================
+// Execução do checklist
+// =========================================================================
+
+enum ExecutionStatus {
+  EM_ANDAMENTO
+  CONCLUIDO
+  INVALIDADO
+}
+
+enum ExecutionResult {
+  LIBERADO
+  LIBERADO_COM_OBSERVACAO
+  RESTRITO
+  BLOQUEADO
+}
+
+model ChecklistExecution {
+  id                 String           @id @default(uuid())
+  code               String           @unique // ex: EXE-000001
+  equipmentId        String
+  checklistVersionId String
+  executedById       String
+  status             ExecutionStatus  @default(EM_ANDAMENTO)
+  result             ExecutionResult?
+  scheduledFor       DateTime?
+  startedAt          DateTime         @default(now())
+  finishedAt         DateTime?
+  delayMinutes       Int?
+  invalidatedById    String?
+  invalidatedAt      DateTime?
+  invalidationReason String?
+
+  equipment        Equipment        @relation(fields: [equipmentId], references: [id])
+  checklistVersion ChecklistVersion @relation(fields: [checklistVersionId], references: [id])
+  executedBy       User             @relation("ExecutionExecutedBy", fields: [executedById], references: [id])
+  invalidatedBy    User?            @relation("ExecutionInvalidatedBy", fields: [invalidatedById], references: [id])
+
+  answers         ChecklistAnswer[]
+  nonconformities Nonconformity[]
+  events          EquipmentEvent[]
+
+  @@index([equipmentId])
+  @@index([status])
+  @@index([startedAt])
+}
+
+model ChecklistAnswer {
+  id          String   @id @default(uuid())
+  executionId String
+  questionId  String
+  optionId    String?
+  value       String? // texto, número, data ou valor de opção em string
+  comment     String?
+  isCritical  Boolean  @default(false) // snapshot da regra no momento da resposta
+  createdAt   DateTime @default(now())
+
+  execution ChecklistExecution @relation(fields: [executionId], references: [id])
+  question  ChecklistQuestion  @relation(fields: [questionId], references: [id])
+
+  attachments     Attachment[]
+  nonconformities Nonconformity[]
+
+  @@unique([executionId, questionId])
+  @@index([questionId])
+}
+
+// =========================================================================
+// Anexos
+// =========================================================================
+
+enum AttachmentContext {
+  EQUIPAMENTO
+  RESPOSTA_CHECKLIST
+  NAO_CONFORMIDADE
+  ACAO
+  ATIVIDADE
+  QUALIFICACAO
+  ACIDENTE
+  ESCALA
+}
+
+enum AttachmentDocType {
+  POP
+  AR_VR
+  LISTA_TREINAMENTO
+}
+
+model Attachment {
+  id                    String             @id @default(uuid())
+  filename              String
+  path                  String
+  mimeType              String
+  size                  Int
+  context               AttachmentContext
+  docType               AttachmentDocType? // usado apenas quando context = ATIVIDADE
+  equipmentId           String?
+  checklistAnswerId     String?
+  nonconformityId       String?
+  actionItemId          String?
+  activityId            String?
+  qualificationRecordId String?
+  accidentId            String?
+  scheduleDayNoteId     String?
+  uploadedById          String
+  uploadedAt            DateTime           @default(now())
+
+  equipment           Equipment?           @relation(fields: [equipmentId], references: [id])
+  checklistAnswer     ChecklistAnswer?     @relation(fields: [checklistAnswerId], references: [id])
+  nonconformity       Nonconformity?       @relation(fields: [nonconformityId], references: [id])
+  actionItem          ActionItem?          @relation(fields: [actionItemId], references: [id])
+  activity            Activity?            @relation(fields: [activityId], references: [id])
+  qualificationRecord QualificationRecord? @relation(fields: [qualificationRecordId], references: [id])
+  accident            Accident?            @relation(fields: [accidentId], references: [id])
+  scheduleDayNote     ScheduleDayNote?     @relation(fields: [scheduleDayNoteId], references: [id])
+  uploadedBy          User                 @relation(fields: [uploadedById], references: [id])
+
+  @@index([equipmentId])
+  @@index([nonconformityId])
+  @@index([activityId])
+  @@index([qualificationRecordId])
+  @@index([scheduleDayNoteId])
+  @@index([accidentId])
+}
+
+// =========================================================================
+// Não conformidades e planos de ação
+// =========================================================================
+
+enum NonconformityStatus {
+  ABERTA
+  EM_ANALISE
+  ACAO_DEFINIDA
+  EM_EXECUCAO
+  AGUARDANDO_VERIFICACAO
+  CONCLUIDA
+  ENCERRADA
+  CANCELADA
+}
+
+model Nonconformity {
+  id                String              @id @default(uuid())
+  code              String              @unique // ex: NC-000001
+  equipmentId       String
+  areaId            String
+  originExecutionId String?
+  originAnswerId    String?
+  identifiedById    String
+  identifiedAt      DateTime            @default(now())
+  description       String
+  severity          Criticality
+  faultCategoryId   String?
+  responsibleId     String?
+  dueDate           DateTime?
+  status            NonconformityStatus @default(ABERTA)
+
+  equipment       Equipment           @relation(fields: [equipmentId], references: [id])
+  area            Area                @relation(fields: [areaId], references: [id])
+  originExecution ChecklistExecution? @relation(fields: [originExecutionId], references: [id])
+  originAnswer    ChecklistAnswer?    @relation(fields: [originAnswerId], references: [id])
+  identifiedBy    User                @relation("NCIdentifiedBy", fields: [identifiedById], references: [id])
+  responsible     User?               @relation("NCResponsible", fields: [responsibleId], references: [id])
+  faultCategory   FaultCategory?      @relation(fields: [faultCategoryId], references: [id])
+
+  actionPlan  ActionPlan?
+  attachments Attachment[]
+  events      EquipmentEvent[]
+
+  @@index([equipmentId])
+  @@index([status])
+  @@index([severity])
+}
+
+model ActionPlan {
+  id              String   @id @default(uuid())
+  nonconformityId String   @unique
+  createdById     String
+  createdAt       DateTime @default(now())
+
+  nonconformity Nonconformity @relation(fields: [nonconformityId], references: [id])
+  createdBy     User          @relation("ActionPlanCreatedBy", fields: [createdById], references: [id])
+
+  items ActionItem[]
+}
+
+enum ActionItemStatus {
+  PENDENTE
+  EM_ANDAMENTO
+  CONCLUIDA
+  VENCIDA
+  CANCELADA
+}
+
+enum ActionPriority {
+  BAIXA
+  MEDIA
+  ALTA
+}
+
+model ActionItem {
+  id            String           @id @default(uuid())
+  actionPlanId  String
+  description   String
+  responsibleId String
+  createdAt     DateTime         @default(now())
+  dueDate       DateTime
+  priority      ActionPriority   @default(MEDIA)
+  status        ActionItemStatus @default(PENDENTE)
+  notes         String?
+  completedAt   DateTime?
+  completedById String?
+  validatedAt   DateTime?
+  validatedById String?
+
+  actionPlan  ActionPlan @relation(fields: [actionPlanId], references: [id])
+  responsible User       @relation("ActionItemResponsible", fields: [responsibleId], references: [id])
+  completedBy User?      @relation("ActionItemCompletedBy", fields: [completedById], references: [id])
+  validatedBy User?      @relation("ActionItemValidatedBy", fields: [validatedById], references: [id])
+
+  attachments Attachment[]
+  events      EquipmentEvent[]
+
+  @@index([actionPlanId])
+  @@index([status])
+  @@index([dueDate])
+}
+
+// =========================================================================
+// Linha do tempo do equipamento e auditoria
+// =========================================================================
+
+enum EquipmentEventType {
+  EQUIPAMENTO_CADASTRADO
+  CHECKLIST_REALIZADO
+  DESVIO_IDENTIFICADO
+  NC_CRIADA
+  EQUIPAMENTO_BLOQUEADO
+  EQUIPAMENTO_RESTRITO
+  MANUTENCAO_INICIADA
+  MANUTENCAO_CONCLUIDA
+  ACAO_CRIADA
+  ACAO_CONCLUIDA
+  CORRECAO_VALIDADA
+  EQUIPAMENTO_LIBERADO
+  MUDANCA_DE_AREA
+  MUDANCA_DE_RESPONSAVEL
+  DOCUMENTO_ANEXADO
+  CHECKLIST_INVALIDADO
+}
+
+model EquipmentEvent {
+  id              String             @id @default(uuid())
+  equipmentId     String
+  type            EquipmentEventType
+  description     String
+  userId          String?
+  executionId     String?
+  nonconformityId String?
+  actionItemId    String?
+  occurredAt      DateTime           @default(now())
+
+  equipment     Equipment           @relation(fields: [equipmentId], references: [id])
+  user          User?               @relation("EventUser", fields: [userId], references: [id])
+  execution     ChecklistExecution? @relation(fields: [executionId], references: [id])
+  nonconformity Nonconformity?      @relation(fields: [nonconformityId], references: [id])
+  actionItem    ActionItem?         @relation(fields: [actionItemId], references: [id])
+
+  @@index([equipmentId, occurredAt])
+}
+
+model AuditLog {
+  id            String   @id @default(uuid())
+  userId        String?
+  action        String // ex: CREATE, UPDATE, STATUS_CHANGE, BLOCK, RELEASE, INVALIDATE
+  entityType    String
+  entityId      String
+  previousValue String? // JSON serializado
+  newValue      String? // JSON serializado
+  occurredAt    DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([occurredAt])
+}
+
+// =========================================================================
+// Notificações (modelo de eventos; sem envio externo nesta versão)
+// =========================================================================
+
+enum NotificationType {
+  CHECKLIST_ATRASADO
+  EQUIPAMENTO_BLOQUEADO
+  NC_CRITICA
+  ACAO_PROXIMA_VENCIMENTO
+  ACAO_VENCIDA
+  EQUIPAMENTO_LIBERADO
+}
+
+model Notification {
+  id         String           @id @default(uuid())
+  type       NotificationType
+  entityType String
+  entityId   String
+  message    String
+  read       Boolean          @default(false)
+  createdAt  DateTime         @default(now())
+}
+
+// =========================================================================
+// Colaboradores (cadastro de funcionários, desacoplado de login/User)
+// =========================================================================
+
+model Collaborator {
+  id               String    @id @default(uuid())
+  name             String
+  matricula        String?   @unique
+  cargo            String? // espelha jobFunction.name quando functionId é definido (compatibilidade com busca/listagem existentes)
+  functionId       String?
+  cpf              String?
+  ctps             String?
+  ctpsSerie        String?
+  admissionDate    DateTime?
+  inactivatedAt    DateTime? // preenchido automaticamente quando active vira false (seção "DESLIGAMENTO" da ficha de EPI)
+  areaId           String?
+  turnoId          String?
+  phone            String?
+  checklistEnabled Boolean   @default(false) // se true, este colaborador precisa de um User pra fazer checklist
+  userId           String?   @unique // User provisionado automaticamente quando checklistEnabled
+  active           Boolean   @default(true)
+  createdAt        DateTime  @default(now())
+
+  area     Area?        @relation(fields: [areaId], references: [id])
+  turno    Turno?       @relation(fields: [turnoId], references: [id])
+  user     User?        @relation(fields: [userId], references: [id])
+  function JobFunction? @relation(fields: [functionId], references: [id])
+
+  accidentInvolvements AccidentInvolvement[]
+  accidentActions      AccidentAction[]
+  qualificationRecords QualificationRecord[]
+  scheduleDayNotes     ScheduleDayNote[]
+  productivityEntries  ProductivityEntry[]
+  productivityGoals    ProductivityGoal[]
+  shiftCheckIns        ShiftCheckIn[]
+  epiDeliveries        EpiDelivery[]
+
+  @@index([areaId])
+  @@index([functionId])
+}
+
+// =========================================================================
+// EPI (Equipamento de Proteção Individual) — ficha de controle por colaborador
+// =========================================================================
+
+model JobFunction {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  collaborators Collaborator[]
+  kitItems      JobFunctionEpiKitItem[]
+}
+
+model JobFunctionEpiKitItem {
+  id            String @id @default(uuid())
+  jobFunctionId String
+  epiTypeId     String
+  quantity      Int    @default(1)
+
+  jobFunction JobFunction @relation(fields: [jobFunctionId], references: [id])
+  epiType     EpiType     @relation(fields: [epiTypeId], references: [id])
+
+  @@unique([jobFunctionId, epiTypeId])
+  @@index([epiTypeId])
+}
+
+model EpiType {
+  id             String   @id @default(uuid())
+  name           String   @unique // "Capacete de Segurança", "Botina de Segurança", ...
+  defaultCa      String? // Certificado de Aprovação padrão, editável por entrega
+  validityMonths Int? // null = não expira
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+
+  kitItems   JobFunctionEpiKitItem[]
+  deliveries EpiDelivery[]
+}
+
+/// Motivos de entrega/devolução (legenda "MED" da ficha física de EPI).
+enum EpiDeliveryReason {
+  PRIMEIRA_ENTREGA // 1
+  SUBSTITUICAO_DANO_JUSTIFICADO // 2
+  SUBSTITUICAO_DANO_PROPRIO_PERDA // 3
+  TROCA_DANIFICADO_VENCIDO // 4
+  DEVOLUCAO_DEMISSAO_MUDANCA_FUNCAO // 5
+}
+
+model EpiDelivery {
+  id             String            @id @default(uuid())
+  collaboratorId String
+  epiTypeId      String
+  quantity       Int               @default(1)
+  ca             String? // CA desta entrega específica (default = epiType.defaultCa)
+  size           String? // "41", "G", "P" — tamanho/medida, quando aplicável
+  reason         EpiDeliveryReason @default(PRIMEIRA_ENTREGA)
+  deliveredAt    DateTime
+  returnedAt     DateTime?
+  traceable      Boolean           @default(false) // gera QR code + código individual pra colar no item físico
+  qrToken        String?           @unique
+  code           String?           @unique // "EPI-000123", só quando traceable
+  createdById    String
+  createdAt      DateTime          @default(now())
+
+  collaborator Collaborator @relation(fields: [collaboratorId], references: [id])
+  epiType      EpiType      @relation(fields: [epiTypeId], references: [id])
+  createdBy    User         @relation("EpiDeliveryCreatedBy", fields: [createdById], references: [id])
+
+  @@index([collaboratorId])
+  @@index([epiTypeId])
+}
+
+// =========================================================================
+// Investigação/Inventário de Acidentes
+// =========================================================================
+
+enum AccidentType {
+  ACIDENTE_TIPICO
+  ACIDENTE_TRAJETO
+  QUASE_ACIDENTE
+  DOENCA_OCUPACIONAL
+}
+
+enum AccidentStatus {
+  ABERTO
+  EM_INVESTIGACAO
+  CONCLUIDO
+}
+
+enum InvolvementRole {
+  VITIMA
+  TESTEMUNHA
+}
+
+/// Classificação SIF (metodologia de prevenção de lesões graves/fatais): Precursor (quase
+/// aconteceu, sem gravidade), Potencial (poderia ter sido grave/fatal) ou Real (foi grave/fatal).
+enum SifClassification {
+  SIF_PRECURSOR
+  SIF_POTENCIAL
+  SIF_REAL
+}
+
+enum AccidentActionStatus {
+  PENDENTE
+  EM_ANDAMENTO
+  CONCLUIDA
+  CANCELADA
+}
+
+model Accident {
+  id                String             @id @default(uuid())
+  code              String             @unique // ex: ACID-000001
+  date              DateTime
+  time              String? // HH:mm
+  areaId            String?
+  type              AccidentType
+  severity          Criticality
+  description       String
+  immediateCause    String?
+  rootCause         String?
+  isSif             Boolean            @default(false)
+  sifClassification SifClassification?
+  creditNumber      String? // número do Credit vinculado à ocorrência
+  status            AccidentStatus     @default(ABERTO)
+  investigatedById  String?
+  reportedById      String
+  reportedAt        DateTime           @default(now())
+  closedAt          DateTime?
+
+  area           Area? @relation(fields: [areaId], references: [id])
+  investigatedBy User? @relation("AccidentInvestigatedBy", fields: [investigatedById], references: [id])
+  reportedBy     User  @relation("AccidentReportedBy", fields: [reportedById], references: [id])
+
+  involvements AccidentInvolvement[]
+  actions      AccidentAction[]
+  attachments  Attachment[]
+
+  @@index([status])
+  @@index([date])
+  @@index([areaId])
+}
+
+model AccidentInvolvement {
+  accidentId     String
+  collaboratorId String
+  role           InvolvementRole
+
+  accident     Accident     @relation(fields: [accidentId], references: [id], onDelete: Cascade)
+  collaborator Collaborator @relation(fields: [collaboratorId], references: [id])
+
+  @@id([accidentId, collaboratorId])
+}
+
+model AccidentAction {
+  id                        String               @id @default(uuid())
+  accidentId                String
+  description               String
+  responsibleUserId         String?
+  responsibleCollaboratorId String?
+  dueDate                   DateTime
+  status                    AccidentActionStatus @default(PENDENTE)
+  completedAt               DateTime?
+  notes                     String?
+  createdAt                 DateTime             @default(now())
+
+  accident                Accident      @relation(fields: [accidentId], references: [id])
+  responsibleUser         User?         @relation("AccidentActionResponsibleUser", fields: [responsibleUserId], references: [id])
+  responsibleCollaborator Collaborator? @relation(fields: [responsibleCollaboratorId], references: [id])
+
+  @@index([accidentId])
+  @@index([status])
+  @@index([dueDate])
+}
+
+// =========================================================================
+// Qualificações (treinamentos NR, ASO, integrações)
+// =========================================================================
+
+enum QualificationCategory {
+  NR
+  ASO
+  INTEGRACAO
+  OUTRO
+}
+
+model QualificationType {
+  id             String                @id @default(uuid())
+  name           String                @unique
+  category       QualificationCategory
+  validityMonths Int? // null = não expira
+  active         Boolean               @default(true)
+  createdAt      DateTime              @default(now())
+
+  records QualificationRecord[]
+}
+
+model QualificationRecord {
+  id                  String    @id @default(uuid())
+  collaboratorId      String
+  qualificationTypeId String
+  completedDate       DateTime
+  expiresAt           DateTime? // completedDate + validityMonths, calculado na criação
+  notes               String?
+  createdById         String
+  createdAt           DateTime  @default(now())
+
+  collaborator      Collaborator      @relation(fields: [collaboratorId], references: [id])
+  qualificationType QualificationType @relation(fields: [qualificationTypeId], references: [id])
+  createdBy         User              @relation("QualificationCreatedBy", fields: [createdById], references: [id])
+
+  attachments Attachment[]
+
+  @@index([collaboratorId])
+  @@index([qualificationTypeId])
+  @@index([expiresAt])
+}
+
+// =========================================================================
+// Atividades e documentos (POP / AR-VR)
+// =========================================================================
+
+model Activity {
+  id          String   @id @default(uuid())
+  name        String
+  code        String?  @unique
+  description String?
+  unit        String? // ex: "caminhões", "paletes", "chapas" — se definido, mostra campo de quantidade na produtividade
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  attachments         Attachment[]
+  productivityEntries ProductivityEntry[]
+  productivityGoals   ProductivityGoal[]
+}
+
+// =========================================================================
+// Produtividade
+// =========================================================================
+
+model ProductivityEntry {
+  id             String   @id @default(uuid())
+  collaboratorId String
+  date           DateTime
+  activityId     String
+  quantity       Int?
+  notes          String?
+  createdById    String
+  createdAt      DateTime @default(now())
+
+  collaborator Collaborator @relation(fields: [collaboratorId], references: [id])
+  activity     Activity     @relation(fields: [activityId], references: [id])
+  createdBy    User         @relation("ProductivityCreatedBy", fields: [createdById], references: [id])
+
+  @@index([collaboratorId, date])
+  @@index([activityId])
+}
+
+/// Meta mensal de produção de um colaborador numa atividade específica (seção pedida pelo
+/// usuário: "meta mensal pro colaborador"). Uma meta por combinação colaborador+atividade+mês —
+/// o progresso é calculado somando `ProductivityEntry.quantity` do mesmo colaborador/atividade
+/// dentro do mês, nunca guardado como valor fixo (fica sempre atualizado com os lançamentos).
+model ProductivityGoal {
+  id             String   @id @default(uuid())
+  collaboratorId String
+  activityId     String
+  month          Int // 1-12
+  year           Int
+  targetQuantity Int
+  createdById    String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  collaborator Collaborator @relation(fields: [collaboratorId], references: [id])
+  activity     Activity     @relation(fields: [activityId], references: [id])
+  createdBy    User         @relation("ProductivityGoalCreatedBy", fields: [createdById], references: [id])
+
+  @@unique([collaboratorId, activityId, month, year])
+  @@index([month, year])
+}
+
+// =========================================================================
+// Escalas de trabalho
+// =========================================================================
+
+model ScheduleType {
+  id        String   @id @default(uuid())
+  name      String   @unique // ex: "6x2", "5x2", "6x1"
+  workDays  Int // dias trabalhados no ciclo
+  restDays  Int // dias de folga no ciclo
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  turnos Turno[]
+}
+
+/// Turno/grupo de revezamento (ex: "A", "B", "C") — já carrega o tipo de escala e a data de
+/// início do ciclo, compartilhados por todos os colaboradores atribuídos a ele. Atribuir um
+/// colaborador a um turno já define automaticamente se ele trabalha ou folga em cada dia.
+model Turno {
+  id             String   @id @default(uuid())
+  name           String   @unique // ex: "A", "B", "C"
+  scheduleTypeId String
+  startDate      DateTime // dia 1 do ciclo do turno
+  startTime      String? // HH:mm — início do expediente
+  endTime        String? // HH:mm — fim do expediente
+  active         Boolean  @default(true)
+  createdById    String
+  createdAt      DateTime @default(now())
+
+  scheduleType  ScheduleType   @relation(fields: [scheduleTypeId], references: [id])
+  createdBy     User           @relation("TurnoCreatedBy", fields: [createdById], references: [id])
+  collaborators Collaborator[]
+}
+
+enum ScheduleDayNoteStatus {
+  FALTA
+  ATESTADO
+  FERIAS
+  TROCA
+  OUTRO
+}
+
+/// Exceção pontual a um dia específico de um colaborador — sobrepõe o cálculo do ciclo só
+/// naquele dia (ex: faltou, folgou por atestado, cobriu o turno de outra pessoa).
+model ScheduleDayNote {
+  id             String                    @id @default(uuid())
+  collaboratorId String
+  date           DateTime
+  overrideStatus ScheduleDayComputedStatus
+  status         ScheduleDayNoteStatus?
+  notes          String
+  createdById    String
+  createdAt      DateTime                  @default(now())
+
+  collaborator Collaborator @relation(fields: [collaboratorId], references: [id])
+  createdBy    User         @relation("ScheduleDayNoteCreatedBy", fields: [createdById], references: [id])
+  attachments  Attachment[]
+
+  @@unique([collaboratorId, date])
+  @@index([collaboratorId])
+}
+
+enum ScheduleDayComputedStatus {
+  TRABALHO
+  FOLGA
+}
+
+/// Confirmação de presença que o próprio colaborador faz no turno (self check-in), separada do
+/// checklist e da produtividade — só registra "eu vim trabalhar hoje". Uma por colaborador/dia.
+model ShiftCheckIn {
+  id             String   @id @default(uuid())
+  collaboratorId String
+  date           DateTime // dia do turno confirmado
+  checkedInAt    DateTime @default(now())
+
+  collaborator Collaborator @relation(fields: [collaboratorId], references: [id])
+
+  @@unique([collaboratorId, date])
+  @@index([collaboratorId, date])
+}
