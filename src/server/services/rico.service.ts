@@ -3,16 +3,31 @@ import OpenAI from "openai";
 import type { CurrentUser } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
 import { parseDateOnly } from "@/lib/dates";
+import type { NonconformityStatus, EpiDeliveryReason } from "@/generated/prisma/enums";
 import { globalSearch } from "@/server/services/search.service";
 import { getGestaoSummary, getTopProblemEquipments } from "@/server/services/indicators.service";
 import { getEquipmentRiskRanking } from "@/server/services/risk-score.service";
 import { listChecklistBoardForUser } from "@/server/services/checklist-execution.service";
-import { listNonconformitiesForUser } from "@/server/services/nonconformity.service";
+import { listNonconformitiesForUser, setNonconformityStatus } from "@/server/services/nonconformity.service";
 import { getQualificationDashboard, listQualificationTypes } from "@/server/services/qualification.service";
 import { listAccidentsForUser } from "@/server/services/accident.service";
 import { listCollaboratorsForUser } from "@/server/services/collaborator.service";
+import { listAreas } from "@/server/services/masterdata.service";
 import * as activityService from "@/server/services/activity.service";
 import * as qualificationService from "@/server/services/qualification.service";
+import * as collaboratorService from "@/server/services/collaborator.service";
+import * as epiService from "@/server/services/epi.service";
+
+const NC_STATUS_LABELS: Record<string, string> = {
+  ABERTA: "Aberta",
+  EM_ANALISE: "Em análise",
+  ACAO_DEFINIDA: "Ação definida",
+  EM_EXECUCAO: "Em execução",
+  AGUARDANDO_VERIFICACAO: "Aguardando verificação",
+  CONCLUIDA: "Concluída",
+  ENCERRADA: "Encerrada",
+  CANCELADA: "Cancelada",
+};
 
 const MODEL = "gpt-4o";
 const MAX_TOOL_ITERATIONS = 5;
@@ -25,18 +40,28 @@ Regras que você segue sempre:
 1. Nunca invente números, status ou nomes de registros. Se a pergunta envolve dado do sistema (contagens,
    status, nomes, prazos), use uma ferramenta de leitura antes de responder. Se a ferramenta não trouxer
    o que precisa, diga que não encontrou — não chute.
-2. Você pode propor ações que escrevem no sistema (criar atividade, registrar qualificação), mas nunca
-   executa essas ações direto — ao chamar uma ferramenta de escrita, o próprio sistema vai transformar
-   isso numa proposta que o usuário precisa confirmar clicando num botão. Avise o usuário que você vai
-   deixar isso pronto pra confirmação dele.
+2. Você pode propor ações que escrevem no sistema (criar atividade, registrar qualificação, cadastrar
+   colaborador, mudar status de não conformidade, registrar entrega de EPI), mas nunca executa essas
+   ações direto — ao chamar uma ferramenta de escrita, o próprio sistema vai transformar isso numa
+   proposta que o usuário precisa confirmar clicando num botão. Avise o usuário que você vai deixar isso
+   pronto pra confirmação dele. Se o usuário pedir uma ação de escrita que você não tem ferramenta pra
+   fazer, diga claramente que ainda não sabe fazer isso — não finja que executou.
 3. Se o usuário pedir uma ação de escrita mas faltar informação (ex: registrar qualificação sem saber o
-   ID do colaborador), use as ferramentas de leitura pra procurar pelo nome antes de propor a ação.
+   ID do colaborador), use as ferramentas de leitura pra procurar pelo nome antes de propor a ação. Os
+   IDs que essas ferramentas retornam são só pra você usar internamente ao chamar a próxima ferramenta —
+   nunca mostre um ID (UUID) pro usuário na conversa; refira-se aos registros pelo nome, código ou
+   descrição. Se restar ambiguidade (duas opções com nome parecido), pergunte usando os nomes, não os IDs.
 4. Respostas curtas e objetivas. Você está dentro de um chat, não escrevendo um relatório.`;
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
 
 export type PendingAction = {
-  tool: "criar_atividade" | "registrar_qualificacao";
+  tool:
+    | "criar_atividade"
+    | "registrar_qualificacao"
+    | "criar_colaborador"
+    | "atualizar_status_nao_conformidade"
+    | "criar_entrega_epi";
   args: Record<string, unknown>;
   label: string;
 };
@@ -128,9 +153,47 @@ const READ_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
       parameters: { type: "object", properties: {} },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "listar_funcoes",
+      description: "Lista as funções (cargos) cadastradas com seus IDs — use antes de cadastrar um colaborador com função definida.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "listar_areas",
+      description: "Lista as áreas cadastradas com seus IDs — use antes de cadastrar um colaborador com área definida.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "listar_tipos_epi",
+      description: "Lista os tipos de EPI cadastrados com seus IDs — use antes de registrar uma entrega de EPI.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
 ];
 
-const WRITE_TOOLS: Record<string, { permission: string; tool: OpenAI.Chat.Completions.ChatCompletionTool }> = {
+type RicoActionResult = { ok: true; message: string } | { ok: false; error: string };
+
+type WriteToolDefinition = {
+  permission: string;
+  tool: OpenAI.Chat.Completions.ChatCompletionTool;
+  label: (args: Record<string, unknown>) => string;
+  execute: (user: CurrentUser, args: Record<string, unknown>) => Promise<RicoActionResult>;
+};
+
+/**
+ * Registro central das ações que o Rico sabe propor. Cada entrada é auto-suficiente
+ * (schema pra IA, permissão exigida, texto de confirmação e execução real) — adicionar
+ * uma ação nova ao Rico é só adicionar uma entrada aqui, sem mexer no resto do fluxo.
+ */
+const WRITE_TOOLS: Record<PendingAction["tool"], WriteToolDefinition> = {
   criar_atividade: {
     permission: PERMISSIONS.ACTIVITY_MANAGE,
     tool: {
@@ -149,6 +212,16 @@ const WRITE_TOOLS: Record<string, { permission: string; tool: OpenAI.Chat.Comple
           required: ["name"],
         },
       },
+    },
+    label: (args) => `Criar atividade "${args.name}"`,
+    execute: async (user, args) => {
+      const activity = await activityService.createActivity(user, {
+        name: String(args.name ?? ""),
+        code: args.code ? String(args.code) : null,
+        description: args.description ? String(args.description) : null,
+        unit: args.unit ? String(args.unit) : null,
+      });
+      return { ok: true, message: `Atividade "${activity.name}" criada.` };
     },
   },
   registrar_qualificacao: {
@@ -171,6 +244,136 @@ const WRITE_TOOLS: Record<string, { permission: string; tool: OpenAI.Chat.Comple
           required: ["collaboratorId", "collaboratorName", "qualificationTypeId", "qualificationTypeName", "completedDate"],
         },
       },
+    },
+    label: (args) => `Registrar "${args.qualificationTypeName}" para ${args.collaboratorName}`,
+    execute: async (user, args) => {
+      await qualificationService.createQualificationRecord(user, {
+        collaboratorId: String(args.collaboratorId ?? ""),
+        qualificationTypeId: String(args.qualificationTypeId ?? ""),
+        completedDate: parseDateOnly(String(args.completedDate ?? "")),
+        notes: args.notes ? String(args.notes) : null,
+      });
+      return { ok: true, message: `Qualificação registrada para ${args.collaboratorName}.` };
+    },
+  },
+  criar_colaborador: {
+    permission: PERMISSIONS.COLLABORATOR_MANAGE,
+    tool: {
+      type: "function",
+      function: {
+        name: "criar_colaborador",
+        description: "Propõe cadastrar um novo colaborador — precisa de confirmação do usuário.",
+        parameters: {
+          type: "object",
+          properties: {
+            name: { type: "string", description: "Nome completo do colaborador" },
+            functionId: { type: "string", description: "ID da função (use listar_funcoes antes), opcional" },
+            functionName: { type: "string", description: "Nome da função, só para exibição na proposta, opcional" },
+            areaId: { type: "string", description: "ID da área (use listar_areas antes), opcional" },
+            areaName: { type: "string", description: "Nome da área, só para exibição na proposta, opcional" },
+            phone: { type: "string", description: "Telefone, opcional" },
+          },
+          required: ["name"],
+        },
+      },
+    },
+    label: (args) => {
+      const extra = [args.functionName, args.areaName].filter(Boolean).join(" — ");
+      return `Cadastrar colaborador "${args.name}"${extra ? ` (${extra})` : ""}`;
+    },
+    execute: async (user, args) => {
+      const collaborator = await collaboratorService.createCollaborator(user, {
+        name: String(args.name ?? ""),
+        functionId: args.functionId ? String(args.functionId) : null,
+        areaId: args.areaId ? String(args.areaId) : null,
+        phone: args.phone ? String(args.phone) : null,
+      });
+      return { ok: true, message: `Colaborador "${collaborator.name}" cadastrado.` };
+    },
+  },
+  atualizar_status_nao_conformidade: {
+    permission: PERMISSIONS.NONCONFORMITY_TREAT,
+    tool: {
+      type: "function",
+      function: {
+        name: "atualizar_status_nao_conformidade",
+        description: "Propõe mudar o status de uma não conformidade — precisa de confirmação do usuário.",
+        parameters: {
+          type: "object",
+          properties: {
+            nonconformityId: {
+              type: "string",
+              description: "ID da NC (use nao_conformidades_abertas ou buscar antes pra achar pelo código)",
+            },
+            nonconformityCode: { type: "string", description: "Código da NC, só para exibição na proposta" },
+            status: {
+              type: "string",
+              enum: [
+                "ABERTA",
+                "EM_ANALISE",
+                "ACAO_DEFINIDA",
+                "EM_EXECUCAO",
+                "AGUARDANDO_VERIFICACAO",
+                "CONCLUIDA",
+                "ENCERRADA",
+                "CANCELADA",
+              ],
+              description: "Novo status da não conformidade",
+            },
+          },
+          required: ["nonconformityId", "nonconformityCode", "status"],
+        },
+      },
+    },
+    label: (args) =>
+      `Mudar status de ${args.nonconformityCode} para "${NC_STATUS_LABELS[String(args.status)] ?? args.status}"`,
+    execute: async (user, args) => {
+      await setNonconformityStatus(user, String(args.nonconformityId ?? ""), args.status as NonconformityStatus);
+      return { ok: true, message: `Status de ${args.nonconformityCode} atualizado.` };
+    },
+  },
+  criar_entrega_epi: {
+    permission: PERMISSIONS.COLLABORATOR_MANAGE,
+    tool: {
+      type: "function",
+      function: {
+        name: "criar_entrega_epi",
+        description: "Propõe registrar a entrega de um EPI a um colaborador — precisa de confirmação do usuário.",
+        parameters: {
+          type: "object",
+          properties: {
+            collaboratorId: { type: "string", description: "ID do colaborador (use listar_colaboradores antes)" },
+            collaboratorName: { type: "string", description: "Nome do colaborador, só para exibição na proposta" },
+            epiTypeId: { type: "string", description: "ID do tipo de EPI (use listar_tipos_epi antes)" },
+            epiTypeName: { type: "string", description: "Nome do tipo de EPI, só para exibição na proposta" },
+            quantity: { type: "number", description: "Quantidade entregue" },
+            reason: {
+              type: "string",
+              enum: [
+                "PRIMEIRA_ENTREGA",
+                "SUBSTITUICAO_DANO_JUSTIFICADO",
+                "SUBSTITUICAO_DANO_PROPRIO_PERDA",
+                "TROCA_DANIFICADO_VENCIDO",
+                "DEVOLUCAO_DEMISSAO_MUDANCA_FUNCAO",
+              ],
+              description: "Motivo da entrega",
+            },
+          },
+          required: ["collaboratorId", "collaboratorName", "epiTypeId", "epiTypeName", "quantity", "reason"],
+        },
+      },
+    },
+    label: (args) => `Registrar entrega de "${args.epiTypeName}" (qtd. ${args.quantity}) para ${args.collaboratorName}`,
+    execute: async (user, args) => {
+      await epiService.createEpiDelivery(user, {
+        collaboratorId: String(args.collaboratorId ?? ""),
+        epiTypeId: String(args.epiTypeId ?? ""),
+        quantity: Number(args.quantity ?? 1),
+        reason: args.reason as EpiDeliveryReason,
+        deliveredAt: new Date(),
+        traceable: false,
+      });
+      return { ok: true, message: `Entrega de "${args.epiTypeName}" registrada para ${args.collaboratorName}.` };
     },
   },
 };
@@ -212,6 +415,7 @@ async function runReadTool(user: CurrentUser, name: string, args: Record<string,
       return (await listNonconformitiesForUser(user, { overdue: false }))
         .filter((nc) => !["CONCLUIDA", "ENCERRADA", "CANCELADA"].includes(nc.status))
         .map((nc) => ({
+          id: nc.id,
           codigo: nc.code,
           equipamento: nc.equipment.code,
           severidade: nc.severity,
@@ -250,20 +454,29 @@ async function runReadTool(user: CurrentUser, name: string, args: Record<string,
         nome: t.name,
         categoria: t.category,
       }));
+    case "listar_funcoes":
+      return (await epiService.listJobFunctionsForCollaboratorForm(user)).map((f) => ({
+        id: f.id,
+        nome: f.name,
+      }));
+    case "listar_areas":
+      return (await listAreas()).map((a) => ({
+        id: a.id,
+        nome: a.name,
+        unidade: a.unit.name,
+      }));
+    case "listar_tipos_epi":
+      return (await epiService.listEpiTypes(user, { onlyActive: true })).map((t) => ({
+        id: t.id,
+        nome: t.name,
+      }));
     default:
       return { erro: "ferramenta desconhecida" };
   }
 }
 
-function proposeWriteAction(name: string, args: Record<string, unknown>): PendingAction {
-  if (name === "criar_atividade") {
-    return { tool: "criar_atividade", args, label: `Criar atividade "${args.name}"` };
-  }
-  return {
-    tool: "registrar_qualificacao",
-    args,
-    label: `Registrar "${args.qualificationTypeName}" para ${args.collaboratorName}`,
-  };
+function proposeWriteAction(name: PendingAction["tool"], args: Record<string, unknown>): PendingAction {
+  return { tool: name, args, label: WRITE_TOOLS[name].label(args) };
 }
 
 /**
@@ -310,7 +523,7 @@ export async function runRicoTurn(
       const reply =
         choice.content?.trim() ||
         "Deixei essa ação pronta pra você confirmar aqui embaixo antes de eu criar de verdade.";
-      return { reply, pendingAction: proposeWriteAction(writeCall.function.name, args) };
+      return { reply, pendingAction: proposeWriteAction(writeCall.function.name as PendingAction["tool"], args) };
     }
 
     messages.push(choice);
@@ -374,36 +587,16 @@ export async function executeRicoAction(
   user: CurrentUser,
   tool: PendingAction["tool"],
   args: Record<string, unknown>,
-): Promise<{ ok: true; message: string } | { ok: false; error: string }> {
+): Promise<RicoActionResult> {
   const definition = WRITE_TOOLS[tool];
   if (!definition || !user.permissions.has(definition.permission)) {
     return { ok: false, error: "Você não tem permissão para essa ação." };
   }
 
   try {
-    if (tool === "criar_atividade") {
-      const activity = await activityService.createActivity(user, {
-        name: String(args.name ?? ""),
-        code: args.code ? String(args.code) : null,
-        description: args.description ? String(args.description) : null,
-        unit: args.unit ? String(args.unit) : null,
-      });
-      return { ok: true, message: `Atividade "${activity.name}" criada.` };
-    }
-
-    if (tool === "registrar_qualificacao") {
-      await qualificationService.createQualificationRecord(user, {
-        collaboratorId: String(args.collaboratorId ?? ""),
-        qualificationTypeId: String(args.qualificationTypeId ?? ""),
-        completedDate: parseDateOnly(String(args.completedDate ?? "")),
-        notes: args.notes ? String(args.notes) : null,
-      });
-      return { ok: true, message: `Qualificação registrada para ${args.collaboratorName}.` };
-    }
-
-    return { ok: false, error: "Ação desconhecida." };
+    return await definition.execute(user, args);
   } catch (error) {
-    console.error("[rico] falha ao executar ação confirmada:", error);
+    console.error(`[rico] falha ao executar ação confirmada (${tool}):`, error);
     return { ok: false, error: "Não foi possível concluir a ação." };
   }
 }
