@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Sparkles } from "lucide-react";
 import { requireUser, requirePermission } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
 import {
@@ -7,20 +8,29 @@ import {
   getTopProblemEquipments,
   getTopFaultCategories,
 } from "@/server/services/indicators.service";
+import { getEquipmentRiskRanking } from "@/server/services/risk-score.service";
 import { PageHeader, PageBody } from "@/components/domain/page-header";
 import { StatCard } from "@/components/domain/stat-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableHeader, TableBody, TableHead, TableCell, TableEmpty, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+
+function riskTone(score: number): "success" | "warning" | "danger" {
+  if (score > 60) return "danger";
+  if (score > 30) return "warning";
+  return "success";
+}
 
 export default async function IndicadoresPage() {
   const user = await requireUser();
   requirePermission(user, PERMISSIONS.INDICATORS_VIEW_AREA);
 
-  const [summary, desempenho, topEquipamentos, topFalhas] = await Promise.all([
+  const [summary, desempenho, topEquipamentos, topFalhas, riskRanking] = await Promise.all([
     getGestaoSummary(user),
     getDesempenhoPorArea(user),
     getTopProblemEquipments(user),
     getTopFaultCategories(user),
+    getEquipmentRiskRanking(user),
   ]);
 
   return (
@@ -41,6 +51,37 @@ export default async function IndicadoresPage() {
           <StatCard label="NCs críticas" value={summary.ncCriticas} tone="danger" href="/nao-conformidades?severity=CRITICA" />
           <StatCard label="Ações vencidas" value={summary.acoesVencidas} tone="danger" href="/planos-de-acao?overdue=true" />
         </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              <span className="flex items-center gap-2"><Sparkles className="size-4 text-accent" /> Painel de Risco (IA)</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col divide-y divide-border p-0">
+            {riskRanking.length === 0 && (
+              <p className="px-4 py-6 text-sm text-foreground-subtle">Sem dados suficientes ainda.</p>
+            )}
+            {riskRanking.map((item) => (
+              <Link
+                key={item.equipmentId}
+                href={`/equipamentos/${item.equipmentId}`}
+                className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm hover:bg-surface-muted"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="truncate">
+                    {item.equipmentCode} — {item.equipmentName}{" "}
+                    <span className="text-foreground-subtle">· {item.areaName}</span>
+                  </p>
+                  {item.latestAiFinding && (
+                    <p className="truncate text-xs text-foreground-subtle">🤖 {item.latestAiFinding.summary}</p>
+                  )}
+                </div>
+                <Badge tone={riskTone(item.score)}>{item.score}</Badge>
+              </Link>
+            ))}
+          </CardContent>
+        </Card>
 
         <Card>
           <CardHeader>

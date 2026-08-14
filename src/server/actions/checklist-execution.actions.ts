@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { requireUser, ForbiddenError } from "@/server/auth/current-user";
 import * as executionService from "@/server/services/checklist-execution.service";
-import { savePhotoUpload, InvalidUploadError } from "@/server/services/storage";
+import { savePhotoUpload, readFileBuffer, InvalidUploadError } from "@/server/services/storage";
+import { analyzePhotoFinding, saveAiInspectionFinding, type PhotoFinding } from "@/server/services/ai-vision.service";
 
 export type SaveAnswerResult = { ok: true } | { ok: false; error: string };
 
@@ -24,11 +25,21 @@ export async function saveAnswerAction(
   }
 }
 
+export type UploadPhotoResult =
+  | { ok: true; finding: PhotoFinding | null }
+  | { ok: false; error: string };
+
+/**
+ * Além de salvar a foto, dispara o Copiloto de Inspeção (análise por visão
+ * computacional) de forma best-effort — se falhar ou a IA não estiver configurada
+ * (`ANTHROPIC_API_KEY`), o upload continua valendo normalmente, só sem o achado.
+ */
 export async function uploadAnswerPhotoAction(
   executionId: string,
   questionId: string,
+  questionTitle: string,
   formData: FormData,
-): Promise<SaveAnswerResult> {
+): Promise<UploadPhotoResult> {
   try {
     const user = await requireUser();
     const file = formData.get("file");
@@ -36,8 +47,28 @@ export async function uploadAnswerPhotoAction(
       return { ok: false, error: "Selecione uma foto válida." };
     }
     const saved = await savePhotoUpload(file);
-    await executionService.attachAnswerPhoto(executionId, questionId, saved, user.id);
-    return { ok: true };
+    const { attachment, answerComment } = await executionService.attachAnswerPhoto(
+      executionId,
+      questionId,
+      saved,
+      user.id,
+    );
+
+    let finding: PhotoFinding | null = null;
+    try {
+      const imageBuffer = await readFileBuffer(saved.path);
+      finding = await analyzePhotoFinding({
+        imageBuffer,
+        mimeType: saved.mimeType,
+        questionTitle,
+        answerComment,
+      });
+      if (finding) await saveAiInspectionFinding(attachment.id, finding);
+    } catch (error) {
+      console.error("[uploadAnswerPhotoAction] copiloto de inspeção falhou:", error);
+    }
+
+    return { ok: true, finding };
   } catch (error) {
     if (error instanceof InvalidUploadError) return { ok: false, error: error.message };
     console.error(error);

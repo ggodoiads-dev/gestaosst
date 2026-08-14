@@ -188,7 +188,7 @@ export async function attachAnswerPhoto(
     create: { executionId, questionId },
   });
 
-  return db.attachment.create({
+  const attachment = await db.attachment.create({
     data: {
       filename: file.filename,
       path: file.path,
@@ -199,6 +199,8 @@ export async function attachAnswerPhoto(
       uploadedById: userId,
     },
   });
+
+  return { attachment, answerComment: answer.comment };
 }
 
 export type FinalizeResult =

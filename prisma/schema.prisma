@@ -530,12 +530,34 @@ model Attachment {
   scheduleDayNote     ScheduleDayNote?     @relation(fields: [scheduleDayNoteId], references: [id])
   uploadedBy          User                 @relation(fields: [uploadedById], references: [id])
 
+  aiFinding AiInspectionFinding?
+
   @@index([equipmentId])
   @@index([nonconformityId])
   @@index([activityId])
   @@index([qualificationRecordId])
   @@index([scheduleDayNoteId])
   @@index([accidentId])
+}
+
+/// Achado de visão computacional sobre uma foto de resposta crítica de checklist —
+/// "Copiloto de Inspeção": a IA analisa a foto no momento do upload e o resultado
+/// alimenta o score de risco (src/server/services/risk-score.service.ts). Best-effort:
+/// se a análise falhar ou a chave de API não estiver configurada, nenhum registro é
+/// criado — o checklist funciona normalmente sem esse recurso.
+model AiInspectionFinding {
+  id              String      @id @default(uuid())
+  attachmentId    String      @unique
+  severity        Criticality
+  summary         String
+  suggestedAction String?
+  model           String // ex: "claude-sonnet-5" — auditoria/custo
+  rawResponse     String? // JSON bruto da resposta, para depuração
+  createdAt       DateTime    @default(now())
+
+  attachment Attachment @relation(fields: [attachmentId], references: [id])
+
+  @@index([severity])
 }
 
 // =========================================================================

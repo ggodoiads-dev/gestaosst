@@ -1,8 +1,8 @@
 import "server-only";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { put } from "@vercel/blob";
+import { put, get } from "@vercel/blob";
 
 const STORAGE_DRIVER = process.env.STORAGE_DRIVER ?? "local";
 const STORAGE_DIR = process.env.STORAGE_DIR ?? "./storage/uploads";
@@ -61,6 +61,25 @@ async function saveFileUpload(file: File, options: UploadOptions): Promise<Uploa
     mimeType: file.type,
     size: file.size,
   };
+}
+
+/**
+ * Lê os bytes de um anexo já salvo, independente do driver ativo — usado pelo
+ * Copiloto de Inspeção (`ai-vision.service.ts`) para enviar a foto pra análise.
+ * Recebe o mesmo `path` gravado em `Attachment.path` (ex: "uploads/<arquivo>").
+ */
+export async function readFileBuffer(attachmentPath: string): Promise<Buffer> {
+  const filename = attachmentPath.replace(/^uploads\//, "");
+
+  if (STORAGE_DRIVER === "blob") {
+    const result = await get(filename, { access: "private" });
+    if (!result) throw new Error(`Anexo não encontrado no Blob: ${filename}`);
+    return Buffer.from(await new Response(result.stream).arrayBuffer());
+  }
+
+  // turbopackIgnore: caminho de storage local configurável em runtime (fora do bundle de build)
+  const dir = path.resolve(/*turbopackIgnore: true*/ process.cwd(), STORAGE_DIR);
+  return readFile(path.join(/*turbopackIgnore: true*/ dir, filename));
 }
 
 const IMAGE_MIME_EXT: Record<string, string> = {

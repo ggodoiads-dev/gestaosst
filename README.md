@@ -26,6 +26,7 @@ CHECKLIST → DESVIO → NÃO CONFORMIDADE → AÇÃO → CORREÇÃO → VALIDA�
 - [Estrutura de pastas](#estrutura-de-pastas)
 - [Modelo de dados](#modelo-de-dados)
 - [Fluxos principais](#fluxos-principais)
+- [Copiloto de Inspeção (IA)](#copiloto-de-inspeção-ia)
 - [Testes](#testes)
 - [Build de produção](#build-de-produção)
 - [Deploy (produção)](#deploy-produção)
@@ -114,6 +115,7 @@ Veja `.env.example`. Resumo:
 | `STORAGE_DRIVER` | `local` (padrão, disco — usado em dev) ou `blob` (Vercel Blob — usado em produção). |
 | `STORAGE_DIR` | Só usado com `STORAGE_DRIVER=local`: diretório onde fotos/anexos são salvos. |
 | `BLOB_READ_WRITE_TOKEN` | Só usado com `STORAGE_DRIVER=blob`: gerado automaticamente pelo Vercel ao conectar um Blob Store ao projeto. |
+| `ANTHROPIC_API_KEY` | Opcional — ativa o Copiloto de Inspeção (ver seção própria abaixo). Gere em [console.anthropic.com](https://console.anthropic.com). |
 
 Nenhum segredo fica no código-fonte.
 
@@ -275,6 +277,28 @@ depois `lider@demo.com` para criar/concluir a ação e validar a correção.
 Todo número na tela de indicadores (`/indicadores`) e na home de gestão
 (`/inicio`) é um link para a lista filtrada que originou aquele número —
 nunca um gráfico solto (seção 12).
+
+## Copiloto de Inspeção (IA)
+
+Diferencial opcional: quando `ANTHROPIC_API_KEY` está configurada, toda foto
+anexada a uma resposta crítica de checklist (a mesma foto já exigida pela
+regra da pergunta — seção 62) passa por análise de visão computacional
+(`src/server/services/ai-vision.service.ts`, Claude com tool use forçado
+pra devolver severidade/resumo/sugestão estruturados). O achado aparece na
+hora pro colaborador durante o preenchimento e é salvo como
+`AiInspectionFinding`, vinculado ao anexo.
+
+Esses achados alimentam um **score de risco** por equipamento/área
+(`src/server/services/risk-score.service.ts`) — uma heurística explícita e
+auditável (pesos num único objeto exportado, não um modelo treinado):
+combina severidade de NCs recentes, severidade dos achados de IA, NCs
+abertas/vencidas e acidentes na área, normalizados em 0-100. O ranking
+aparece no **Painel de Risco** em `/indicadores`, com link direto pro
+prontuário de cada equipamento.
+
+Toda a integração é best-effort por design: sem a chave, ou se a chamada à
+API falhar por qualquer motivo, o checklist continua funcionando
+normalmente — a IA nunca pode ser um ponto de falha do fluxo de segurança.
 
 ## Testes
 

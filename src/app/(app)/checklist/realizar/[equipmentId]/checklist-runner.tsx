@@ -8,13 +8,14 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { QuestionField } from "./question-field";
+import { AiFindingCard } from "./ai-finding-card";
 import {
   saveAnswerAction,
   uploadAnswerPhotoAction,
   finalizeExecutionAction,
 } from "@/server/actions/checklist-execution.actions";
 import { NOT_APPLICABLE_VALUE } from "@/domain/checklist/answer-values";
-import type { QuestionType } from "@/generated/prisma/enums";
+import type { QuestionType, Criticality } from "@/generated/prisma/enums";
 
 type RuleSummary = { triggerValue: string; requiresComment: boolean; requiresPhoto: boolean };
 type OptionData = { id: string; label: string; value: string };
@@ -32,10 +33,17 @@ export type RunnerQuestion = {
   rules: RuleSummary[];
 };
 
+export type AiFinding = {
+  severity: Criticality;
+  summary: string;
+  suggestedAction: string | null;
+};
+
 export type RunnerAnswer = {
   value: string | null;
   comment: string | null;
   photoUrl: string | null;
+  aiFinding?: AiFinding | null;
 };
 
 export function ChecklistRunner({
@@ -104,13 +112,13 @@ export function ChecklistRunner({
     setSavingPhoto(true);
     const formData = new FormData();
     formData.append("file", file);
-    const result = await uploadAnswerPhotoAction(executionId, question.id, formData);
+    const result = await uploadAnswerPhotoAction(executionId, question.id, question.title, formData);
     setSavingPhoto(false);
     if (!result.ok) {
       toast.error(result.error);
       return;
     }
-    updateAnswer({ photoUrl: URL.createObjectURL(file) });
+    updateAnswer({ photoUrl: URL.createObjectURL(file), aiFinding: result.finding });
     toast.success("Foto anexada.");
   }
 
@@ -266,6 +274,7 @@ export function ChecklistRunner({
                 </>
               )}
             </button>
+            {answer.aiFinding && <AiFindingCard finding={answer.aiFinding} />}
           </div>
         )}
       </div>
