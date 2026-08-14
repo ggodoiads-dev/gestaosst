@@ -27,7 +27,12 @@ export function StatCard({
   icon?: ReactNode;
 }) {
   const content = (
-    <div className="flex flex-col gap-1 rounded-lg border border-border bg-surface p-4 h-full">
+    <div
+      className={cn(
+        "flex h-full flex-col gap-1 rounded-lg border border-border bg-surface p-4",
+        href && "transition-colors hover:border-border-strong",
+      )}
+    >
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium text-foreground-subtle">{label}</span>
         {icon && <span className={cn("size-4", TONE_CLASSES[tone])}>{icon}</span>}
@@ -40,7 +45,7 @@ export function StatCard({
   if (!href) return content;
 
   return (
-    <Link href={href} className="block transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 rounded-lg">
+    <Link href={href} className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40">
       {content}
     </Link>
   );

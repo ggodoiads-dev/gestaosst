@@ -145,10 +145,10 @@ export function AppShell({
                     key={item.href}
                     href={item.href}
                     className={cn(
-                      "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-medium transition-colors",
+                      "flex items-center gap-2.5 rounded-md border-l-[3px] px-2.5 py-2 text-sm font-medium transition-colors",
                       active
-                        ? "bg-white/10 text-brand-accent"
-                        : "text-white/70 hover:bg-white/5 hover:text-white",
+                        ? "border-brand-accent bg-white/5 text-brand-accent"
+                        : "border-transparent text-white/70 hover:bg-white/5 hover:text-white",
                     )}
                   >
                     <Icon className="size-4 shrink-0" />

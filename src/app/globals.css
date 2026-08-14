@@ -33,8 +33,6 @@
   --radius-sm: 4px;
   --radius-md: 6px;
   --radius-lg: 10px;
-
-  --font-sans: var(--font-inter);
 }
 
 @theme inline {

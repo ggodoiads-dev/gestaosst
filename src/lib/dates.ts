@@ -30,6 +30,11 @@ export function formatRelative(date: Date | string | null | undefined): string {
   return formatDistanceToNow(new Date(date), { locale: ptBR, addSuffix: true });
 }
 
+export function formatLongDate(date: Date | string = new Date()): string {
+  const text = formatInTimeZone(new Date(date), APP_TIMEZONE, "EEEE, dd 'de' MMMM", { locale: ptBR });
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
 /**
  * Converte um valor de `<input type="date">` (ex: "2026-08-12") em um Date
  * que representa meio-dia local, evitando que a data avance ou recue um dia
