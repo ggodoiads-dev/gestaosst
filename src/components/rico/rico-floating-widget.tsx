@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { useRico } from "@/components/rico/rico-context";
 import { RicoAvatar } from "@/components/rico/rico-avatar";
+import { RicoMarkdown } from "@/components/rico/rico-markdown";
 
 export function RicoFloatingWidget() {
   const {
@@ -70,11 +71,13 @@ export function RicoFloatingWidget() {
               <div key={i} className={cn("flex flex-col gap-1", m.role === "user" ? "items-end" : "items-start")}>
                 <div
                   className={cn(
-                    "max-w-[85%] rounded-lg px-3 py-2 text-[13px] whitespace-pre-wrap leading-snug",
-                    m.role === "user" ? "bg-accent text-accent-foreground" : "bg-surface-muted text-foreground",
+                    "max-w-[85%] rounded-lg px-3 py-2 text-[13px] leading-snug",
+                    m.role === "user"
+                      ? "whitespace-pre-wrap bg-accent text-accent-foreground"
+                      : "bg-surface-muted text-foreground",
                   )}
                 >
-                  {m.content}
+                  {m.role === "assistant" ? <RicoMarkdown content={m.content} /> : m.content}
                 </div>
 
                 {m.pendingAction && m.actionState === "pending" && (

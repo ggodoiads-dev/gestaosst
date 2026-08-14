@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { useRico } from "@/components/rico/rico-context";
+import { RicoMarkdown } from "@/components/rico/rico-markdown";
 
 export function RicoChat() {
   const { messages, sending, sendMessage, confirmingIndex, confirmAction, cancelAction } = useRico();
@@ -41,11 +42,13 @@ export function RicoChat() {
             </div>
             <div
               className={cn(
-                "max-w-[80%] rounded-lg px-3.5 py-2.5 text-sm whitespace-pre-wrap",
-                m.role === "user" ? "bg-accent text-accent-foreground" : "bg-surface-muted text-foreground",
+                "max-w-[80%] rounded-lg px-3.5 py-2.5 text-sm",
+                m.role === "user"
+                  ? "whitespace-pre-wrap bg-accent text-accent-foreground"
+                  : "bg-surface-muted text-foreground",
               )}
             >
-              {m.content}
+              {m.role === "assistant" ? <RicoMarkdown content={m.content} /> : m.content}
             </div>
 
             {m.pendingAction && m.actionState === "pending" && (
