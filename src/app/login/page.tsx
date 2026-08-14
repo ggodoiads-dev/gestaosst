@@ -9,26 +9,25 @@ export const metadata: Metadata = {
 
 export default function LoginPage() {
   return (
-    <div className="flex min-h-screen w-full">
-      <div className="hidden lg:flex lg:w-1/2 flex-col justify-between bg-brand px-14 py-12 text-white">
-        <Image src="/log20-wordmark.png" alt="Log 20 Logística" width={220} height={87} priority />
-        <div>
-          <h1 className="text-3xl font-semibold leading-snug max-w-md">
-            Sistema de Gestão de SST e Equipamentos
-          </h1>
-          <p className="mt-4 max-w-sm text-sm text-white/75 leading-relaxed">
-            Checklists de equipamentos, manutenção, não conformidades, acidentes, qualificações,
-            atividades e colaboradores, com rastreabilidade completa do início ao fim.
+    <div className="relative flex min-h-screen w-full items-center justify-center overflow-hidden bg-brand px-4 py-12">
+      <div
+        className="pointer-events-none absolute inset-0 opacity-[0.06]"
+        style={{
+          backgroundImage: "radial-gradient(circle, white 1px, transparent 1px)",
+          backgroundSize: "22px 22px",
+        }}
+      />
+
+      <div className="relative w-full max-w-sm">
+        <div className="mb-7 flex flex-col items-center gap-2 text-center">
+          <Image src="/log20-wordmark.png" alt="Log 20 Logística" width={168} height={66} priority />
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/55">
+            Gestão de SST e Equipamentos
           </p>
         </div>
-        <div className="text-xs text-white/50">
-          Acesso restrito a colaboradores autorizados.
-        </div>
-      </div>
 
-      <div className="flex flex-1 items-center justify-center px-6 py-12">
-        <div className="w-full max-w-sm">
-          <div className="mb-8">
+        <div className="rounded-lg border border-border bg-surface p-7 shadow-xl">
+          <div className="mb-6">
             <h2 className="text-xl font-semibold text-foreground">Entrar</h2>
             <p className="mt-1 text-sm text-foreground-subtle">
               Informe suas credenciais para acessar o sistema.
@@ -38,6 +37,8 @@ export default function LoginPage() {
             <LoginForm />
           </Suspense>
         </div>
+
+        <p className="mt-6 text-center text-xs text-white/45">Acesso restrito a colaboradores autorizados.</p>
       </div>
     </div>
   );
