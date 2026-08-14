@@ -43,7 +43,10 @@ async function saveFileUpload(file: File, options: UploadOptions): Promise<Uploa
   const buffer = Buffer.from(await file.arrayBuffer());
 
   if (STORAGE_DRIVER === "blob") {
-    await put(relativePath, buffer, { access: "private", contentType: file.type });
+    // Pathname no Blob é só o filename (sem o prefixo "uploads/"), pra bater com os
+    // segmentos que a rota `/api/uploads/[...path]` recebe — "uploads/" já é o
+    // segmento literal da própria rota, não faz parte do catch-all.
+    await put(filename, buffer, { access: "private", contentType: file.type });
   } else {
     // turbopackIgnore: caminho de storage local configurável em runtime (fora do bundle de build)
     const dir = path.resolve(/*turbopackIgnore: true*/ process.cwd(), STORAGE_DIR);
