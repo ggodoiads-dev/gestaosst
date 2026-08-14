@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, Camera, CheckCircle2, AlertTriangle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -15,6 +15,7 @@ import {
   finalizeExecutionAction,
 } from "@/server/actions/checklist-execution.actions";
 import { NOT_APPLICABLE_VALUE } from "@/domain/checklist/answer-values";
+import { useRico } from "@/components/rico/rico-context";
 import type { QuestionType, Criticality } from "@/generated/prisma/enums";
 
 type RuleSummary = { triggerValue: string; requiresComment: boolean; requiresPhoto: boolean };
@@ -80,6 +81,19 @@ export function ChecklistRunner({
     () => question.rules.find((r) => r.triggerValue === answer.value),
     [question, answer.value],
   );
+
+  const { notifyContext } = useRico();
+
+  useEffect(() => {
+    if (!activeRule || answer.value === NOT_APPLICABLE_VALUE) return;
+    if (!(activeRule.requiresComment || activeRule.requiresPhoto)) return;
+    notifyContext({
+      kind: "checklist_deviation",
+      equipmentCode,
+      questionTitle: question.title,
+      answerValue: answer.value ?? "",
+    });
+  }, [activeRule, answer.value, equipmentCode, question.title, notifyContext]);
 
   const isLast = index === questions.length - 1;
   const progressPct = Math.round(((index + 1) / questions.length) * 100);

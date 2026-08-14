@@ -325,6 +325,50 @@ export async function runRicoTurn(
   return { reply: "Isso ficou complexo demais pra eu resolver em uma resposta — pode tentar de um jeito mais direto?", pendingAction: null };
 }
 
+export type ProactiveSignal = {
+  kind: "checklist_deviation";
+  equipmentCode: string;
+  questionTitle: string;
+  answerValue: string;
+};
+
+function describeSignal(signal: ProactiveSignal): string {
+  if (signal.kind === "checklist_deviation") {
+    return `O colaborador está fazendo o checklist do equipamento ${signal.equipmentCode} e acabou de responder "${signal.answerValue}" na pergunta "${signal.questionTitle}" — uma resposta que caracteriza um desvio.`;
+  }
+  return "Algo relevante aconteceu no sistema.";
+}
+
+/**
+ * Gera um comentário curto e proativo do Rico sobre algo que acabou de acontecer em outra
+ * tela (hoje só o gatilho de desvio crítico no checklist). Chamada leve, sem ferramentas —
+ * só uma resposta de 1-2 frases. Best-effort: falha silenciosa (retorna null), nunca deve
+ * atrapalhar o fluxo da tela que disparou o sinal.
+ */
+export async function getProactiveTip(user: CurrentUser, signal: ProactiveSignal): Promise<string | null> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return null;
+
+  try {
+    const client = new OpenAI({ apiKey });
+    const response = await client.chat.completions.create({
+      model: MODEL,
+      max_tokens: 120,
+      messages: [
+        {
+          role: "system",
+          content: `${SYSTEM_PROMPT}\n\nVocê está comentando proativamente algo que acabou de acontecer, sem o usuário ter perguntado nada — não repita os fatos que ele já sabe (ele já viu o que respondeu), vá direto pra um comentário ou dica útil e curta, no máximo 2 frases.`,
+        },
+        { role: "user", content: describeSignal(signal) },
+      ],
+    });
+    return response.choices[0]?.message.content?.trim() || null;
+  } catch (error) {
+    console.error("[rico] falha ao gerar dica proativa:", error);
+    return null;
+  }
+}
+
 /** Executa de verdade uma ação de escrita já confirmada pelo usuário no chat. */
 export async function executeRicoAction(
   user: CurrentUser,

@@ -49,6 +49,8 @@ import { logoutAction } from "@/server/actions/auth.actions";
 import type { NavGroup, NavIconKey } from "@/components/layout/nav-items";
 import { ROLE_LABELS, type RoleKeyValue } from "@/domain/shared/permissions";
 import { GlobalSearch } from "@/components/domain/global-search";
+import { RicoProvider } from "@/components/rico/rico-context";
+import { RicoFloatingWidget } from "@/components/rico/rico-floating-widget";
 
 const ICONS: Record<NavIconKey, LucideIcon> = {
   dashboard: LayoutDashboard,
@@ -98,6 +100,7 @@ export function AppShell({
   const roleLabel = ROLE_LABELS[user.roleKey as RoleKeyValue] ?? user.roleKey;
 
   return (
+    <RicoProvider userFirstName={user.name.split(" ")[0]}>
     <div className="flex min-h-screen w-full bg-background">
       {mobileOpen && (
         <button
@@ -200,7 +203,10 @@ export function AppShell({
 
         <main className="flex-1 min-w-0">{children}</main>
       </div>
+
+      <RicoFloatingWidget />
     </div>
+    </RicoProvider>
   );
 }
 

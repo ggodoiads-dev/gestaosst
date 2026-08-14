@@ -1,34 +1,15 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useRef, useState } from "react";
 import { Sparkles, Send, Check, X, Loader2 } from "lucide-react";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import {
-  sendRicoMessageAction,
-  confirmRicoActionAction,
-  type PendingAction,
-} from "@/server/actions/rico.actions";
+import { useRico } from "@/components/rico/rico-context";
 
-type Message = {
-  role: "user" | "assistant";
-  content: string;
-  pendingAction?: PendingAction | null;
-  actionState?: "pending" | "confirmed" | "cancelled";
-};
-
-export function RicoChat({ userFirstName }: { userFirstName: string }) {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      role: "assistant",
-      content: `E aí, ${userFirstName}! Eu sou o Rico. Pode perguntar sobre checklists, não conformidades, risco dos equipamentos, qualificações, acidentes — ou pedir pra eu criar uma atividade ou registrar uma qualificação. Manda ver.`,
-    },
-  ]);
+export function RicoChat() {
+  const { messages, sending, sendMessage, confirmingIndex, confirmAction, cancelAction } = useRico();
   const [input, setInput] = useState("");
-  const [sending, startSending] = useTransition();
-  const [confirmingIndex, setConfirmingIndex] = useState<number | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   function scrollToBottom() {
@@ -39,51 +20,8 @@ export function RicoChat({ userFirstName }: { userFirstName: string }) {
     const text = input.trim();
     if (!text || sending) return;
     setInput("");
-    const history = messages.map((m) => ({ role: m.role, content: m.content }));
-    setMessages((prev) => [...prev, { role: "user", content: text }]);
+    sendMessage(text);
     scrollToBottom();
-
-    startSending(async () => {
-      const result = await sendRicoMessageAction(history, text);
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content: result.reply,
-          pendingAction: result.pendingAction,
-          actionState: result.pendingAction ? "pending" : undefined,
-        },
-      ]);
-      scrollToBottom();
-    });
-  }
-
-  function handleConfirm(index: number, action: PendingAction) {
-    setConfirmingIndex(index);
-    confirmRicoActionAction(action).then((result) => {
-      setConfirmingIndex(null);
-      setMessages((prev) => {
-        const next = [...prev];
-        next[index] = { ...next[index], actionState: result.ok ? "confirmed" : "pending" };
-        return [
-          ...next,
-          {
-            role: "assistant",
-            content: result.ok ? `✅ ${result.message}` : `Não deu certo: ${result.error}`,
-          },
-        ];
-      });
-      if (!result.ok) toast.error(result.error);
-      scrollToBottom();
-    });
-  }
-
-  function handleCancel(index: number) {
-    setMessages((prev) => {
-      const next = [...prev];
-      next[index] = { ...next[index], actionState: "cancelled" };
-      return next;
-    });
   }
 
   return (
@@ -109,10 +47,10 @@ export function RicoChat({ userFirstName }: { userFirstName: string }) {
                 <p className="font-medium">{m.pendingAction.label}</p>
                 <p className="text-xs text-foreground-subtle">Rico só executa depois que você confirmar.</p>
                 <div className="flex gap-2">
-                  <Button size="sm" onClick={() => handleConfirm(i, m.pendingAction!)} loading={confirmingIndex === i}>
+                  <Button size="sm" onClick={() => confirmAction(i, m.pendingAction!)} loading={confirmingIndex === i}>
                     <Check className="size-3.5" /> Confirmar
                   </Button>
-                  <Button size="sm" variant="secondary" onClick={() => handleCancel(i)} disabled={confirmingIndex === i}>
+                  <Button size="sm" variant="secondary" onClick={() => cancelAction(i)} disabled={confirmingIndex === i}>
                     <X className="size-3.5" /> Cancelar
                   </Button>
                 </div>
