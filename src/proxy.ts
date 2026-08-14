@@ -27,16 +27,22 @@ async function getAuthenticatedUserId(request: NextRequest): Promise<string | nu
   const secret = process.env.AUTH_SECRET;
   if (!secret) return null;
 
+  let userId: string | null;
   try {
     const { payload } = await jwtVerify(token, new TextEncoder().encode(secret));
-    const userId = typeof payload.sub === "string" ? payload.sub : null;
-    if (!userId) return null;
+    userId = typeof payload.sub === "string" ? payload.sub : null;
+  } catch (error) {
+    console.error("[proxy] falha ao verificar JWT:", error);
+    return null;
+  }
+  if (!userId) return null;
 
+  try {
     const user = await db.user.findUnique({ where: { id: userId }, select: { active: true } });
     if (!user || !user.active) return null;
-
     return userId;
-  } catch {
+  } catch (error) {
+    console.error("[proxy] falha ao consultar usuário no banco:", error);
     return null;
   }
 }
