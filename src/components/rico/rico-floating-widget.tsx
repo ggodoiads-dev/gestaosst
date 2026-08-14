@@ -21,10 +21,14 @@ export function RicoFloatingWidget() {
   } = useRico();
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (open) requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }));
+    if (!open) return;
+    requestAnimationFrame(() => {
+      const el = scrollAreaRef.current;
+      if (el) el.scrollTop = el.scrollHeight;
+    });
   }, [open, messages.length, sending]);
 
   function handleOpen() {
@@ -61,7 +65,7 @@ export function RicoFloatingWidget() {
             </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-2.5">
+          <div ref={scrollAreaRef} className="flex-1 overflow-y-auto p-3 flex flex-col gap-2.5">
             {messages.map((m, i) => (
               <div key={i} className={cn("flex flex-col gap-1", m.role === "user" ? "items-end" : "items-start")}>
                 <div
@@ -96,7 +100,6 @@ export function RicoFloatingWidget() {
                 <Loader2 className="size-3 animate-spin" /> Rico está pensando...
               </div>
             )}
-            <div ref={bottomRef} />
           </div>
 
           <div className="flex items-end gap-1.5 border-t border-border p-2.5">

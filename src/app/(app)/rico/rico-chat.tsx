@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Sparkles, Send, Check, X, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -10,23 +10,29 @@ import { useRico } from "@/components/rico/rico-context";
 export function RicoChat() {
   const { messages, sending, sendMessage, confirmingIndex, confirmAction, cancelAction } = useRico();
   const [input, setInput] = useState("");
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
 
   function scrollToBottom() {
-    requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }));
+    requestAnimationFrame(() => {
+      const el = scrollAreaRef.current;
+      if (el) el.scrollTop = el.scrollHeight;
+    });
   }
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages.length, sending]);
 
   function handleSend() {
     const text = input.trim();
     if (!text || sending) return;
     setInput("");
     sendMessage(text);
-    scrollToBottom();
   }
 
   return (
     <div className="flex h-[calc(100vh-220px)] flex-col rounded-lg border border-border bg-surface">
-      <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
+      <div ref={scrollAreaRef} className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
         {messages.map((m, i) => (
           <div key={i} className={cn("flex flex-col gap-1.5", m.role === "user" ? "items-end" : "items-start")}>
             <div className="flex items-center gap-1.5 text-xs text-foreground-subtle">
@@ -66,7 +72,6 @@ export function RicoChat() {
             <Loader2 className="size-3 animate-spin" /> Rico está pensando...
           </div>
         )}
-        <div ref={bottomRef} />
       </div>
 
       <div className="flex items-end gap-2 border-t border-border p-3">
