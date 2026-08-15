@@ -1,3 +1,33 @@
+import {
+  LayoutDashboard,
+  ClipboardCheck,
+  Wrench,
+  Hammer,
+  AlertTriangle,
+  ListChecks,
+  History,
+  RotateCcwClock,
+  BarChart3,
+  Building2,
+  FileStack,
+  Users,
+  ShieldCheck,
+  UsersRound,
+  FolderKanban,
+  GraduationCap,
+  HeartPulse,
+  CalendarDays,
+  TrendingUp,
+  ClipboardList,
+  CheckCircle2,
+  HardHat,
+  Fingerprint,
+  Sparkles,
+  Wallet,
+  Upload,
+  Clock,
+  type LucideIcon,
+} from "lucide-react";
 import { PERMISSIONS } from "@/domain/shared/permissions";
 import type { CurrentUser } from "@/server/auth/current-user";
 
@@ -47,6 +77,37 @@ export type NavGroup = {
   key: string;
   title?: string;
   items: NavItem[];
+};
+
+/** Resolve `NavIconKey` pro componente de ícone real — compartilhado entre a sidebar (AppShell) e a paleta de comandos da tela de início. */
+export const NAV_ICONS: Record<NavIconKey, LucideIcon> = {
+  dashboard: LayoutDashboard,
+  checklist: ClipboardCheck,
+  equipment: Wrench,
+  maintenance: Hammer,
+  alert: AlertTriangle,
+  actionPlan: ListChecks,
+  history: History,
+  historyAll: RotateCcwClock,
+  indicators: BarChart3,
+  building: Building2,
+  checklistTemplate: FileStack,
+  users: Users,
+  audit: ShieldCheck,
+  collaborators: UsersRound,
+  activities: FolderKanban,
+  qualifications: GraduationCap,
+  accidents: HeartPulse,
+  schedules: CalendarDays,
+  productivity: TrendingUp,
+  checklistCompliance: ClipboardList,
+  myPresence: CheckCircle2,
+  epi: HardHat,
+  jobFunctions: Fingerprint,
+  rico: Sparkles,
+  hr: Wallet,
+  hrImport: Upload,
+  timeClock: Clock,
 };
 
 /**
