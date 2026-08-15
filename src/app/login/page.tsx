@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
-import Image from "next/image";
 import { Suspense } from "react";
+import { SigoWordmark } from "@/components/domain/sigo-wordmark";
 import { LoginForm } from "./login-form";
 
 export const metadata: Metadata = {
-  title: "Entrar — Log 20 · Gestão de SST e Equipamentos",
+  title: "Entrar — SIGO · Sistema Interno de Gestão Organizacional",
 };
 
 export default function LoginPage() {
@@ -19,11 +19,8 @@ export default function LoginPage() {
       />
 
       <div className="relative w-full max-w-sm">
-        <div className="mb-7 flex flex-col items-center gap-2 text-center">
-          <Image src="/log20-wordmark.png" alt="Log 20 Logística" width={168} height={66} priority />
-          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/55">
-            Gestão de SST e Equipamentos
-          </p>
+        <div className="mb-7 flex flex-col items-center text-center">
+          <SigoWordmark size="lg" className="items-center" />
         </div>
 
         <div className="rounded-lg border border-border bg-surface p-7 shadow-xl">

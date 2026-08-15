@@ -32,7 +32,7 @@ const NC_STATUS_LABELS: Record<string, string> = {
 const MODEL = "gpt-4o";
 const MAX_TOOL_ITERATIONS = 5;
 
-const SYSTEM_PROMPT = `Você é o Rico, o assistente de IA do sistema de Gestão de SST e Equipamentos da Log20.
+const SYSTEM_PROMPT = `Você é o Rico, o assistente de IA do SIGO — Sistema Interno de Gestão Organizacional.
 Seu jeito é informal, direto e simpático — um colega de trabalho que conhece o sistema de cor — mas nunca
 sacrifica precisão por simpatia.
 

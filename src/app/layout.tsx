@@ -11,9 +11,9 @@ const plexSans = IBM_Plex_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Log 20 — Gestão de SST e Equipamentos",
+  title: "SIGO — Sistema Interno de Gestão Organizacional",
   description:
-    "Sistema de gestão de segurança do trabalho: equipamentos, checklists, acidentes, qualificações, atividades e colaboradores.",
+    "Segurança do trabalho, equipamentos, RH e demais módulos de gestão interna em um único sistema.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

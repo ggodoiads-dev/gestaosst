@@ -45,6 +45,8 @@ export const PERMISSIONS = {
   SHIFT_CHECKIN_SELF: "shift.checkin_self",
   SHIFT_CHECKIN_MANAGE: "shift.checkin_manage",
   REPORTS_VIEW: "reports.view",
+
+  HR_MANAGE: "hr.manage",
 } as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -89,6 +91,8 @@ export const PERMISSION_DESCRIPTIONS: Record<PermissionKey, string> = {
   [PERMISSIONS.SHIFT_CHECKIN_SELF]: "Confirmar a própria presença no turno",
   [PERMISSIONS.SHIFT_CHECKIN_MANAGE]: "Confirmar presença de qualquer colaborador (quando ele esquece)",
   [PERMISSIONS.REPORTS_VIEW]: "Gerar e baixar relatórios",
+
+  [PERMISSIONS.HR_MANAGE]: "Acessar dados de RH (salário) e importar planilha de colaboradores",
 };
 
 export const ROLE_KEYS = {

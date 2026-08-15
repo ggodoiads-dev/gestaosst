@@ -31,7 +31,9 @@ export type NavIconKey =
   | "myPresence"
   | "epi"
   | "jobFunctions"
-  | "rico";
+  | "rico"
+  | "hr"
+  | "hrImport";
 
 export type NavItem = {
   href: string;
@@ -108,6 +110,13 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
     sst.push({ href: "/produtividade", label: "Produtividade", icon: "productivity" });
   }
   if (sst.length > 0) groups.push({ title: "SST", items: sst });
+
+  const rh: NavItem[] = [];
+  if (p.has(PERMISSIONS.HR_MANAGE)) {
+    rh.push({ href: "/rh", label: "Colaboradores (RH)", icon: "hr" });
+    rh.push({ href: "/rh/importar", label: "Importar Planilha", icon: "hrImport" });
+  }
+  if (rh.length > 0) groups.push({ title: "RH", items: rh });
 
   const admin: NavItem[] = [];
   if (p.has(PERMISSIONS.MASTERDATA_MANAGE)) {

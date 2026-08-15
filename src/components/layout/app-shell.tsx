@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
   Menu,
@@ -33,6 +32,8 @@ import {
   HardHat,
   Fingerprint,
   Sparkles,
+  Wallet,
+  Upload,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -49,6 +50,7 @@ import { logoutAction } from "@/server/actions/auth.actions";
 import type { NavGroup, NavIconKey } from "@/components/layout/nav-items";
 import { ROLE_LABELS, type RoleKeyValue } from "@/domain/shared/permissions";
 import { GlobalSearch } from "@/components/domain/global-search";
+import { SigoWordmark } from "@/components/domain/sigo-wordmark";
 import { RicoProvider } from "@/components/rico/rico-context";
 import { RicoFloatingWidget } from "@/components/rico/rico-floating-widget";
 
@@ -77,6 +79,8 @@ const ICONS: Record<NavIconKey, LucideIcon> = {
   epi: HardHat,
   jobFunctions: Fingerprint,
   rico: Sparkles,
+  hr: Wallet,
+  hrImport: Upload,
 };
 
 export function AppShell({
@@ -118,7 +122,7 @@ export function AppShell({
       >
         <div className="flex items-center justify-between h-16 px-4 border-b border-white/10">
           <Link href="/inicio" className="flex items-center">
-            <Image src="/log20-wordmark.png" alt="Log 20 Logística" width={140} height={56} priority />
+            <SigoWordmark size="sm" />
           </Link>
           <button
             className="lg:hidden text-white/70 hover:text-white"

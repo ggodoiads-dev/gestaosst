@@ -32,6 +32,45 @@ async function resolveCargo(tx: Tx, functionId: string | null | undefined): Prom
   return jobFunction.name;
 }
 
+/** Listagem pra tela de RH — inclui salário, por isso exige HR_MANAGE em vez de COLLABORATOR_MANAGE. */
+export function listCollaboratorsForHr(
+  user: CurrentUser,
+  filters: { onlyActive?: boolean; search?: string } = {},
+) {
+  requirePermission(user, PERMISSIONS.HR_MANAGE);
+  return db.collaborator.findMany({
+    where: {
+      active: filters.onlyActive ? true : undefined,
+      OR: filters.search
+        ? [
+            { name: { contains: filters.search } },
+            { matricula: { contains: filters.search } },
+            { cpf: { contains: filters.search } },
+          ]
+        : undefined,
+    },
+    include: { area: { include: { unit: true } }, function: true },
+    orderBy: { name: "asc" },
+  });
+}
+
+/** Só quem tem HR_MANAGE define/altera salário — separado de updateCollaborator (COLLABORATOR_MANAGE)
+ * de propósito, pra que gestores de área possam editar cadastro sem enxergar ou mexer em folha. */
+export async function setCollaboratorSalary(user: CurrentUser, id: string, salary: number | null) {
+  requirePermission(user, PERMISSIONS.HR_MANAGE);
+  const before = await db.collaborator.findUniqueOrThrow({ where: { id } });
+  const collaborator = await db.collaborator.update({ where: { id }, data: { salary } });
+  await recordAudit({
+    userId: user.id,
+    action: "UPDATE",
+    entityType: "Collaborator",
+    entityId: id,
+    previousValue: { salary: before.salary ? Number(before.salary) : null },
+    newValue: { salary },
+  });
+  return collaborator;
+}
+
 export function listCollaboratorsForUser(
   user: CurrentUser,
   filters: { areaId?: string; search?: string; onlyActive?: boolean } = {},
