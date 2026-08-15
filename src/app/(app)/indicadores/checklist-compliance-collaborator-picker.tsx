@@ -19,7 +19,7 @@ export function ChecklistComplianceCollaboratorPicker({
       <FormField label="Colaborador">
         <Select
           value={selectedId ?? "none"}
-          onValueChange={(id) => router.push(id === "none" ? "/checklist/conformidade" : `/checklist/conformidade?collaboratorId=${id}`)}
+          onValueChange={(id) => router.push(id === "none" ? "/indicadores" : `/indicadores?collaboratorId=${id}`)}
         >
           <SelectTrigger><SelectValue placeholder="Selecione um colaborador" /></SelectTrigger>
           <SelectContent>

@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { FormField } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { StatCard } from "@/components/domain/stat-card";
+import { DonutStat } from "@/components/domain/charts/donut-stat";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { JustifyChecklistDialog } from "@/components/domain/justify-checklist-dialog";
 import { getChecklistAdherenceAction } from "@/server/actions/time-clock.actions";
@@ -64,10 +65,20 @@ export function ChecklistAdherenceCard({
           </Button>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-          <StatCard label="Aderência" value={`${report.adherencePercent}%`} tone={tone} />
-          <StatCard label="Dias exigidos" value={report.requiredDays} />
-          <StatCard label="Dias cumpridos" value={report.compliantDays} tone="success" />
+        <div className="grid grid-cols-1 sm:grid-cols-[auto_1fr] gap-4 items-center">
+          <DonutStat
+            centerLabel="aderência"
+            centerValue={`${report.adherencePercent}%`}
+            segments={[
+              { label: "Cumpridos", value: report.compliantDays, color: tone === "danger" ? "var(--danger)" : "var(--success)" },
+              { label: "Pendentes", value: Math.max(report.requiredDays - report.compliantDays, 0), color: "var(--border-strong)" },
+            ]}
+          />
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+            <StatCard label="Aderência" value={`${report.adherencePercent}%`} tone={tone} />
+            <StatCard label="Dias exigidos" value={report.requiredDays} />
+            <StatCard label="Dias cumpridos" value={report.compliantDays} tone="success" />
+          </div>
         </div>
 
         {error && <p className="text-sm text-danger">{error}</p>}

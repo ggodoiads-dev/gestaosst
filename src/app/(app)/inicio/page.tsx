@@ -14,7 +14,6 @@ import {
   Wallet,
   Upload,
   BarChart3,
-  ClipboardList,
   RotateCcwClock,
   Sparkles,
 } from "lucide-react";
@@ -305,16 +304,9 @@ export default async function InicioPage() {
     {
       href: "/indicadores",
       title: "Indicadores",
-      description: "Cumprimento de checklist, não conformidades e desempenho por área.",
+      description: "Cumprimento de checklist, conformidade por colaborador, não conformidades e desempenho por área.",
       icon: <BarChart3 className="size-4" />,
       visible: canSeeGestao,
-    },
-    {
-      href: "/checklist/conformidade",
-      title: "Conformidade de Checklist",
-      description: "Quem cumpriu o checklist do turno, por colaborador.",
-      icon: <ClipboardList className="size-4" />,
-      visible: hasPermission(user, PERMISSIONS.CHECKLIST_COMPLIANCE_VIEW),
     },
     {
       href: "/historico",

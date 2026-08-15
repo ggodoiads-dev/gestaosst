@@ -124,9 +124,6 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
   if (p.has(PERMISSIONS.INDICATORS_VIEW_AREA) || p.has(PERMISSIONS.INDICATORS_VIEW_CONSOLIDATED)) {
     indicadores.push({ href: "/indicadores", label: "Indicadores", icon: "indicators" });
   }
-  if (p.has(PERMISSIONS.CHECKLIST_COMPLIANCE_VIEW)) {
-    indicadores.push({ href: "/checklist/conformidade", label: "Conformidade de Checklist", icon: "checklistCompliance" });
-  }
   if (p.has(PERMISSIONS.HISTORY_VIEW)) {
     indicadores.push({ href: "/historico", label: "Histórico Geral", icon: "historyAll" });
   }
