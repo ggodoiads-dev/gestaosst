@@ -285,7 +285,7 @@ export default async function InicioPage() {
       visible: hasPermission(user, PERMISSIONS.PRODUCTIVITY_SELF_LOG),
     },
     {
-      href: "/rh",
+      href: "/colaboradores",
       title: "Colaboradores (RH)",
       description: "Salário e dados de folha, atualizáveis por planilha.",
       icon: <Wallet className="size-4" />,

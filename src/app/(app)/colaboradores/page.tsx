@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { requireUser } from "@/server/auth/current-user";
-import { listCollaboratorsForUser } from "@/server/services/collaborator.service";
+import { requireUser, hasPermission } from "@/server/auth/current-user";
+import { PERMISSIONS } from "@/domain/shared/permissions";
+import { listCollaboratorsUnified } from "@/server/services/collaborator.service";
 import { listAreas } from "@/server/services/masterdata.service";
 import { listTurnos } from "@/server/services/schedule.service";
 import { listJobFunctionsForCollaboratorForm } from "@/server/services/epi.service";
@@ -9,30 +10,42 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, TableEmpty } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { formatDate } from "@/lib/dates";
+import { formatCurrency } from "@/lib/format";
 import { CreateCollaboratorDialog, EditCollaboratorDialog } from "./collaborator-form-dialog";
 import { DeleteCollaboratorButton, ReactivateCollaboratorButton } from "./collaborator-delete-button";
+import { EditSalaryDialog } from "./salary-dialog";
+import { RequiresChecklistToggle } from "./requires-checklist-toggle";
 
 export default async function ColaboradoresPage() {
   const user = await requireUser();
+  const canManage = hasPermission(user, PERMISSIONS.COLLABORATOR_MANAGE);
+  const canSeeHr = hasPermission(user, PERMISSIONS.HR_MANAGE);
 
   const [collaborators, areas, turnos, jobFunctions] = await Promise.all([
-    listCollaboratorsForUser(user),
+    listCollaboratorsUnified(user),
     listAreas(),
     listTurnos(user),
     listJobFunctionsForCollaboratorForm(user),
   ]);
 
+  const hasActionsColumn = canManage || canSeeHr;
+  const columnCount = 8 + (canSeeHr ? 2 : 0) + (hasActionsColumn ? 1 : 0);
+
   return (
     <>
       <PageHeader
         title="Colaboradores"
-        description="Cadastro central dos funcionários da operação — alimenta acidentes, qualificações e o histórico de cada pessoa."
+        description={
+          canSeeHr
+            ? "Cadastro central dos funcionários da operação — dados de RH (salário) só aparecem pra quem tem esse acesso."
+            : "Cadastro central dos funcionários da operação — alimenta acidentes, qualificações e o histórico de cada pessoa."
+        }
       />
       <PageBody>
         <Card>
           <CardHeader>
             <CardTitle>Colaboradores ({collaborators.length})</CardTitle>
-            <CreateCollaboratorDialog areas={areas} turnos={turnos} jobFunctions={jobFunctions} />
+            {canManage && <CreateCollaboratorDialog areas={areas} turnos={turnos} jobFunctions={jobFunctions} />}
           </CardHeader>
           <CardContent className="p-0">
             <Table>
@@ -46,11 +59,17 @@ export default async function ColaboradoresPage() {
                   <TableHead>Admissão</TableHead>
                   <TableHead>Acesso</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead className="w-16" />
+                  {canSeeHr && (
+                    <>
+                      <TableHead>Salário</TableHead>
+                      <TableHead>Precisa de checklist</TableHead>
+                    </>
+                  )}
+                  {hasActionsColumn && <TableHead className="w-16" />}
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {collaborators.length === 0 && <TableEmpty colSpan={9} />}
+                {collaborators.length === 0 && <TableEmpty colSpan={columnCount} />}
                 {collaborators.map((collaborator) => (
                   <TableRow key={collaborator.id} className={!collaborator.active ? "opacity-60" : undefined}>
                     <TableCell>
@@ -83,21 +102,50 @@ export default async function ColaboradoresPage() {
                         <Badge tone="neutral">Excluído</Badge>
                       )}
                     </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1">
-                        <EditCollaboratorDialog
-                          collaborator={collaborator}
-                          areas={areas}
-                          turnos={turnos}
-                          jobFunctions={jobFunctions}
-                        />
-                        {collaborator.active ? (
-                          <DeleteCollaboratorButton id={collaborator.id} name={collaborator.name} />
-                        ) : (
-                          <ReactivateCollaboratorButton id={collaborator.id} name={collaborator.name} />
-                        )}
-                      </div>
-                    </TableCell>
+                    {canSeeHr && (
+                      <>
+                        <TableCell>
+                          {collaborator.salary ? (
+                            <span className="tabular-nums">{formatCurrency(Number(collaborator.salary))}</span>
+                          ) : (
+                            <Badge tone="neutral">Não definido</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <RequiresChecklistToggle
+                            collaboratorId={collaborator.id}
+                            defaultChecked={collaborator.requiresChecklist}
+                          />
+                        </TableCell>
+                      </>
+                    )}
+                    {hasActionsColumn && (
+                      <TableCell>
+                        <div className="flex items-center gap-1">
+                          {canManage && (
+                            <EditCollaboratorDialog
+                              collaborator={collaborator}
+                              areas={areas}
+                              turnos={turnos}
+                              jobFunctions={jobFunctions}
+                            />
+                          )}
+                          {canSeeHr && (
+                            <EditSalaryDialog
+                              collaboratorId={collaborator.id}
+                              collaboratorName={collaborator.name}
+                              currentSalary={collaborator.salary ? Number(collaborator.salary) : null}
+                            />
+                          )}
+                          {canManage &&
+                            (collaborator.active ? (
+                              <DeleteCollaboratorButton id={collaborator.id} name={collaborator.name} />
+                            ) : (
+                              <ReactivateCollaboratorButton id={collaborator.id} name={collaborator.name} />
+                            ))}
+                        </div>
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))}
               </TableBody>

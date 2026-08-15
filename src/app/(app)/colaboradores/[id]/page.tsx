@@ -19,10 +19,13 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, TableEmp
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/dates";
+import { formatCurrency } from "@/lib/format";
 import { EditCollaboratorDialog } from "../collaborator-form-dialog";
 import { DeleteCollaboratorButton } from "../collaborator-delete-button";
 import { CollaboratorAccessPanel } from "../collaborator-access-panel";
 import { ShiftCheckInPanel } from "../shift-checkin-panel";
+import { EditSalaryDialog } from "../salary-dialog";
+import { RequiresChecklistToggle } from "../requires-checklist-toggle";
 import { RegisterEpiDeliveryDialog } from "./register-epi-delivery-dialog";
 import { MarkEpiReturnedButton } from "./mark-epi-returned-button";
 
@@ -41,6 +44,8 @@ export default async function ColaboradorDetailPage({
 }) {
   const { id } = await params;
   const user = await requireUser();
+  const canManage = hasPermission(user, PERMISSIONS.COLLABORATOR_MANAGE);
+  const canSeeHr = hasPermission(user, PERMISSIONS.HR_MANAGE);
   const canManageCheckIn = hasPermission(user, PERMISSIONS.SHIFT_CHECKIN_MANAGE);
   const [{ collaborator, history }, areas, turnos, jobFunctions, epiDeliveries, epiTypes, shiftCheckIn] =
     await Promise.all([
@@ -73,8 +78,12 @@ export default async function ColaboradorDetailPage({
         actions={
           <div className="flex items-center gap-2">
             {collaborator.active ? <Badge tone="success">Ativo</Badge> : <Badge tone="neutral">Excluído</Badge>}
-            <EditCollaboratorDialog collaborator={collaborator} areas={areas} turnos={turnos} jobFunctions={jobFunctions} />
-            {collaborator.active && <DeleteCollaboratorButton id={collaborator.id} name={collaborator.name} />}
+            {canManage && (
+              <EditCollaboratorDialog collaborator={collaborator} areas={areas} turnos={turnos} jobFunctions={jobFunctions} />
+            )}
+            {canManage && collaborator.active && (
+              <DeleteCollaboratorButton id={collaborator.id} name={collaborator.name} />
+            )}
           </div>
         }
       />
@@ -122,6 +131,38 @@ export default async function ColaboradorDetailPage({
               </div>
             </CardContent>
           </Card>
+
+          {canSeeHr && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Dados de RH</CardTitle>
+                <EditSalaryDialog
+                  collaboratorId={collaborator.id}
+                  collaboratorName={collaborator.name}
+                  currentSalary={collaborator.salary ? Number(collaborator.salary) : null}
+                />
+              </CardHeader>
+              <CardContent className="flex flex-col gap-4 text-sm">
+                <div>
+                  <p className="text-xs text-foreground-subtle">Salário</p>
+                  <p>
+                    {collaborator.salary ? (
+                      <span className="tabular-nums">{formatCurrency(Number(collaborator.salary))}</span>
+                    ) : (
+                      <Badge tone="neutral">Não definido</Badge>
+                    )}
+                  </p>
+                </div>
+                <label className="flex items-center gap-2.5">
+                  <RequiresChecklistToggle
+                    collaboratorId={collaborator.id}
+                    defaultChecked={collaborator.requiresChecklist}
+                  />
+                  <span>Precisa de checklist (cobrado no relatório de ponto)</span>
+                </label>
+              </CardContent>
+            </Card>
+          )}
 
           <CollaboratorAccessPanel
             collaboratorId={collaborator.id}

@@ -36,7 +36,7 @@ export async function setCollaboratorSalaryAction(_prev: ActionResult, formData:
       salary: formData.get("salary"),
     });
     await collaboratorService.setCollaboratorSalary(user, parsed.id, parsed.salary);
-    revalidatePath("/rh");
+    revalidatePath("/colaboradores");
   });
 }
 
@@ -44,7 +44,8 @@ export async function setCollaboratorRequiresChecklistAction(id: string, require
   const user = await requireUser();
   return toResult(async () => {
     await collaboratorService.setCollaboratorRequiresChecklist(user, id, requiresChecklist);
-    revalidatePath("/rh");
+    revalidatePath("/colaboradores");
+    revalidatePath("/colaboradores/[id]", "page");
     revalidatePath("/rh/ponto");
   });
 }

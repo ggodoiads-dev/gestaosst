@@ -5,7 +5,7 @@ import * as userService from "@/server/services/user.service";
 import { applyJobFunctionKit } from "@/server/services/epi.service";
 import { generateLoginEmail, generatePassword } from "@/domain/shared/credentials";
 import type { CurrentUser } from "@/server/auth/current-user";
-import { requirePermission } from "@/server/auth/current-user";
+import { requirePermission, hasPermission, ForbiddenError } from "@/server/auth/current-user";
 import { PERMISSIONS, ROLE_KEYS } from "@/domain/shared/permissions";
 import type { Prisma } from "@/generated/prisma/client";
 
@@ -33,12 +33,19 @@ async function resolveCargo(tx: Tx, functionId: string | null | undefined): Prom
 }
 
 /** Listagem pra tela de RH — inclui salário, por isso exige HR_MANAGE em vez de COLLABORATOR_MANAGE. */
-export function listCollaboratorsForHr(
+/** Tela única de Colaboradores (Segurança + RH unificadas): exige COLLABORATOR_MANAGE ou
+ * HR_MANAGE pra ver a lista — cada um enxerga as próprias colunas/ações (cadastro geral vs.
+ * dados de RH). `salary`/`pis` são zerados aqui mesmo, no servidor, pra quem não tem HR_MANAGE
+ * nunca receber esses campos no payload — não depende de a UI simplesmente não exibi-los. */
+export async function listCollaboratorsUnified(
   user: CurrentUser,
   filters: { onlyActive?: boolean; search?: string } = {},
 ) {
-  requirePermission(user, PERMISSIONS.HR_MANAGE);
-  return db.collaborator.findMany({
+  const canManage = hasPermission(user, PERMISSIONS.COLLABORATOR_MANAGE);
+  const canSeeHr = hasPermission(user, PERMISSIONS.HR_MANAGE);
+  if (!canManage && !canSeeHr) throw new ForbiddenError();
+
+  const collaborators = await db.collaborator.findMany({
     where: {
       active: filters.onlyActive ? true : undefined,
       OR: filters.search
@@ -49,9 +56,12 @@ export function listCollaboratorsForHr(
           ]
         : undefined,
     },
-    include: { area: { include: { unit: true } }, function: true },
+    include: { area: { include: { unit: true } }, turno: true, user: true, function: true },
     orderBy: { name: "asc" },
   });
+
+  if (canSeeHr) return collaborators;
+  return collaborators.map((c) => ({ ...c, salary: null, pis: null }));
 }
 
 /** Resumo leve pro briefing diário do Rico — não é a listagem completa, só os dois números que
@@ -101,6 +111,21 @@ export async function setCollaboratorRequiresChecklist(user: CurrentUser, id: st
   return collaborator;
 }
 
+/** Colaboradores ativos pro seletor do "Relatório por colaborador" em Indicadores — sem exigir
+ * `checklistEnabled`/`userId` como `listChecklistEligibleCollaborators`, porque o mesmo seletor
+ * também alimenta a aba de Produtividade, que não depende de acesso ao sistema (lançamento pode
+ * ser feito por quem gerencia, em nome do colaborador). Cobre qualquer colaborador cadastrado
+ * em RH, não só o subconjunto técnico habilitado pra checklist. */
+export function listActiveCollaboratorsForSupervision(user: CurrentUser) {
+  if (!hasPermission(user, PERMISSIONS.CHECKLIST_COMPLIANCE_VIEW) && !hasPermission(user, PERMISSIONS.PRODUCTIVITY_MANAGE)) {
+    throw new ForbiddenError();
+  }
+  return db.collaborator.findMany({
+    where: { active: true },
+    orderBy: { name: "asc" },
+  });
+}
+
 export function listCollaboratorsForUser(
   user: CurrentUser,
   filters: { areaId?: string; search?: string; onlyActive?: boolean } = {},
@@ -124,8 +149,11 @@ export function listCollaboratorsForUser(
 }
 
 export async function getCollaboratorDetail(user: CurrentUser, id: string) {
-  requirePermission(user, PERMISSIONS.COLLABORATOR_MANAGE);
-  return db.collaborator.findUniqueOrThrow({
+  const canManage = hasPermission(user, PERMISSIONS.COLLABORATOR_MANAGE);
+  const canSeeHr = hasPermission(user, PERMISSIONS.HR_MANAGE);
+  if (!canManage && !canSeeHr) throw new ForbiddenError();
+
+  const collaborator = await db.collaborator.findUniqueOrThrow({
     where: { id },
     include: {
       area: { include: { unit: true } },
@@ -134,6 +162,8 @@ export async function getCollaboratorDetail(user: CurrentUser, id: string) {
       function: true,
     },
   });
+
+  return canSeeHr ? collaborator : { ...collaborator, salary: null, pis: null };
 }
 
 /** Prontuário do colaborador: dados + histórico unificado (acidentes + qualificações), sem tabela de eventos própria. */

@@ -57,7 +57,7 @@ export async function commitImportAction(rows: ImportRowResult[]): Promise<Commi
   try {
     const user = await requireUser();
     const result = await hrImportService.commitImport(user, rows);
-    revalidatePath("/rh");
+    revalidatePath("/colaboradores");
     return { ok: true, ...result };
   } catch (error) {
     if (error instanceof ForbiddenError) return { ok: false, error: error.message };
