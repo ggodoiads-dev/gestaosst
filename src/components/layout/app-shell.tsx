@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
   Menu,
@@ -50,7 +51,6 @@ import { logoutAction } from "@/server/actions/auth.actions";
 import type { NavGroup, NavIconKey } from "@/components/layout/nav-items";
 import { ROLE_LABELS, type RoleKeyValue } from "@/domain/shared/permissions";
 import { GlobalSearch } from "@/components/domain/global-search";
-import { SigoWordmark } from "@/components/domain/sigo-wordmark";
 import { RicoProvider } from "@/components/rico/rico-context";
 import { RicoFloatingWidget } from "@/components/rico/rico-floating-widget";
 
@@ -121,8 +121,8 @@ export function AppShell({
         )}
       >
         <div className="flex items-center justify-between h-16 px-4 border-b border-white/10">
-          <Link href="/inicio" className="flex items-center">
-            <SigoWordmark size="sm" />
+          <Link href="/inicio" className="flex items-center rounded-md bg-white px-2.5 py-1.5">
+            <Image src="/sigo-logo.png" alt="SIGO" width={112} height={36} priority />
           </Link>
           <button
             className="lg:hidden text-white/70 hover:text-white"
