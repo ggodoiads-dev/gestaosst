@@ -62,21 +62,9 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
   const geral: NavItem[] = [
     { href: "/inicio", label: "Início", icon: "dashboard" },
     { href: "/rico", label: "Rico", icon: "rico" },
+    { href: "/meu-historico", label: "Meu Histórico", icon: "history" },
   ];
   groups.push({ key: "geral", items: geral });
-
-  const meuTrabalho: NavItem[] = [];
-  if (p.has(PERMISSIONS.CHECKLIST_EXECUTE)) {
-    meuTrabalho.push({ href: "/checklist/realizar", label: "Realizar Checklist", icon: "checklist" });
-  }
-  if (p.has(PERMISSIONS.PRODUCTIVITY_SELF_LOG)) {
-    meuTrabalho.push({ href: "/minha-produtividade", label: "Minha Produtividade", icon: "productivity" });
-  }
-  if (p.has(PERMISSIONS.SHIFT_CHECKIN_SELF)) {
-    meuTrabalho.push({ href: "/minha-presenca", label: "Minha Presença", icon: "myPresence" });
-  }
-  meuTrabalho.push({ href: "/meu-historico", label: "Meu Histórico", icon: "history" });
-  if (meuTrabalho.length > 0) groups.push({ key: "meuTrabalho", title: "Meu Trabalho", items: meuTrabalho });
 
   const equipamentos: NavItem[] = [];
   if (p.has(PERMISSIONS.EQUIPMENT_VIEW)) {
@@ -94,6 +82,9 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
   if (equipamentos.length > 0) groups.push({ key: "equipamentos", title: "Equipamentos", items: equipamentos });
 
   const sst: NavItem[] = [];
+  if (p.has(PERMISSIONS.CHECKLIST_EXECUTE)) {
+    sst.push({ href: "/checklist/realizar", label: "Realizar Checklist", icon: "checklist" });
+  }
   if (p.has(PERMISSIONS.COLLABORATOR_MANAGE)) {
     sst.push({ href: "/colaboradores", label: "Colaboradores", icon: "collaborators" });
   }
@@ -109,6 +100,12 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
   if (sst.length > 0) groups.push({ key: "sst", title: "Segurança", items: sst });
 
   const rh: NavItem[] = [];
+  if (p.has(PERMISSIONS.SHIFT_CHECKIN_SELF)) {
+    rh.push({ href: "/minha-presenca", label: "Minha Presença", icon: "myPresence" });
+  }
+  if (p.has(PERMISSIONS.PRODUCTIVITY_SELF_LOG)) {
+    rh.push({ href: "/minha-produtividade", label: "Minha Produtividade", icon: "productivity" });
+  }
   if (p.has(PERMISSIONS.HR_MANAGE)) {
     rh.push({ href: "/rh", label: "Colaboradores (RH)", icon: "hr" });
     rh.push({ href: "/rh/importar", label: "Importar Planilha", icon: "hrImport" });

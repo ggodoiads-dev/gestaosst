@@ -582,6 +582,52 @@ export async function getProactiveTip(user: CurrentUser, signal: ProactiveSignal
   }
 }
 
+export type DailyBriefingContext = {
+  previstos: number;
+  realizados: number;
+  atrasados: number;
+  ncAbertas: number | null;
+  acoesVencidas: number | null;
+  topRisk: { equipmentCode: string; score: number } | null;
+};
+
+function describeBriefingContext(ctx: DailyBriefingContext): string {
+  const parts = [`Checklists hoje: ${ctx.realizados} realizados de ${ctx.previstos} previstos, ${ctx.atrasados} atrasados.`];
+  if (ctx.ncAbertas !== null) parts.push(`Não conformidades abertas: ${ctx.ncAbertas}.`);
+  if (ctx.acoesVencidas !== null) parts.push(`Ações de plano vencidas: ${ctx.acoesVencidas}.`);
+  if (ctx.topRisk) parts.push(`Equipamento com maior risco no momento: ${ctx.topRisk.equipmentCode} (score ${ctx.topRisk.score}/100).`);
+  return parts.join(" ");
+}
+
+/**
+ * Briefing curto que aparece assim que o usuário abre o sistema — a mesma chamada leve e
+ * best-effort do getProactiveTip, mas resumindo o estado do dia em vez de reagir a um evento.
+ * Renderizado num Suspense boundary na home pra não atrasar o resto da página.
+ */
+export async function getDailyBriefing(user: CurrentUser, context: DailyBriefingContext): Promise<string | null> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return null;
+
+  try {
+    const client = new OpenAI({ apiKey });
+    const response = await client.chat.completions.create({
+      model: MODEL,
+      max_tokens: 140,
+      messages: [
+        {
+          role: "system",
+          content: `${SYSTEM_PROMPT}\n\nVocê está escrevendo o briefing que aparece assim que ${user.name.split(" ")[0]} abre o sistema — 2 a 3 frases, tom direto e humano. Destaque o que mais importa, não liste todos os números soltos. Se estiver tudo bem, comente isso brevemente sem soar robótico. Nunca invente números além dos que foram passados a você.`,
+        },
+        { role: "user", content: describeBriefingContext(context) },
+      ],
+    });
+    return response.choices[0]?.message.content?.trim() || null;
+  } catch (error) {
+    console.error("[rico] falha ao gerar briefing diário:", error);
+    return null;
+  }
+}
+
 /** Executa de verdade uma ação de escrita já confirmada pelo usuário no chat. */
 export async function executeRicoAction(
   user: CurrentUser,
