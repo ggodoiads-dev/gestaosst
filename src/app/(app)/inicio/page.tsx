@@ -10,6 +10,8 @@ import {
   ClipboardCheck,
   TrendingUp,
   CheckCircle2,
+  Wallet,
+  Upload,
 } from "lucide-react";
 import { requireUser, hasPermission } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
@@ -72,7 +74,7 @@ export default async function InicioPage() {
     canSeeGestao ? getGestaoSummary(user) : Promise.resolve(null),
   ]);
 
-  const operacional = [
+  const meuTrabalho = [
     {
       href: "/checklist/realizar",
       title: "Realizar Checklist",
@@ -96,7 +98,7 @@ export default async function InicioPage() {
     },
   ].filter((m) => m.visible);
 
-  const gestao = [
+  const equipamentos = [
     {
       href: "/equipamentos/painel",
       title: "Gestão de Equipamentos",
@@ -104,6 +106,9 @@ export default async function InicioPage() {
       icon: <Wrench className="size-4" />,
       visible: hasPermission(user, PERMISSIONS.EQUIPMENT_VIEW),
     },
+  ].filter((m) => m.visible);
+
+  const sst = [
     {
       href: "/colaboradores",
       title: "Colaboradores",
@@ -131,6 +136,23 @@ export default async function InicioPage() {
       description: "Cadastro de atividades com POP e AR/VR de cada uma.",
       icon: <FolderKanban className="size-4" />,
       visible: hasPermission(user, PERMISSIONS.ACTIVITY_MANAGE),
+    },
+  ].filter((m) => m.visible);
+
+  const rh = [
+    {
+      href: "/rh",
+      title: "Colaboradores (RH)",
+      description: "Salário e dados de folha, atualizáveis por planilha.",
+      icon: <Wallet className="size-4" />,
+      visible: hasPermission(user, PERMISSIONS.HR_MANAGE),
+    },
+    {
+      href: "/rh/importar",
+      title: "Importar Planilha",
+      description: "Atualizar colaboradores em lote a partir de uma planilha.",
+      icon: <Upload className="size-4" />,
+      visible: hasPermission(user, PERMISSIONS.HR_MANAGE),
     },
   ].filter((m) => m.visible);
 
@@ -162,8 +184,10 @@ export default async function InicioPage() {
           )}
         </div>
 
-        <ModuleSection title="Operacional" items={operacional} />
-        <ModuleSection title="Gestão" items={gestao} />
+        <ModuleSection title="Meu Trabalho" items={meuTrabalho} />
+        <ModuleSection title="Equipamentos" items={equipamentos} />
+        <ModuleSection title="SST" items={sst} />
+        <ModuleSection title="RH" items={rh} />
       </PageBody>
     </>
   );

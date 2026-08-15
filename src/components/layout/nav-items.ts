@@ -42,53 +42,56 @@ export type NavItem = {
 };
 
 export type NavGroup = {
+  /** Chave estável usada só pra lembrar estado de expandido/recolhido — não é exibida. */
+  key: string;
   title?: string;
   items: NavItem[];
 };
 
+/**
+ * Reagrupado por área real de uso (seção 68 do documento) — o sistema cresceu módulo a
+ * módulo ao longo do projeto (SST → equipamentos → RH) e a navegação tinha acumulado itens
+ * parecidos em grupos diferentes (duas entradas de "Colaboradores", "Produtividade" e
+ * "Qualificações" espalhadas). Cada item agora aparece uma vez só, no grupo que reflete
+ * quem usa aquilo no dia a dia.
+ */
 export function getNavGroups(user: CurrentUser): NavGroup[] {
   const p = user.permissions;
   const groups: NavGroup[] = [];
 
-  const principal: NavItem[] = [
+  const geral: NavItem[] = [
     { href: "/inicio", label: "Início", icon: "dashboard" },
     { href: "/rico", label: "Rico", icon: "rico" },
   ];
+  groups.push({ key: "geral", items: geral });
+
+  const meuTrabalho: NavItem[] = [];
   if (p.has(PERMISSIONS.CHECKLIST_EXECUTE)) {
-    principal.push({ href: "/checklist/realizar", label: "Realizar Checklist", icon: "checklist" });
+    meuTrabalho.push({ href: "/checklist/realizar", label: "Realizar Checklist", icon: "checklist" });
   }
   if (p.has(PERMISSIONS.PRODUCTIVITY_SELF_LOG)) {
-    principal.push({ href: "/minha-produtividade", label: "Minha Produtividade", icon: "productivity" });
+    meuTrabalho.push({ href: "/minha-produtividade", label: "Minha Produtividade", icon: "productivity" });
   }
   if (p.has(PERMISSIONS.SHIFT_CHECKIN_SELF)) {
-    principal.push({ href: "/minha-presenca", label: "Minha Presença", icon: "myPresence" });
+    meuTrabalho.push({ href: "/minha-presenca", label: "Minha Presença", icon: "myPresence" });
   }
-  if (p.has(PERMISSIONS.EQUIPMENT_VIEW)) {
-    principal.push({ href: "/equipamentos", label: "Equipamentos", icon: "equipment" });
-  }
-  groups.push({ items: principal });
+  meuTrabalho.push({ href: "/meu-historico", label: "Meu Histórico", icon: "history" });
+  if (meuTrabalho.length > 0) groups.push({ key: "meuTrabalho", title: "Meu Trabalho", items: meuTrabalho });
 
-  const gestao: NavItem[] = [];
+  const equipamentos: NavItem[] = [];
+  if (p.has(PERMISSIONS.EQUIPMENT_VIEW)) {
+    equipamentos.push({ href: "/equipamentos", label: "Equipamentos", icon: "equipment" });
+  }
   if (p.has(PERMISSIONS.EQUIPMENT_MAINTENANCE)) {
-    gestao.push({ href: "/manutencao", label: "Manutenção", icon: "maintenance" });
+    equipamentos.push({ href: "/manutencao", label: "Manutenção", icon: "maintenance" });
   }
   if (p.has(PERMISSIONS.NONCONFORMITY_VIEW)) {
-    gestao.push({ href: "/nao-conformidades", label: "Não Conformidades", icon: "alert" });
+    equipamentos.push({ href: "/nao-conformidades", label: "Não Conformidades", icon: "alert" });
   }
   if (p.has(PERMISSIONS.ACTIONPLAN_MANAGE)) {
-    gestao.push({ href: "/planos-de-acao", label: "Planos de Ação", icon: "actionPlan" });
+    equipamentos.push({ href: "/planos-de-acao", label: "Planos de Ação", icon: "actionPlan" });
   }
-  gestao.push({ href: "/meu-historico", label: "Meu Histórico", icon: "history" });
-  if (p.has(PERMISSIONS.HISTORY_VIEW)) {
-    gestao.push({ href: "/historico", label: "Histórico Geral", icon: "historyAll" });
-  }
-  if (p.has(PERMISSIONS.INDICATORS_VIEW_AREA) || p.has(PERMISSIONS.INDICATORS_VIEW_CONSOLIDATED)) {
-    gestao.push({ href: "/indicadores", label: "Indicadores", icon: "indicators" });
-  }
-  if (p.has(PERMISSIONS.CHECKLIST_COMPLIANCE_VIEW)) {
-    gestao.push({ href: "/checklist/conformidade", label: "Conformidade de Checklist", icon: "checklistCompliance" });
-  }
-  if (gestao.length > 0) groups.push({ title: "Gestão", items: gestao });
+  if (equipamentos.length > 0) groups.push({ key: "equipamentos", title: "Equipamentos", items: equipamentos });
 
   const sst: NavItem[] = [];
   if (p.has(PERMISSIONS.COLLABORATOR_MANAGE)) {
@@ -103,20 +106,32 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
   if (p.has(PERMISSIONS.QUALIFICATION_MANAGE)) {
     sst.push({ href: "/qualificacoes", label: "Qualificações", icon: "qualifications" });
   }
-  if (p.has(PERMISSIONS.SCHEDULE_MANAGE)) {
-    sst.push({ href: "/escalas", label: "Escalas de Trabalho", icon: "schedules" });
-  }
-  if (p.has(PERMISSIONS.PRODUCTIVITY_MANAGE)) {
-    sst.push({ href: "/produtividade", label: "Produtividade", icon: "productivity" });
-  }
-  if (sst.length > 0) groups.push({ title: "SST", items: sst });
+  if (sst.length > 0) groups.push({ key: "sst", title: "SST", items: sst });
 
   const rh: NavItem[] = [];
   if (p.has(PERMISSIONS.HR_MANAGE)) {
     rh.push({ href: "/rh", label: "Colaboradores (RH)", icon: "hr" });
     rh.push({ href: "/rh/importar", label: "Importar Planilha", icon: "hrImport" });
   }
-  if (rh.length > 0) groups.push({ title: "RH", items: rh });
+  if (p.has(PERMISSIONS.SCHEDULE_MANAGE)) {
+    rh.push({ href: "/escalas", label: "Escalas de Trabalho", icon: "schedules" });
+  }
+  if (p.has(PERMISSIONS.PRODUCTIVITY_MANAGE)) {
+    rh.push({ href: "/produtividade", label: "Produtividade", icon: "productivity" });
+  }
+  if (rh.length > 0) groups.push({ key: "rh", title: "RH", items: rh });
+
+  const indicadores: NavItem[] = [];
+  if (p.has(PERMISSIONS.INDICATORS_VIEW_AREA) || p.has(PERMISSIONS.INDICATORS_VIEW_CONSOLIDATED)) {
+    indicadores.push({ href: "/indicadores", label: "Indicadores", icon: "indicators" });
+  }
+  if (p.has(PERMISSIONS.CHECKLIST_COMPLIANCE_VIEW)) {
+    indicadores.push({ href: "/checklist/conformidade", label: "Conformidade de Checklist", icon: "checklistCompliance" });
+  }
+  if (p.has(PERMISSIONS.HISTORY_VIEW)) {
+    indicadores.push({ href: "/historico", label: "Histórico Geral", icon: "historyAll" });
+  }
+  if (indicadores.length > 0) groups.push({ key: "indicadores", title: "Indicadores", items: indicadores });
 
   const admin: NavItem[] = [];
   if (p.has(PERMISSIONS.MASTERDATA_MANAGE)) {
@@ -140,7 +155,7 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
   if (p.has(PERMISSIONS.AUDIT_VIEW)) {
     admin.push({ href: "/auditoria", label: "Auditoria", icon: "audit" });
   }
-  if (admin.length > 0) groups.push({ title: "Administração", items: admin });
+  if (admin.length > 0) groups.push({ key: "admin", title: "Administração", items: admin });
 
   return groups;
 }
