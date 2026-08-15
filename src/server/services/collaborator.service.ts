@@ -82,6 +82,25 @@ export async function setCollaboratorSalary(user: CurrentUser, id: string, salar
   return collaborator;
 }
 
+/** Classificação manual de quem é cobrado por checklist no relatório de ponto — separada de
+ * `checklistEnabled` (que só controla se existe um User provisionado pra fazer checklist),
+ * porque a lista de quem "precisa" é definida por RH/Supervisão e pode incluir gente que ainda
+ * não tem acesso ao sistema (aí o relatório aponta a falta de acesso como o próprio problema). */
+export async function setCollaboratorRequiresChecklist(user: CurrentUser, id: string, requiresChecklist: boolean) {
+  requirePermission(user, PERMISSIONS.HR_MANAGE);
+  const before = await db.collaborator.findUniqueOrThrow({ where: { id } });
+  const collaborator = await db.collaborator.update({ where: { id }, data: { requiresChecklist } });
+  await recordAudit({
+    userId: user.id,
+    action: "UPDATE",
+    entityType: "Collaborator",
+    entityId: id,
+    previousValue: { requiresChecklist: before.requiresChecklist },
+    newValue: { requiresChecklist },
+  });
+  return collaborator;
+}
+
 export function listCollaboratorsForUser(
   user: CurrentUser,
   filters: { areaId?: string; search?: string; onlyActive?: boolean } = {},

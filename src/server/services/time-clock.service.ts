@@ -233,16 +233,26 @@ export async function getTimeClockReport(
           });
         }
 
-        if (collaborator.checklistEnabled && collaborator.userId) {
-          const executedDays = executionDaysByUser.get(collaborator.userId);
-          if (!executedDays?.has(dayKey)) {
+        if (collaborator.requiresChecklist) {
+          if (!collaborator.userId) {
             anomalies.push({
               collaboratorId: collaborator.id,
               collaboratorName: collaborator.name,
               date: dayKey,
               type: "CHECKLIST_PENDENTE",
-              detail: "Bateu ponto mas não realizou nenhum checklist no dia",
+              detail: "Precisa de checklist, mas ainda não tem acesso ao sistema pra registrar",
             });
+          } else {
+            const executedDays = executionDaysByUser.get(collaborator.userId);
+            if (!executedDays?.has(dayKey)) {
+              anomalies.push({
+                collaboratorId: collaborator.id,
+                collaboratorName: collaborator.name,
+                date: dayKey,
+                type: "CHECKLIST_PENDENTE",
+                detail: "Bateu ponto mas não realizou nenhum checklist no dia",
+              });
+            }
           }
         }
       }

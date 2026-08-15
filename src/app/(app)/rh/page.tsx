@@ -6,6 +6,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, TableEmp
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/format";
 import { EditSalaryDialog } from "./salary-dialog";
+import { RequiresChecklistToggle } from "./requires-checklist-toggle";
 
 export default async function RhPage() {
   const user = await requireUser();
@@ -31,11 +32,12 @@ export default async function RhPage() {
                   <TableHead>Cargo</TableHead>
                   <TableHead>Área</TableHead>
                   <TableHead>Salário</TableHead>
+                  <TableHead>Precisa de checklist</TableHead>
                   <TableHead className="w-16" />
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {collaborators.length === 0 && <TableEmpty colSpan={6} />}
+                {collaborators.length === 0 && <TableEmpty colSpan={7} />}
                 {collaborators.map((collaborator) => (
                   <TableRow key={collaborator.id}>
                     <TableCell className="font-medium text-foreground">{collaborator.name}</TableCell>
@@ -50,6 +52,12 @@ export default async function RhPage() {
                       ) : (
                         <Badge tone="neutral">Não definido</Badge>
                       )}
+                    </TableCell>
+                    <TableCell>
+                      <RequiresChecklistToggle
+                        collaboratorId={collaborator.id}
+                        defaultChecked={collaborator.requiresChecklist}
+                      />
                     </TableCell>
                     <TableCell>
                       <EditSalaryDialog

@@ -39,3 +39,12 @@ export async function setCollaboratorSalaryAction(_prev: ActionResult, formData:
     revalidatePath("/rh");
   });
 }
+
+export async function setCollaboratorRequiresChecklistAction(id: string, requiresChecklist: boolean): Promise<ActionResult> {
+  const user = await requireUser();
+  return toResult(async () => {
+    await collaboratorService.setCollaboratorRequiresChecklist(user, id, requiresChecklist);
+    revalidatePath("/rh");
+    revalidatePath("/rh/ponto");
+  });
+}

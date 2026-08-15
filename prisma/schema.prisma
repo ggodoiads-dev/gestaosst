@@ -766,6 +766,7 @@ model Collaborator {
   turnoId          String?
   phone            String?
   checklistEnabled Boolean   @default(false) // se true, este colaborador precisa de um User pra fazer checklist
+  requiresChecklist Boolean  @default(false) // classificação manual de RH/Supervisão: esse colaborador é cobrado por checklist no relatório de ponto (independe de já ter acesso ao sistema)
   userId           String?   @unique // User provisionado automaticamente quando checklistEnabled
   active           Boolean   @default(true)
   createdAt        DateTime  @default(now())
