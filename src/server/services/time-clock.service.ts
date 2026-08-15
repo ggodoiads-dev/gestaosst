@@ -5,11 +5,29 @@ import { recordAudit } from "@/server/services/audit";
 import { parseAfdt } from "@/domain/time-clock/afdt-parser";
 import { getDayStatus } from "@/domain/schedule/schedule-calendar";
 import { APP_TIMEZONE, formatTime } from "@/lib/dates";
+import { CHECKLIST_JUSTIFICATION_REASONS, type ChecklistJustificationReason } from "@/domain/time-clock/checklist-justification-reasons";
 import type { CurrentUser } from "@/server/auth/current-user";
-import { requirePermission } from "@/server/auth/current-user";
+import { requirePermission, hasPermission, ForbiddenError } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
 
 const LATE_TOLERANCE_MINUTES = 5;
+
+/** RH lida com a importação do ponto; Supervisão acompanha aderência em Indicadores — os dois
+ * precisam poder justificar um checklist não realizado, sem precisar do outro nível de acesso. */
+function requireHrOrSupervisao(user: CurrentUser): void {
+  if (!hasPermission(user, PERMISSIONS.HR_MANAGE) && !hasPermission(user, PERMISSIONS.INDICATORS_VIEW_AREA)) {
+    throw new ForbiddenError();
+  }
+}
+
+/** RH e quem tem visão consolidada enxergam todo mundo; um supervisor só com INDICATORS_VIEW_AREA
+ * fica restrito às próprias áreas — mesmo critério de `areaScope` em indicators.service.ts. */
+function adherenceAreaScope(user: CurrentUser): string[] | undefined {
+  if (hasPermission(user, PERMISSIONS.HR_MANAGE) || hasPermission(user, PERMISSIONS.INDICATORS_VIEW_CONSOLIDATED)) {
+    return undefined;
+  }
+  return Array.from(user.areaIds);
+}
 
 export type TimeClockImportSummary = {
   totalRecords: number;
@@ -105,17 +123,27 @@ function dayKeyFromTimestamp(timestamp: Date): string {
   return formatInTimeZone(timestamp, APP_TIMEZONE, "yyyy-MM-dd");
 }
 
+export type ChecklistLedgerEntry = {
+  collaboratorId: string;
+  collaboratorName: string;
+  date: string;
+  done: boolean;
+};
+
+type Evaluation = {
+  anomalies: TimeClockAnomaly[];
+  /** Um item por dia em que o colaborador precisava de checklist (requiresChecklist) e
+   * trabalhou (bateu ponto) — a base pra calcular aderência, feito ou não. */
+  checklistLedger: ChecklistLedgerEntry[];
+};
+
 /**
  * Cruza as batidas de ponto importadas com escala, checklist e o próprio padrão par/ímpar de
- * marcações do dia, gerando as ocorrências: atraso, falta, checklist não realizado e batida
- * ímpar (sinal de esquecimento). `from`/`to` são datas de negócio (meio-dia local).
+ * marcações do dia. `from`/`to` são datas de negócio (meio-dia local). Núcleo compartilhado por
+ * `getTimeClockReport` (todas as ocorrências) e `getChecklistAdherence` (só a aderência de
+ * checklist) — pra não recalcular a mesma coisa duas vezes com lógicas que podem divergir.
  */
-export async function getTimeClockReport(
-  user: CurrentUser,
-  range: { from: Date; to: Date },
-): Promise<TimeClockAnomaly[]> {
-  requirePermission(user, PERMISSIONS.HR_MANAGE);
-
+async function evaluateRange(range: { from: Date; to: Date }, options?: { areaIds?: string[] }): Promise<Evaluation> {
   const rangeStartUtc = fromZonedTime(
     new Date(range.from.getFullYear(), range.from.getMonth(), range.from.getDate(), 0, 0, 0),
     APP_TIMEZONE,
@@ -126,11 +154,11 @@ export async function getTimeClockReport(
   );
 
   const collaborators = await db.collaborator.findMany({
-    where: { active: true },
+    where: { active: true, areaId: options?.areaIds ? { in: options.areaIds } : undefined },
     include: { turno: { include: { scheduleType: true } } },
   });
   const collaboratorIds = collaborators.map((c) => c.id);
-  if (collaboratorIds.length === 0) return [];
+  if (collaboratorIds.length === 0) return { anomalies: [], checklistLedger: [] };
 
   const userIds = collaborators.filter((c) => c.userId).map((c) => c.userId as string);
 
@@ -170,6 +198,7 @@ export async function getTimeClockReport(
   }
 
   const anomalies: TimeClockAnomaly[] = [];
+  const checklistLedger: ChecklistLedgerEntry[] = [];
 
   for (const collaborator of collaborators) {
     const cursor = new Date(range.from);
@@ -234,25 +263,19 @@ export async function getTimeClockReport(
         }
 
         if (collaborator.requiresChecklist) {
-          if (!collaborator.userId) {
+          const done = collaborator.userId ? Boolean(executionDaysByUser.get(collaborator.userId)?.has(dayKey)) : false;
+          checklistLedger.push({ collaboratorId: collaborator.id, collaboratorName: collaborator.name, date: dayKey, done });
+
+          if (!done) {
             anomalies.push({
               collaboratorId: collaborator.id,
               collaboratorName: collaborator.name,
               date: dayKey,
               type: "CHECKLIST_PENDENTE",
-              detail: "Precisa de checklist, mas ainda não tem acesso ao sistema pra registrar",
+              detail: collaborator.userId
+                ? "Bateu ponto mas não realizou nenhum checklist no dia"
+                : "Precisa de checklist, mas ainda não tem acesso ao sistema pra registrar",
             });
-          } else {
-            const executedDays = executionDaysByUser.get(collaborator.userId);
-            if (!executedDays?.has(dayKey)) {
-              anomalies.push({
-                collaboratorId: collaborator.id,
-                collaboratorName: collaborator.name,
-                date: dayKey,
-                type: "CHECKLIST_PENDENTE",
-                detail: "Bateu ponto mas não realizou nenhum checklist no dia",
-              });
-            }
           }
         }
       }
@@ -261,5 +284,126 @@ export async function getTimeClockReport(
     }
   }
 
-  return anomalies.sort((a, b) => (a.date === b.date ? a.collaboratorName.localeCompare(b.collaboratorName) : a.date < b.date ? 1 : -1));
+  anomalies.sort((a, b) => (a.date === b.date ? a.collaboratorName.localeCompare(b.collaboratorName) : a.date < b.date ? 1 : -1));
+
+  return { anomalies, checklistLedger };
+}
+
+/**
+ * Cruza as batidas de ponto importadas com escala, checklist e o próprio padrão par/ímpar de
+ * marcações do dia, gerando as ocorrências: atraso, falta, checklist não realizado e batida
+ * ímpar (sinal de esquecimento).
+ */
+export async function getTimeClockReport(
+  user: CurrentUser,
+  range: { from: Date; to: Date },
+): Promise<TimeClockAnomaly[]> {
+  requirePermission(user, PERMISSIONS.HR_MANAGE);
+  const { anomalies } = await evaluateRange(range);
+  return anomalies;
+}
+
+export type ChecklistJustificationInfo = {
+  reason: ChecklistJustificationReason;
+  reasonLabel: string;
+  countsAsCompliant: boolean;
+  note: string | null;
+};
+
+export type ChecklistAdherencePendingDay = {
+  collaboratorId: string;
+  collaboratorName: string;
+  date: string;
+  detail: string;
+  justification: ChecklistJustificationInfo | null;
+};
+
+export type ChecklistAdherenceReport = {
+  requiredDays: number;
+  compliantDays: number;
+  adherencePercent: number;
+  pendingDays: ChecklistAdherencePendingDay[];
+};
+
+/**
+ * Aderência de checklist no período: dos dias em que alguém precisava fazer checklist (e
+ * trabalhou), quantos foram feitos de verdade ou justificados com um motivo que conta como
+ * cumprido. Motivos que não contam (ex: "Sem justificativa válida") ficam documentados mas não
+ * melhoram o número — é isso que evita que uma justificativa qualquer infle o indicador.
+ */
+export async function getChecklistAdherence(
+  user: CurrentUser,
+  range: { from: Date; to: Date },
+): Promise<ChecklistAdherenceReport> {
+  requireHrOrSupervisao(user);
+
+  const { anomalies, checklistLedger } = await evaluateRange(range, { areaIds: adherenceAreaScope(user) });
+  const requiredDays = checklistLedger.length;
+  const doneDays = checklistLedger.filter((d) => d.done).length;
+
+  const pendingAnomalies = anomalies.filter((a) => a.type === "CHECKLIST_PENDENTE");
+  const collaboratorIds = [...new Set(pendingAnomalies.map((a) => a.collaboratorId))];
+
+  const justifications =
+    collaboratorIds.length > 0
+      ? await db.checklistJustification.findMany({
+          where: { collaboratorId: { in: collaboratorIds }, date: { gte: range.from, lte: range.to } },
+        })
+      : [];
+  const justificationByKey = new Map(justifications.map((j) => [`${j.collaboratorId}-${dayKeyFromLocalDate(j.date)}`, j]));
+
+  let justifiedCompliant = 0;
+  const pendingDays: ChecklistAdherencePendingDay[] = pendingAnomalies.map((a) => {
+    const justification = justificationByKey.get(`${a.collaboratorId}-${a.date}`);
+    let info: ChecklistJustificationInfo | null = null;
+    if (justification) {
+      const meta = CHECKLIST_JUSTIFICATION_REASONS[justification.reason];
+      info = { reason: justification.reason, reasonLabel: meta.label, countsAsCompliant: meta.countsAsCompliant, note: justification.note };
+      if (meta.countsAsCompliant) justifiedCompliant++;
+    }
+    return { collaboratorId: a.collaboratorId, collaboratorName: a.collaboratorName, date: a.date, detail: a.detail, justification: info };
+  });
+
+  const compliantDays = doneDays + justifiedCompliant;
+  const adherencePercent = requiredDays === 0 ? 100 : Math.round((compliantDays / requiredDays) * 1000) / 10;
+
+  return { requiredDays, compliantDays, adherencePercent, pendingDays };
+}
+
+/** Registra (ou substitui) a justificativa de um dia de checklist não realizado. */
+export async function justifyChecklistPending(
+  user: CurrentUser,
+  input: { collaboratorId: string; date: Date; reason: ChecklistJustificationReason; note: string | null },
+) {
+  requireHrOrSupervisao(user);
+
+  const allowedAreaIds = adherenceAreaScope(user);
+  if (allowedAreaIds) {
+    const collaborator = await db.collaborator.findUniqueOrThrow({ where: { id: input.collaboratorId } });
+    if (!collaborator.areaId || !allowedAreaIds.includes(collaborator.areaId)) {
+      throw new ForbiddenError();
+    }
+  }
+
+  const justification = await db.checklistJustification.upsert({
+    where: { collaboratorId_date: { collaboratorId: input.collaboratorId, date: input.date } },
+    update: { reason: input.reason, note: input.note, createdById: user.id },
+    create: {
+      collaboratorId: input.collaboratorId,
+      date: input.date,
+      reason: input.reason,
+      note: input.note,
+      createdById: user.id,
+    },
+  });
+
+  await recordAudit({
+    userId: user.id,
+    action: "CREATE",
+    entityType: "ChecklistJustification",
+    entityId: justification.id,
+    newValue: { collaboratorId: input.collaboratorId, date: input.date, reason: input.reason, note: input.note },
+  });
+
+  return justification;
 }

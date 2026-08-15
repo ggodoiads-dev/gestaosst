@@ -1,7 +1,7 @@
 import { requireUser, requirePermission } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
 import { PageHeader, PageBody } from "@/components/domain/page-header";
-import { getTimeClockReport } from "@/server/services/time-clock.service";
+import { getTimeClockReport, getChecklistAdherence } from "@/server/services/time-clock.service";
 import { PontoPanel } from "./ponto-panel";
 
 function toInputValue(date: Date): string {
@@ -19,7 +19,10 @@ export default async function PontoPage() {
   const from = new Date();
   from.setDate(from.getDate() - 13);
 
-  const anomalies = await getTimeClockReport(user, { from, to });
+  const [anomalies, adherence] = await Promise.all([
+    getTimeClockReport(user, { from, to }),
+    getChecklistAdherence(user, { from, to }),
+  ]);
 
   return (
     <>
@@ -28,7 +31,12 @@ export default async function PontoPage() {
         description="Importe o arquivo AFDT do relógio de ponto e veja quem atrasou, faltou, esqueceu de bater o ponto ou não fez o checklist do dia."
       />
       <PageBody className="flex flex-col gap-6">
-        <PontoPanel initialFrom={toInputValue(from)} initialTo={toInputValue(to)} initialAnomalies={anomalies} />
+        <PontoPanel
+          initialFrom={toInputValue(from)}
+          initialTo={toInputValue(to)}
+          initialAnomalies={anomalies}
+          initialAdherence={adherence}
+        />
       </PageBody>
     </>
   );

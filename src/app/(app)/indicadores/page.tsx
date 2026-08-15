@@ -9,11 +9,20 @@ import {
   getTopFaultCategories,
 } from "@/server/services/indicators.service";
 import { getEquipmentRiskRanking } from "@/server/services/risk-score.service";
+import { getChecklistAdherence } from "@/server/services/time-clock.service";
 import { PageHeader, PageBody } from "@/components/domain/page-header";
 import { StatCard } from "@/components/domain/stat-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableHeader, TableBody, TableHead, TableCell, TableEmpty, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { ChecklistAdherenceCard } from "./checklist-adherence-card";
+
+function toInputValue(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
 
 function riskTone(score: number): "success" | "warning" | "danger" {
   if (score > 60) return "danger";
@@ -25,12 +34,17 @@ export default async function IndicadoresPage() {
   const user = await requireUser();
   requirePermission(user, PERMISSIONS.INDICATORS_VIEW_AREA);
 
-  const [summary, desempenho, topEquipamentos, topFalhas, riskRanking] = await Promise.all([
+  const adherenceTo = new Date();
+  const adherenceFrom = new Date();
+  adherenceFrom.setDate(adherenceFrom.getDate() - 13);
+
+  const [summary, desempenho, topEquipamentos, topFalhas, riskRanking, checklistAdherence] = await Promise.all([
     getGestaoSummary(user),
     getDesempenhoPorArea(user),
     getTopProblemEquipments(user),
     getTopFaultCategories(user),
     getEquipmentRiskRanking(user),
+    getChecklistAdherence(user, { from: adherenceFrom, to: adherenceTo }),
   ]);
 
   return (
@@ -51,6 +65,12 @@ export default async function IndicadoresPage() {
           <StatCard label="NCs críticas" value={summary.ncCriticas} tone="danger" href="/nao-conformidades?severity=CRITICA" />
           <StatCard label="Ações vencidas" value={summary.acoesVencidas} tone="danger" href="/planos-de-acao?overdue=true" />
         </div>
+
+        <ChecklistAdherenceCard
+          initialFrom={toInputValue(adherenceFrom)}
+          initialTo={toInputValue(adherenceTo)}
+          initialReport={checklistAdherence}
+        />
 
         <Card>
           <CardHeader>

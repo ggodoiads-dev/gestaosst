@@ -93,6 +93,7 @@ model User {
   productivityGoalsCreated    ProductivityGoal[]    @relation("ProductivityGoalCreatedBy")
   epiDeliveriesCreated        EpiDelivery[]         @relation("EpiDeliveryCreatedBy")
   timeClockRecordsImported    TimeClockRecord[]     @relation("TimeClockImportedBy")
+  checklistJustificationsMade ChecklistJustification[] @relation("ChecklistJustificationCreatedBy")
   collaboratorProfile         Collaborator?
 
   @@index([roleId])
@@ -785,6 +786,7 @@ model Collaborator {
   shiftCheckIns        ShiftCheckIn[]
   epiDeliveries        EpiDelivery[]
   timeClockRecords     TimeClockRecord[]
+  checklistJustifications ChecklistJustification[]
 
   @@index([areaId])
   @@index([functionId])
@@ -1183,4 +1185,33 @@ model TimeClockRecord {
   @@unique([pis, timestamp, markNumber])
   @@index([collaboratorId, timestamp])
   @@index([timestamp])
+}
+
+enum ChecklistJustificationReason {
+  ATESTADO_MEDICO
+  FOLGA_FERIAS_APROVADA
+  EQUIPAMENTO_INDISPONIVEL
+  FALHA_SISTEMA
+  TREINAMENTO_OUTRA_ATIVIDADE
+  SEM_JUSTIFICATIVA
+  OUTRO
+}
+
+/// Justificativa de um dia em que o colaborador precisava de checklist (Collaborator.requiresChecklist)
+/// e não fez — cada motivo já tem fixado se conta como cumprido pra aderência (ver
+/// checklist-justification-reasons.ts). Uma por colaborador/dia; justificar de novo substitui.
+model ChecklistJustification {
+  id             String                        @id @default(uuid())
+  collaboratorId String
+  date           DateTime // dia do checklist não realizado, meio-dia local (mesmo padrão de ScheduleDayNote.date)
+  reason         ChecklistJustificationReason
+  note           String?
+  createdById    String
+  createdAt      DateTime                      @default(now())
+
+  collaborator Collaborator @relation(fields: [collaboratorId], references: [id])
+  createdBy    User         @relation("ChecklistJustificationCreatedBy", fields: [createdById], references: [id])
+
+  @@unique([collaboratorId, date])
+  @@index([collaboratorId, date])
 }

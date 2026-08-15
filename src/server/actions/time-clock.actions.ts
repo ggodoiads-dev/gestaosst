@@ -3,7 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { requireUser, ForbiddenError } from "@/server/auth/current-user";
 import * as timeClockService from "@/server/services/time-clock.service";
-import type { TimeClockAnomaly, TimeClockImportSummary } from "@/server/services/time-clock.service";
+import type {
+  TimeClockAnomaly,
+  TimeClockImportSummary,
+  ChecklistAdherenceReport,
+} from "@/server/services/time-clock.service";
+import type { ChecklistJustificationReason } from "@/domain/time-clock/checklist-justification-reasons";
 import { parseDateOnly } from "@/lib/dates";
 
 export type UploadAfdtResult = { ok: true; summary: TimeClockImportSummary } | { ok: false; error: string };
@@ -46,5 +51,48 @@ export async function getTimeClockReportAction(fromIso: string, toIso: string): 
     if (error instanceof ForbiddenError) return { ok: false, error: error.message };
     console.error("[time-clock] falha ao montar relatório:", error);
     return { ok: false, error: "Não foi possível montar o relatório." };
+  }
+}
+
+export type GetAdherenceResult = { ok: true; report: ChecklistAdherenceReport } | { ok: false; error: string };
+
+export async function getChecklistAdherenceAction(fromIso: string, toIso: string): Promise<GetAdherenceResult> {
+  try {
+    const user = await requireUser();
+    const report = await timeClockService.getChecklistAdherence(user, {
+      from: parseDateOnly(fromIso),
+      to: parseDateOnly(toIso),
+    });
+    return { ok: true, report };
+  } catch (error) {
+    if (error instanceof ForbiddenError) return { ok: false, error: error.message };
+    console.error("[time-clock] falha ao montar aderência de checklist:", error);
+    return { ok: false, error: "Não foi possível montar a aderência." };
+  }
+}
+
+export type JustifyResult = { ok: true } | { ok: false; error: string };
+
+export async function justifyChecklistPendingAction(input: {
+  collaboratorId: string;
+  date: string;
+  reason: ChecklistJustificationReason;
+  note: string | null;
+}): Promise<JustifyResult> {
+  try {
+    const user = await requireUser();
+    await timeClockService.justifyChecklistPending(user, {
+      collaboratorId: input.collaboratorId,
+      date: parseDateOnly(input.date),
+      reason: input.reason,
+      note: input.note?.trim() || null,
+    });
+    revalidatePath("/rh/ponto");
+    revalidatePath("/indicadores");
+    return { ok: true };
+  } catch (error) {
+    if (error instanceof ForbiddenError) return { ok: false, error: error.message };
+    console.error("[time-clock] falha ao justificar checklist:", error);
+    return { ok: false, error: "Não foi possível salvar a justificativa." };
   }
 }

@@ -8,8 +8,14 @@ import { Input } from "@/components/ui/input";
 import { FormField } from "@/components/ui/label";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { uploadAfdtAction, getTimeClockReportAction } from "@/server/actions/time-clock.actions";
-import type { TimeClockAnomaly, TimeClockAnomalyType, TimeClockImportSummary } from "@/server/services/time-clock.service";
+import { uploadAfdtAction, getTimeClockReportAction, getChecklistAdherenceAction } from "@/server/actions/time-clock.actions";
+import type {
+  TimeClockAnomaly,
+  TimeClockAnomalyType,
+  TimeClockImportSummary,
+  ChecklistAdherenceReport,
+} from "@/server/services/time-clock.service";
+import { JustifyChecklistDialog } from "@/components/domain/justify-checklist-dialog";
 import { formatDate, parseDateOnly } from "@/lib/dates";
 
 const ANOMALY_LABELS: Record<TimeClockAnomalyType, string> = {
@@ -30,9 +36,10 @@ type PontoPanelProps = {
   initialFrom: string;
   initialTo: string;
   initialAnomalies: TimeClockAnomaly[];
+  initialAdherence: ChecklistAdherenceReport;
 };
 
-export function PontoPanel({ initialFrom, initialTo, initialAnomalies }: PontoPanelProps) {
+export function PontoPanel({ initialFrom, initialTo, initialAnomalies, initialAdherence }: PontoPanelProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, startUpload] = useTransition();
   const [loadingReport, startReport] = useTransition();
@@ -44,16 +51,25 @@ export function PontoPanel({ initialFrom, initialTo, initialAnomalies }: PontoPa
   const [to, setTo] = useState(initialTo);
   const [reportError, setReportError] = useState<string | null>(null);
   const [anomalies, setAnomalies] = useState<TimeClockAnomaly[]>(initialAnomalies);
+  const [adherence, setAdherence] = useState<ChecklistAdherenceReport>(initialAdherence);
+
+  const justificationByKey = new Map(
+    adherence.pendingDays.map((d) => [`${d.collaboratorId}-${d.date}`, d.justification]),
+  );
 
   function fetchReport() {
     setReportError(null);
     startReport(async () => {
-      const res = await getTimeClockReportAction(from, to);
-      if (!res.ok) {
-        setReportError(res.error);
+      const [reportRes, adherenceRes] = await Promise.all([
+        getTimeClockReportAction(from, to),
+        getChecklistAdherenceAction(from, to),
+      ]);
+      if (!reportRes.ok) {
+        setReportError(reportRes.error);
         return;
       }
-      setAnomalies(res.anomalies);
+      setAnomalies(reportRes.anomalies);
+      if (adherenceRes.ok) setAdherence(adherenceRes.report);
     });
   }
 
@@ -84,9 +100,9 @@ export function PontoPanel({ initialFrom, initialTo, initialAnomalies }: PontoPa
         <CardHeader>
           <CardTitle>Importar arquivo AFDT</CardTitle>
           <CardDescription>
-            Envie o arquivo .txt exportado do relógio de ponto (padrão Portaria 671/2021). O casamento com o
-            colaborador é feito pelo PIS — cadastre o PIS de cada colaborador em RH pra que as batidas sejam
-            identificadas.
+            Envie o arquivo .txt do relógio de ponto (padrão Portaria 671/2021). As batidas são identificadas
+            pelo PIS — garanta que o PIS de cada colaborador esteja preenchido na planilha de importação de RH
+            antes de importar.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
@@ -157,19 +173,45 @@ export function PontoPanel({ initialFrom, initialTo, initialAnomalies }: PontoPa
                   <TableHead>Colaborador</TableHead>
                   <TableHead>Ocorrência</TableHead>
                   <TableHead>Detalhe</TableHead>
+                  <TableHead className="w-40" />
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {anomalies.map((a, i) => (
-                  <TableRow key={`${a.collaboratorId}-${a.date}-${a.type}-${i}`}>
-                    <TableCell className="whitespace-nowrap text-foreground-subtle">{formatDate(parseDateOnly(a.date))}</TableCell>
-                    <TableCell>{a.collaboratorName}</TableCell>
-                    <TableCell>
-                      <Badge tone={ANOMALY_TONES[a.type]}>{ANOMALY_LABELS[a.type]}</Badge>
-                    </TableCell>
-                    <TableCell className="text-foreground-subtle">{a.detail}</TableCell>
-                  </TableRow>
-                ))}
+                {anomalies.map((a, i) => {
+                  const justification =
+                    a.type === "CHECKLIST_PENDENTE" ? justificationByKey.get(`${a.collaboratorId}-${a.date}`) : undefined;
+                  return (
+                    <TableRow key={`${a.collaboratorId}-${a.date}-${a.type}-${i}`}>
+                      <TableCell className="whitespace-nowrap text-foreground-subtle">{formatDate(parseDateOnly(a.date))}</TableCell>
+                      <TableCell>{a.collaboratorName}</TableCell>
+                      <TableCell>
+                        <Badge tone={ANOMALY_TONES[a.type]}>{ANOMALY_LABELS[a.type]}</Badge>
+                      </TableCell>
+                      <TableCell className="text-foreground-subtle">
+                        {a.detail}
+                        {justification && (
+                          <span className="mt-0.5 block text-xs text-foreground-subtle">
+                            Justificado: {justification.reasonLabel}
+                            {!justification.countsAsCompliant && " (não conta pra aderência)"}
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {a.type === "CHECKLIST_PENDENTE" && (
+                          <JustifyChecklistDialog
+                            collaboratorId={a.collaboratorId}
+                            collaboratorName={a.collaboratorName}
+                            date={a.date}
+                            dateLabel={formatDate(parseDateOnly(a.date))}
+                            currentReason={justification?.reason}
+                            currentNote={justification?.note}
+                            onSaved={fetchReport}
+                          />
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           )}
