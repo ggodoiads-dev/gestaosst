@@ -582,21 +582,54 @@ export async function getProactiveTip(user: CurrentUser, signal: ProactiveSignal
   }
 }
 
+/**
+ * Cada bloco só entra no contexto se o usuário de fato tem a permissão daquela área —
+ * é isso que impede o briefing de ficar preso só em segurança: um admin que também
+ * enxerga RH e gestão recebe os três blocos, um colaborador comum só recebe segurança.
+ */
 export type DailyBriefingContext = {
-  previstos: number;
-  realizados: number;
-  atrasados: number;
-  ncAbertas: number | null;
-  acoesVencidas: number | null;
-  topRisk: { equipmentCode: string; score: number } | null;
+  seguranca?: {
+    previstos: number;
+    realizados: number;
+    atrasados: number;
+    ncAbertas: number | null;
+    topRisk: { equipmentCode: string; score: number } | null;
+  };
+  gestao?: {
+    percentualCumprimento: number;
+    equipamentosBloqueados: number;
+    acoesVencidas: number;
+  };
+  rh?: {
+    totalColaboradores: number;
+    semSalarioDefinido: number;
+  };
 };
 
 function describeBriefingContext(ctx: DailyBriefingContext): string {
-  const parts = [`Checklists hoje: ${ctx.realizados} realizados de ${ctx.previstos} previstos, ${ctx.atrasados} atrasados.`];
-  if (ctx.ncAbertas !== null) parts.push(`Não conformidades abertas: ${ctx.ncAbertas}.`);
-  if (ctx.acoesVencidas !== null) parts.push(`Ações de plano vencidas: ${ctx.acoesVencidas}.`);
-  if (ctx.topRisk) parts.push(`Equipamento com maior risco no momento: ${ctx.topRisk.equipmentCode} (score ${ctx.topRisk.score}/100).`);
-  return parts.join(" ");
+  const blocks: string[] = [];
+
+  if (ctx.seguranca) {
+    const s = ctx.seguranca;
+    const parts = [`Checklists hoje: ${s.realizados} realizados de ${s.previstos} previstos, ${s.atrasados} atrasados.`];
+    if (s.ncAbertas !== null) parts.push(`Não conformidades abertas: ${s.ncAbertas}.`);
+    if (s.topRisk) parts.push(`Equipamento com maior risco: ${s.topRisk.equipmentCode} (score ${s.topRisk.score}/100).`);
+    blocks.push(`[Segurança] ${parts.join(" ")}`);
+  }
+
+  if (ctx.gestao) {
+    const g = ctx.gestao;
+    blocks.push(
+      `[Gestão] Cumprimento geral de checklist: ${g.percentualCumprimento}%. Equipamentos bloqueados: ${g.equipamentosBloqueados}. Ações de plano vencidas: ${g.acoesVencidas}.`,
+    );
+  }
+
+  if (ctx.rh) {
+    const r = ctx.rh;
+    blocks.push(`[RH] ${r.totalColaboradores} colaborador(es) ativo(s), sendo ${r.semSalarioDefinido} sem salário cadastrado ainda.`);
+  }
+
+  return blocks.join(" ");
 }
 
 /**
@@ -608,17 +641,22 @@ export async function getDailyBriefing(user: CurrentUser, context: DailyBriefing
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return null;
 
+  const description = describeBriefingContext(context);
+  if (!description) return null;
+
+  const areaCount = [context.seguranca, context.gestao, context.rh].filter(Boolean).length;
+
   try {
     const client = new OpenAI({ apiKey });
     const response = await client.chat.completions.create({
       model: MODEL,
-      max_tokens: 140,
+      max_tokens: 160,
       messages: [
         {
           role: "system",
-          content: `${SYSTEM_PROMPT}\n\nVocê está escrevendo o briefing que aparece assim que ${user.name.split(" ")[0]} abre o sistema — 2 a 3 frases, tom direto e humano. Destaque o que mais importa, não liste todos os números soltos. Se estiver tudo bem, comente isso brevemente sem soar robótico. Nunca invente números além dos que foram passados a você.`,
+          content: `${SYSTEM_PROMPT}\n\nVocê está escrevendo o briefing que aparece assim que ${user.name.split(" ")[0]} abre o sistema — 2 a 3 frases, tom direto e humano. Os dados vêm marcados por área (ex: [Segurança], [RH], [Gestão]) conforme o que essa pessoa realmente acompanha — ${areaCount > 1 ? "toque em cada área presente, não fique só numa delas" : "fale só da área que foi passada"}. Destaque o que mais importa, não liste todos os números soltos. Se estiver tudo bem, comente isso brevemente sem soar robótico. Nunca invente números além dos que foram passados a você.`,
         },
-        { role: "user", content: describeBriefingContext(context) },
+        { role: "user", content: description },
       ],
     });
     return response.choices[0]?.message.content?.trim() || null;

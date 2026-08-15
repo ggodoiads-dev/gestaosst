@@ -26,6 +26,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/componen
 import { Badge } from "@/components/ui/badge";
 import { getColaboradorSummary, getGestaoSummary } from "@/server/services/indicators.service";
 import { getEquipmentRiskRanking, type EquipmentRisk } from "@/server/services/risk-score.service";
+import { getHrDailyStats } from "@/server/services/collaborator.service";
 import { getDailyBriefing, type DailyBriefingContext } from "@/server/services/rico.service";
 import { RicoAvatar } from "@/components/rico/rico-avatar";
 import { formatLongDate } from "@/lib/dates";
@@ -194,20 +195,31 @@ export default async function InicioPage() {
 
   const canSeeGestao =
     hasPermission(user, PERMISSIONS.INDICATORS_VIEW_AREA) || hasPermission(user, PERMISSIONS.INDICATORS_VIEW_CONSOLIDATED);
+  const canSeeHr = hasPermission(user, PERMISSIONS.HR_MANAGE);
 
-  const [colaboradorSummary, gestaoSummary, riskRanking] = await Promise.all([
+  const [colaboradorSummary, gestaoSummary, riskRanking, hrStats] = await Promise.all([
     getColaboradorSummary(user),
     canSeeGestao ? getGestaoSummary(user) : Promise.resolve(null),
     canSeeGestao ? getEquipmentRiskRanking(user, 4) : Promise.resolve([]),
+    canSeeHr ? getHrDailyStats(user) : Promise.resolve(null),
   ]);
 
   const briefingContext: DailyBriefingContext = {
-    previstos: colaboradorSummary.previstos,
-    realizados: colaboradorSummary.realizados,
-    atrasados: colaboradorSummary.atrasados,
-    ncAbertas: gestaoSummary?.ncAbertas ?? null,
-    acoesVencidas: gestaoSummary?.acoesVencidas ?? null,
-    topRisk: riskRanking[0] ? { equipmentCode: riskRanking[0].equipmentCode, score: riskRanking[0].score } : null,
+    seguranca: {
+      previstos: colaboradorSummary.previstos,
+      realizados: colaboradorSummary.realizados,
+      atrasados: colaboradorSummary.atrasados,
+      ncAbertas: gestaoSummary?.ncAbertas ?? null,
+      topRisk: riskRanking[0] ? { equipmentCode: riskRanking[0].equipmentCode, score: riskRanking[0].score } : null,
+    },
+    gestao: gestaoSummary
+      ? {
+          percentualCumprimento: gestaoSummary.percentualCumprimento,
+          equipamentosBloqueados: gestaoSummary.equipamentosBloqueados,
+          acoesVencidas: gestaoSummary.acoesVencidas,
+        }
+      : undefined,
+    rh: hrStats ?? undefined,
   };
 
   const equipamentos = [

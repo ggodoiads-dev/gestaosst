@@ -54,6 +54,17 @@ export function listCollaboratorsForHr(
   });
 }
 
+/** Resumo leve pro briefing diário do Rico — não é a listagem completa, só os dois números que
+ * importam pra quem cuida de RH: quantos colaboradores existem e quantos ainda não têm salário lançado. */
+export async function getHrDailyStats(user: CurrentUser) {
+  requirePermission(user, PERMISSIONS.HR_MANAGE);
+  const [totalColaboradores, semSalarioDefinido] = await Promise.all([
+    db.collaborator.count({ where: { active: true } }),
+    db.collaborator.count({ where: { active: true, salary: null } }),
+  ]);
+  return { totalColaboradores, semSalarioDefinido };
+}
+
 /** Só quem tem HR_MANAGE define/altera salário — separado de updateCollaborator (COLLABORATOR_MANAGE)
  * de propósito, pra que gestores de área possam editar cadastro sem enxergar ou mexer em folha. */
 export async function setCollaboratorSalary(user: CurrentUser, id: string, salary: number | null) {
