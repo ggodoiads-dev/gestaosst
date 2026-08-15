@@ -1,7 +1,12 @@
 import "server-only";
 import { db } from "@/server/db";
 import { recordAudit } from "@/server/services/audit";
-import { getDayStatus, type ScheduleDayComputedStatus } from "@/domain/schedule/schedule-calendar";
+import {
+  getCollaboratorDayStatus,
+  cycleStartFromFirstRestDay,
+  isSecondRestDayConsistent,
+  type ScheduleDayComputedStatus,
+} from "@/domain/schedule/schedule-calendar";
 import type { CurrentUser } from "@/server/auth/current-user";
 import { requirePermission } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
@@ -106,18 +111,54 @@ export async function updateTurno(user: CurrentUser, id: string, data: TurnoInpu
   return turno;
 }
 
-/** Atribui (ou remove, com turnoId null) o turno de um colaborador — usado no atalho da grade de escalas. */
-export async function setCollaboratorTurno(user: CurrentUser, collaboratorId: string, turnoId: string | null) {
+export type CollaboratorScheduleInput = {
+  turnoId: string | null;
+  /** 1º dia de folga informado pelo operador — usado só pra calcular a data de início do ciclo
+   * pessoal; não sobrescreve o ciclo atual quando null (troca de turno sem mexer no ciclo). */
+  firstRestDate: Date | null;
+  /** 2º dia de folga, opcional — só uma conferência de que as datas batem com o ciclo da escala. */
+  secondRestDate: Date | null;
+};
+
+/**
+ * Atribui (ou remove) o turno de um colaborador e, quando informado, o dia 1 do ciclo pessoal
+ * (calculado a partir do 1º dia de folga que o operador de fato sabe de cabeça, em vez de uma
+ * abstrata "data de início do ciclo") — usado no atalho da grade de escalas.
+ */
+export async function setCollaboratorSchedule(user: CurrentUser, collaboratorId: string, input: CollaboratorScheduleInput) {
   requirePermission(user, PERMISSIONS.SCHEDULE_MANAGE);
   const before = await db.collaborator.findUniqueOrThrow({ where: { id: collaboratorId } });
-  const collaborator = await db.collaborator.update({ where: { id: collaboratorId }, data: { turnoId } });
+
+  let scheduleStartDate = before.scheduleStartDate;
+  if (!input.turnoId) {
+    scheduleStartDate = null;
+  } else if (input.firstRestDate) {
+    const turno = await db.turno.findUniqueOrThrow({ where: { id: input.turnoId }, include: { scheduleType: true } });
+    if (
+      input.secondRestDate &&
+      !isSecondRestDayConsistent(
+        input.firstRestDate,
+        input.secondRestDate,
+        turno.scheduleType.workDays,
+        turno.scheduleType.restDays,
+      )
+    ) {
+      throw new Error("O segundo dia de folga não é consistente com o primeiro pra essa escala. Confira as datas.");
+    }
+    scheduleStartDate = cycleStartFromFirstRestDay(input.firstRestDate, turno.scheduleType.workDays);
+  }
+
+  const collaborator = await db.collaborator.update({
+    where: { id: collaboratorId },
+    data: { turnoId: input.turnoId, scheduleStartDate },
+  });
   await recordAudit({
     userId: user.id,
     action: "UPDATE",
     entityType: "Collaborator",
     entityId: collaboratorId,
-    previousValue: { turnoId: before.turnoId },
-    newValue: { turnoId },
+    previousValue: { turnoId: before.turnoId, scheduleStartDate: before.scheduleStartDate },
+    newValue: { turnoId: input.turnoId, scheduleStartDate },
   });
   return collaborator;
 }
@@ -206,7 +247,7 @@ export async function getScheduleGrid(user: CurrentUser, params: { month: number
 
   const collaborators = await db.collaborator.findMany({
     where: { active: true, areaId: params.areaId || undefined },
-    include: { turno: { include: { scheduleType: true } } },
+    include: { turno: { include: { scheduleType: true } }, function: true },
     orderBy: { name: "asc" },
   });
 
@@ -230,14 +271,7 @@ export async function getScheduleGrid(user: CurrentUser, params: { month: number
     for (let day = 1; day <= daysInMonth; day++) {
       const date = new Date(params.year, params.month - 1, day);
       const note = notesByKey.get(`${collaborator.id}-${localDateKey(date)}`) ?? null;
-      const computed = collaborator.turno
-        ? getDayStatus(
-            date,
-            collaborator.turno.startDate,
-            collaborator.turno.scheduleType.workDays,
-            collaborator.turno.scheduleType.restDays,
-          )
-        : "FOLGA";
+      const computed = getCollaboratorDayStatus(date, collaborator);
       days.push({
         date,
         computed: note ? note.overrideStatus : computed,

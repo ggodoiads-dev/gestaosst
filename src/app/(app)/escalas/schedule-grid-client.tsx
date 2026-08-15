@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
+import { FormField } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TurnoSelectDialog } from "./turno-select-dialog";
 import { ScheduleDayNoteDialog } from "./schedule-day-note-dialog";
 import type { ScheduleType, Turno } from "@/generated/prisma/client";
@@ -21,7 +23,8 @@ type DayCellData = {
 };
 
 type RowData = {
-  collaborator: { id: string; name: string; turnoId: string | null };
+  collaborator: { id: string; name: string; turnoId: string | null; functionId: string | null };
+  functionName: string | null;
   turnoLabel: string | null;
   days: DayCellData[];
 };
@@ -37,9 +40,11 @@ const STATUS_LABEL: Record<string, string> = {
 export function ScheduleGridClient({
   rows,
   turnos,
+  functions,
 }: {
   rows: RowData[];
   turnos: (Turno & { scheduleType: ScheduleType })[];
+  functions: { id: string; name: string }[];
 }) {
   const [selectedCell, setSelectedCell] = useState<{
     collaboratorId: string;
@@ -49,9 +54,61 @@ export function ScheduleGridClient({
     note: DayCellData["note"];
   } | null>(null);
   const [turnoFor, setTurnoFor] = useState<{ id: string; name: string; turnoId: string | null } | null>(null);
+  const [functionFilter, setFunctionFilter] = useState("all");
+  const [turnoFilter, setTurnoFilter] = useState("all");
+
+  const turnosForFilter =
+    functionFilter === "all"
+      ? turnos
+      : turnos.filter((t) => rows.some((r) => r.collaborator.functionId === functionFilter && r.collaborator.turnoId === t.id));
+
+  const filteredRows = useMemo(
+    () =>
+      rows.filter((r) => {
+        if (functionFilter !== "all" && r.collaborator.functionId !== functionFilter) return false;
+        if (turnoFilter !== "all" && r.collaborator.turnoId !== turnoFilter) return false;
+        return true;
+      }),
+    [rows, functionFilter, turnoFilter],
+  );
 
   return (
     <>
+      <div className="mb-4 flex flex-wrap items-end gap-3">
+        <div className="w-52">
+          <FormField label="Função">
+            <Select
+              value={functionFilter}
+              onValueChange={(v) => {
+                setFunctionFilter(v);
+                setTurnoFilter("all");
+              }}
+            >
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas as funções</SelectItem>
+                {functions.map((f) => (
+                  <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FormField>
+        </div>
+        <div className="w-52">
+          <FormField label="Turno">
+            <Select value={turnoFilter} onValueChange={setTurnoFilter}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os turnos</SelectItem>
+                {turnosForFilter.map((t) => (
+                  <SelectItem key={t.id} value={t.id}>Turno {t.name} ({t.scheduleType.name})</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FormField>
+        </div>
+      </div>
+
       <div className="overflow-x-auto rounded-lg border border-border bg-surface">
         <table className="w-full border-collapse text-sm">
           <thead>
@@ -59,7 +116,7 @@ export function ScheduleGridClient({
               <th className="sticky left-0 z-10 bg-surface-muted px-3 py-2 text-left text-xs font-semibold text-foreground-subtle whitespace-nowrap">
                 Colaborador
               </th>
-              {rows[0]?.days.map((d) => (
+              {(filteredRows[0] ?? rows[0])?.days.map((d) => (
                 <th key={d.date} className="px-1.5 py-1 text-center text-[11px] font-medium text-foreground-subtle">
                   <div>{d.day}</div>
                   <div className="font-normal text-foreground-subtle/70">{d.weekday}</div>
@@ -68,7 +125,14 @@ export function ScheduleGridClient({
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
+            {filteredRows.length === 0 && (
+              <tr>
+                <td colSpan={(rows[0]?.days.length ?? 0) + 1} className="px-3 py-8 text-center text-sm text-foreground-subtle">
+                  Nenhum colaborador com esses filtros.
+                </td>
+              </tr>
+            )}
+            {filteredRows.map((row) => (
               <tr key={row.collaborator.id} className="border-b border-border last:border-0">
                 <td className="sticky left-0 z-10 bg-surface px-3 py-2 whitespace-nowrap">
                   <button
@@ -77,7 +141,10 @@ export function ScheduleGridClient({
                     onClick={() => setTurnoFor(row.collaborator)}
                   >
                     <p className="font-medium text-foreground hover:underline">{row.collaborator.name}</p>
-                    <p className="text-xs text-foreground-subtle">{row.turnoLabel ?? "Sem turno definido"}</p>
+                    <p className="text-xs text-foreground-subtle">
+                      {row.functionName ? `${row.functionName} · ` : ""}
+                      {row.turnoLabel ?? "Sem turno definido"}
+                    </p>
                   </button>
                 </td>
                 {row.days.map((d) => {

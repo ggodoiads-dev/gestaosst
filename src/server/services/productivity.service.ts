@@ -2,7 +2,7 @@ import "server-only";
 import { addDays, addMonths, startOfDay, startOfMonth } from "date-fns";
 import { db } from "@/server/db";
 import { recordAudit } from "@/server/services/audit";
-import { getDayStatus } from "@/domain/schedule/schedule-calendar";
+import { getCollaboratorDayStatus } from "@/domain/schedule/schedule-calendar";
 import type { CurrentUser } from "@/server/auth/current-user";
 import { requirePermission, ForbiddenError } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
@@ -92,9 +92,7 @@ async function buildCollaboratorDays(collaboratorId: string, from: Date, toInclu
   for (let date = rangeStart; date < rangeEndExclusive; date = addDays(date, 1)) {
     const key = localDateKey(date);
     const note = notesByKey.get(key) ?? null;
-    const computed = collaborator.turno
-      ? getDayStatus(date, collaborator.turno.startDate, collaborator.turno.scheduleType.workDays, collaborator.turno.scheduleType.restDays)
-      : "FOLGA";
+    const computed = getCollaboratorDayStatus(date, collaborator);
     days.push({
       date,
       status: note ? note.overrideStatus : computed,
@@ -161,11 +159,7 @@ async function computePeriodStats(from: Date, toInclusive: Date): Promise<Period
   for (const c of collaborators) {
     for (let date = rangeStart; date < rangeEndExclusive; date = addDays(date, 1)) {
       const note = notesByKey.get(`${c.id}|${localDateKey(date)}`);
-      const status = note
-        ? note.overrideStatus
-        : c.turno
-          ? getDayStatus(date, c.turno.startDate, c.turno.scheduleType.workDays, c.turno.scheduleType.restDays)
-          : "FOLGA";
+      const status = note ? note.overrideStatus : getCollaboratorDayStatus(date, c);
       if (status === "TRABALHO") {
         workDays++;
         scheduledCollaboratorIds.add(c.id);

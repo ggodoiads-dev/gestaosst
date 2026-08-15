@@ -17,6 +17,7 @@ function toResult(fn: () => Promise<unknown>): Promise<ActionResult> {
       if (error instanceof z.ZodError) {
         return { ok: false as const, error: error.issues[0]?.message ?? "Dados inválidos." };
       }
+      if (error instanceof Error) return { ok: false as const, error: error.message };
       console.error(error);
       return { ok: false as const, error: "Não foi possível concluir a operação." };
     });
@@ -107,12 +108,21 @@ export async function updateTurnoAction(_prev: ActionResult, formData: FormData)
   });
 }
 
-export async function setCollaboratorTurnoAction(collaboratorId: string, turnoId: string | null) {
-  const user = await requireUser();
-  await scheduleService.setCollaboratorTurno(user, collaboratorId, turnoId);
-  revalidatePath("/escalas");
-  revalidatePath("/colaboradores");
-  revalidatePath(`/colaboradores/${collaboratorId}`);
+export async function setCollaboratorScheduleAction(
+  collaboratorId: string,
+  input: { turnoId: string | null; firstRestDate: string | null; secondRestDate: string | null },
+): Promise<ActionResult> {
+  return toResult(async () => {
+    const user = await requireUser();
+    await scheduleService.setCollaboratorSchedule(user, collaboratorId, {
+      turnoId: input.turnoId,
+      firstRestDate: input.firstRestDate ? parseDateOnly(input.firstRestDate) : null,
+      secondRestDate: input.secondRestDate ? parseDateOnly(input.secondRestDate) : null,
+    });
+    revalidatePath("/escalas");
+    revalidatePath("/colaboradores");
+    revalidatePath(`/colaboradores/${collaboratorId}`);
+  });
 }
 
 const dayNoteSchema = z.object({

@@ -765,6 +765,7 @@ model Collaborator {
   inactivatedAt    DateTime? // preenchido automaticamente quando active vira false (seção "DESLIGAMENTO" da ficha de EPI)
   areaId           String?
   turnoId          String?
+  scheduleStartDate DateTime? // dia 1 do ciclo pessoal (trabalho) — calculado a partir do 1º dia de folga informado no cadastro da escala; sobrepõe Turno.startDate quando definido
   phone            String?
   checklistEnabled Boolean   @default(false) // se true, este colaborador precisa de um User pra fazer checklist
   requiresChecklist Boolean  @default(false) // classificação manual de RH/Supervisão: esse colaborador é cobrado por checklist no relatório de ponto (independe de já ter acesso ao sistema)

@@ -3,7 +3,7 @@ import { fromZonedTime, toZonedTime, formatInTimeZone } from "date-fns-tz";
 import { db } from "@/server/db";
 import { recordAudit } from "@/server/services/audit";
 import { parseAfdt } from "@/domain/time-clock/afdt-parser";
-import { getDayStatus } from "@/domain/schedule/schedule-calendar";
+import { getCollaboratorDayStatus } from "@/domain/schedule/schedule-calendar";
 import { APP_TIMEZONE, formatTime } from "@/lib/dates";
 import { CHECKLIST_JUSTIFICATION_REASONS, type ChecklistJustificationReason } from "@/domain/time-clock/checklist-justification-reasons";
 import type { CurrentUser } from "@/server/auth/current-user";
@@ -211,14 +211,7 @@ async function evaluateRange(range: { from: Date; to: Date }, options?: { areaId
 
       if (collaborator.turno) {
         const note = noteByKey.get(`${collaborator.id}-${dayKey}`);
-        const scheduled = note
-          ? note.overrideStatus
-          : getDayStatus(
-              cursor,
-              collaborator.turno.startDate,
-              collaborator.turno.scheduleType.workDays,
-              collaborator.turno.scheduleType.restDays,
-            );
+        const scheduled = note ? note.overrideStatus : getCollaboratorDayStatus(cursor, collaborator);
 
         if (scheduled === "TRABALHO" && !hasPunches) {
           anomalies.push({

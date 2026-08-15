@@ -1,7 +1,7 @@
 import "server-only";
 import { addDays, addMonths, startOfDay, startOfMonth } from "date-fns";
 import { db } from "@/server/db";
-import { getDayStatus } from "@/domain/schedule/schedule-calendar";
+import { getCollaboratorDayStatus } from "@/domain/schedule/schedule-calendar";
 import type { CurrentUser } from "@/server/auth/current-user";
 import { requirePermission } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
@@ -101,9 +101,7 @@ async function buildCollaboratorChecklistDays(collaboratorId: string, from: Date
   for (let date = rangeStart; date < rangeEndExclusive; date = addDays(date, 1)) {
     const key = localDateKey(date);
     const note = notesByKey.get(key) ?? null;
-    const computed = collaborator.turno
-      ? getDayStatus(date, collaborator.turno.startDate, collaborator.turno.scheduleType.workDays, collaborator.turno.scheduleType.restDays)
-      : "FOLGA";
+    const computed = getCollaboratorDayStatus(date, collaborator);
     const status = note ? note.overrideStatus : computed;
     const completedIds = completedByDay.get(key) ?? new Set<string>();
     days.push({
@@ -195,9 +193,7 @@ async function computeCompliancePeriodStats(from: Date, toInclusive: Date): Prom
     for (let date = rangeStart; date < rangeEndExclusive; date = addDays(date, 1)) {
       const dayKey = localDateKey(date);
       const note = notesByKey.get(`${c.id}|${dayKey}`);
-      const computed = c.turno
-        ? getDayStatus(date, c.turno.startDate, c.turno.scheduleType.workDays, c.turno.scheduleType.restDays)
-        : "FOLGA";
+      const computed = getCollaboratorDayStatus(date, c);
       const status = note ? note.overrideStatus : computed;
       if (status !== "TRABALHO") continue;
       scheduledAnyDay = true;

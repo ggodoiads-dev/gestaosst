@@ -43,7 +43,13 @@ export default async function EscalasPage({
   const nextYear = month === 12 ? year + 1 : year;
 
   const gridRows = rows.map((row) => ({
-    collaborator: { id: row.collaborator.id, name: row.collaborator.name, turnoId: row.collaborator.turnoId },
+    collaborator: {
+      id: row.collaborator.id,
+      name: row.collaborator.name,
+      turnoId: row.collaborator.turnoId,
+      functionId: row.collaborator.functionId,
+    },
+    functionName: row.collaborator.function?.name ?? null,
     turnoLabel: row.turno
       ? `Turno ${row.turno.name} (${row.turno.scheduleType.name})${
           row.turno.startTime && row.turno.endTime ? ` · ${row.turno.startTime}-${row.turno.endTime}` : ""
@@ -57,6 +63,16 @@ export default async function EscalasPage({
       note: d.note,
     })),
   }));
+
+  const functionsMap = new Map<string, string>();
+  for (const row of gridRows) {
+    if (row.collaborator.functionId && row.functionName) {
+      functionsMap.set(row.collaborator.functionId, row.functionName);
+    }
+  }
+  const functions = Array.from(functionsMap, ([id, name]) => ({ id, name })).sort((a, b) =>
+    a.name.localeCompare(b.name),
+  );
 
   return (
     <>
@@ -89,7 +105,7 @@ export default async function EscalasPage({
             </CardContent>
           </Card>
         ) : (
-          <ScheduleGridClient rows={gridRows} turnos={turnos} />
+          <ScheduleGridClient rows={gridRows} turnos={turnos} functions={functions} />
         )}
       </PageBody>
     </>

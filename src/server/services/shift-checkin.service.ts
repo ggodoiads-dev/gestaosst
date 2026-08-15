@@ -1,7 +1,7 @@
 import "server-only";
 import { startOfDay } from "date-fns";
 import { db } from "@/server/db";
-import { getDayStatus } from "@/domain/schedule/schedule-calendar";
+import { getCollaboratorDayStatus } from "@/domain/schedule/schedule-calendar";
 import type { CurrentUser } from "@/server/auth/current-user";
 import { requirePermission, ForbiddenError } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
@@ -25,6 +25,7 @@ async function requireMyCollaborator(user: CurrentUser) {
 
 type CollaboratorWithTurno = {
   id: string;
+  scheduleStartDate?: Date | null;
   turno: { startDate: Date; scheduleType: { workDays: number; restDays: number } } | null;
 };
 
@@ -37,9 +38,7 @@ async function computeTodayCheckIn<T extends CollaboratorWithTurno>(collaborator
     db.shiftCheckIn.findUnique({ where: { collaboratorId_date: { collaboratorId: collaborator.id, date: today } } }),
   ]);
 
-  const computed = collaborator.turno
-    ? getDayStatus(today, collaborator.turno.startDate, collaborator.turno.scheduleType.workDays, collaborator.turno.scheduleType.restDays)
-    : "FOLGA";
+  const computed = getCollaboratorDayStatus(today, collaborator);
   const status = note ? note.overrideStatus : computed;
 
   return { collaborator, date: today, status, checkedIn: !!checkIn, checkedInAt: checkIn?.checkedInAt ?? null };
