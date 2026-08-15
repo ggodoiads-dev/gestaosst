@@ -106,7 +106,7 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
   if (p.has(PERMISSIONS.QUALIFICATION_MANAGE)) {
     sst.push({ href: "/qualificacoes", label: "Qualificações", icon: "qualifications" });
   }
-  if (sst.length > 0) groups.push({ key: "sst", title: "SST", items: sst });
+  if (sst.length > 0) groups.push({ key: "sst", title: "Segurança", items: sst });
 
   const rh: NavItem[] = [];
   if (p.has(PERMISSIONS.HR_MANAGE)) {
@@ -131,7 +131,7 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
   if (p.has(PERMISSIONS.HISTORY_VIEW)) {
     indicadores.push({ href: "/historico", label: "Histórico Geral", icon: "historyAll" });
   }
-  if (indicadores.length > 0) groups.push({ key: "indicadores", title: "Indicadores", items: indicadores });
+  if (indicadores.length > 0) groups.push({ key: "indicadores", title: "Supervisão", items: indicadores });
 
   const admin: NavItem[] = [];
   if (p.has(PERMISSIONS.MASTERDATA_MANAGE)) {

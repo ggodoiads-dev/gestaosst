@@ -12,6 +12,9 @@ import {
   CheckCircle2,
   Wallet,
   Upload,
+  BarChart3,
+  ClipboardList,
+  RotateCcwClock,
 } from "lucide-react";
 import { requireUser, hasPermission } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
@@ -156,6 +159,30 @@ export default async function InicioPage() {
     },
   ].filter((m) => m.visible);
 
+  const supervisao = [
+    {
+      href: "/indicadores",
+      title: "Indicadores",
+      description: "Cumprimento de checklist, não conformidades e desempenho por área.",
+      icon: <BarChart3 className="size-4" />,
+      visible: canSeeGestao,
+    },
+    {
+      href: "/checklist/conformidade",
+      title: "Conformidade de Checklist",
+      description: "Quem cumpriu o checklist do turno, por colaborador.",
+      icon: <ClipboardList className="size-4" />,
+      visible: hasPermission(user, PERMISSIONS.CHECKLIST_COMPLIANCE_VIEW),
+    },
+    {
+      href: "/historico",
+      title: "Histórico Geral",
+      description: "Consulta completa do que já aconteceu no sistema.",
+      icon: <RotateCcwClock className="size-4" />,
+      visible: hasPermission(user, PERMISSIONS.HISTORY_VIEW),
+    },
+  ].filter((m) => m.visible);
+
   return (
     <>
       <PageHeader title={`Olá, ${firstName}`} description={formatLongDate()} />
@@ -186,8 +213,9 @@ export default async function InicioPage() {
 
         <ModuleSection title="Meu Trabalho" items={meuTrabalho} />
         <ModuleSection title="Equipamentos" items={equipamentos} />
-        <ModuleSection title="SST" items={sst} />
+        <ModuleSection title="Segurança" items={sst} />
         <ModuleSection title="RH" items={rh} />
+        <ModuleSection title="Supervisão" items={supervisao} />
       </PageBody>
     </>
   );
