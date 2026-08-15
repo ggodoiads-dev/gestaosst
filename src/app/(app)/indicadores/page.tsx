@@ -13,7 +13,13 @@ import {
   getChecklistComplianceDashboard,
   getChecklistComplianceRange,
 } from "@/server/services/checklist-compliance.service";
-import { getProductivityDashboard, getProductivityRange } from "@/server/services/productivity.service";
+import {
+  getProductivityDashboard,
+  getProductivityRange,
+  getProductivityGoalsProgress,
+  getAllProductivityGoalsProgress,
+} from "@/server/services/productivity.service";
+import { listActivitiesForUser } from "@/server/services/activity.service";
 import { getEquipmentRiskRanking } from "@/server/services/risk-score.service";
 import { getChecklistAdherence } from "@/server/services/time-clock.service";
 import { listActiveCollaboratorsForSupervision } from "@/server/services/collaborator.service";
@@ -30,6 +36,8 @@ import { cn } from "@/lib/utils";
 import { formatDate, parseDateOnly } from "@/lib/dates";
 import { ChecklistComplianceCollaboratorPicker } from "./checklist-compliance-collaborator-picker";
 import { ChecklistAdherenceCard } from "./checklist-adherence-card";
+import { ProductivityGoalDialog, DeleteProductivityGoalButton } from "./productivity-goal-dialog";
+import { ProductivityCalendarClient } from "./productivity-calendar-client";
 
 const MONTH_LABELS = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
@@ -60,6 +68,17 @@ function riskTone(score: number): "success" | "warning" | "danger" {
   if (score > 60) return "danger";
   if (score > 30) return "warning";
   return "success";
+}
+
+function progressBar(percent: number) {
+  return (
+    <div className="h-2 flex-1 rounded-full bg-neutral-soft overflow-hidden">
+      <div
+        className={cn("h-full rounded-full", percent >= 100 ? "bg-success" : percent >= 60 ? "bg-accent" : "bg-warning")}
+        style={{ width: `${Math.min(percent, 100)}%` }}
+      />
+    </div>
+  );
 }
 
 export default async function IndicadoresPage({
@@ -122,6 +141,9 @@ export default async function IndicadoresPage({
   let checklistRangeReport: Awaited<ReturnType<typeof getChecklistComplianceRange>> | null = null;
   let productivityDashboard: Awaited<ReturnType<typeof getProductivityDashboard>> | null = null;
   let productivityRangeReport: Awaited<ReturnType<typeof getProductivityRange>> | null = null;
+  let activities: Awaited<ReturnType<typeof listActivitiesForUser>> = [];
+  let currentMonthGoals: Awaited<ReturnType<typeof getAllProductivityGoalsProgress>> = [];
+  let collaboratorGoals: Awaited<ReturnType<typeof getProductivityGoalsProgress>> = [];
 
   if (canSeeCollaboratorReport) {
     collaborators = await listActiveCollaboratorsForSupervision(user);
@@ -133,9 +155,16 @@ export default async function IndicadoresPage({
     }
   }
   if (canSeeProductivity) {
-    productivityDashboard = await getProductivityDashboard(user);
+    [productivityDashboard, activities, currentMonthGoals] = await Promise.all([
+      getProductivityDashboard(user),
+      listActivitiesForUser(user),
+      getAllProductivityGoalsProgress(user, { month: now.getMonth() + 1, year: now.getFullYear() }),
+    ]);
     if (collaboratorId) {
-      productivityRangeReport = await getProductivityRange(user, { collaboratorId, from: rangeFrom, to: rangeTo });
+      [productivityRangeReport, collaboratorGoals] = await Promise.all([
+        getProductivityRange(user, { collaboratorId, from: rangeFrom, to: rangeTo }),
+        getProductivityGoalsProgress(user, { collaboratorId, month: refDate.getMonth() + 1, year: refDate.getFullYear() }),
+      ]);
     }
   }
 
@@ -368,10 +397,10 @@ export default async function IndicadoresPage({
               )}
 
               {canSeeProductivity && productivityDashboard && (
-                <TabsContent value="produtividade" className="flex flex-col gap-5">
+                <TabsContent value="produtividade" className="flex flex-col gap-6">
                   <p className="text-sm text-foreground-subtle">
-                    Quem tinha turno de trabalho e lançou (ou não) a própria produção — e o total por atividade no
-                    período.
+                    Quem tinha turno de trabalho e lançou (ou não) a própria produção, o total por atividade e as
+                    metas do mês.
                   </p>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
@@ -433,113 +462,201 @@ export default async function IndicadoresPage({
                             },
                           ]}
                         />
-                        {productivityDashboard.month.byActivity.length > 0 && (
-                          <div className="flex flex-col divide-y divide-border">
-                            {productivityDashboard.month.byActivity.slice(0, 5).map((a) => (
-                              <div key={a.activityId} className="flex items-center justify-between px-1 py-2 text-sm">
-                                <span>{a.activityName}</span>
-                                <span className="font-semibold tabular-nums">
-                                  {a.totalQuantity}{a.unit ? ` ${a.unit}` : ""} · {a.count} lanç.
-                                </span>
-                              </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Produção por atividade (mês)</CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Atividade</TableHead>
+                            <TableHead>Lançamentos</TableHead>
+                            <TableHead>Quantidade total</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {productivityDashboard.month.byActivity.length === 0 && <TableEmpty colSpan={3} />}
+                          {productivityDashboard.month.byActivity.map((a) => (
+                            <TableRow key={a.activityId}>
+                              <TableCell>{a.activityName}</TableCell>
+                              <TableCell>{a.count}</TableCell>
+                              <TableCell>{a.unit ? `${a.totalQuantity} ${a.unit}` : "—"}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </CardContent>
+                  </Card>
+
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-semibold text-foreground">Metas de {MONTH_LABELS[now.getMonth()]}</h3>
+                    <ProductivityGoalDialog
+                      collaborators={collaborators}
+                      activities={activities}
+                      month={now.getMonth() + 1}
+                      year={now.getFullYear()}
+                    />
+                  </div>
+                  <Card>
+                    <CardContent className="p-0">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Colaborador</TableHead>
+                            <TableHead>Atividade</TableHead>
+                            <TableHead>Progresso</TableHead>
+                            <TableHead className="w-16" />
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {currentMonthGoals.length === 0 && <TableEmpty colSpan={4} message="Nenhuma meta definida ainda." />}
+                          {currentMonthGoals.map(({ goal, achieved, percent }) => (
+                            <TableRow key={goal.id}>
+                              <TableCell>{goal.collaborator.name}</TableCell>
+                              <TableCell>{goal.activity.name}</TableCell>
+                              <TableCell>
+                                <div className="flex items-center gap-2">
+                                  <div className="max-w-40">{progressBar(percent)}</div>
+                                  <span className="whitespace-nowrap text-xs tabular-nums text-foreground-subtle">
+                                    {achieved}/{goal.targetQuantity}{goal.activity.unit ? ` ${goal.activity.unit}` : ""} ({percent}%)
+                                  </span>
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex items-center justify-end gap-1">
+                                  <ProductivityGoalDialog
+                                    collaborators={collaborators}
+                                    activities={activities}
+                                    month={now.getMonth() + 1}
+                                    year={now.getFullYear()}
+                                    goal={goal}
+                                  />
+                                  <DeleteProductivityGoalButton id={goal.id} />
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </CardContent>
+                  </Card>
+
+                  <div className="flex flex-col gap-3 border-t border-border pt-6">
+                    <h3 className="text-sm font-semibold text-foreground">Relatório por colaborador</h3>
+                    <p className="text-sm text-foreground-subtle">
+                      Escolha um colaborador pra ver o que ele fez — e o que não fez — por dia, semana ou mês, e
+                      lançar produção.
+                    </p>
+                    <div className="flex flex-wrap items-end justify-between gap-3">
+                      <ChecklistComplianceCollaboratorPicker collaborators={collaborators} selectedId={collaboratorId} />
+                      {collaboratorId && (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="flex overflow-hidden rounded-md border border-border-strong">
+                            {(["dia", "semana", "mes"] as const).map((p) => (
+                              <Link
+                                key={p}
+                                href={buildHref({ collaboratorId, period: p, ref: localDateKey(refDate) })}
+                                className={cn(
+                                  "px-3 py-1.5 text-xs font-medium",
+                                  period === p ? "bg-accent text-accent-foreground" : "bg-surface text-foreground-subtle hover:bg-surface-muted",
+                                )}
+                              >
+                                {p === "mes" ? "Mês" : p === "semana" ? "Semana" : "Dia"}
+                              </Link>
                             ))}
                           </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  </div>
-
-                  <div className="flex flex-wrap items-end justify-between gap-3">
-                    <ChecklistComplianceCollaboratorPicker collaborators={collaborators} selectedId={collaboratorId} />
-                    {collaboratorId && (
-                      <div className="flex flex-wrap items-center gap-2">
-                        <div className="flex overflow-hidden rounded-md border border-border-strong">
-                          {(["dia", "semana", "mes"] as const).map((p) => (
-                            <Link
-                              key={p}
-                              href={buildHref({ collaboratorId, period: p, ref: localDateKey(refDate) })}
-                              className={cn(
-                                "px-3 py-1.5 text-xs font-medium",
-                                period === p ? "bg-accent text-accent-foreground" : "bg-surface text-foreground-subtle hover:bg-surface-muted",
-                              )}
-                            >
-                              {p === "mes" ? "Mês" : p === "semana" ? "Semana" : "Dia"}
+                          <Button size="icon" variant="secondary" asChild>
+                            <Link href={buildHref({ collaboratorId, period, ref: localDateKey(prevRef) })} aria-label="Anterior">
+                              <ChevronLeft className="size-4" />
                             </Link>
-                          ))}
+                          </Button>
+                          <span className="min-w-40 text-center text-sm font-medium text-foreground">{rangeLabel}</span>
+                          <Button size="icon" variant="secondary" asChild>
+                            <Link href={buildHref({ collaboratorId, period, ref: localDateKey(nextRef) })} aria-label="Próximo">
+                              <ChevronRight className="size-4" />
+                            </Link>
+                          </Button>
                         </div>
-                        <Button size="icon" variant="secondary" asChild>
-                          <Link href={buildHref({ collaboratorId, period, ref: localDateKey(prevRef) })} aria-label="Anterior">
-                            <ChevronLeft className="size-4" />
-                          </Link>
-                        </Button>
-                        <span className="min-w-40 text-center text-sm font-medium text-foreground">{rangeLabel}</span>
-                        <Button size="icon" variant="secondary" asChild>
-                          <Link href={buildHref({ collaboratorId, period, ref: localDateKey(nextRef) })} aria-label="Próximo">
-                            <ChevronRight className="size-4" />
-                          </Link>
-                        </Button>
-                      </div>
+                      )}
+                    </div>
+
+                    {!collaboratorId && (
+                      <Card>
+                        <CardContent className="py-10 text-center text-sm text-foreground-subtle">
+                          Selecione um colaborador acima pra ver o relatório e lançar produtividade.
+                        </CardContent>
+                      </Card>
+                    )}
+
+                    {productivityRangeReport && (
+                      <>
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <p className="text-sm text-foreground-subtle">
+                            {productivityRangeReport.collaborator.name}
+                            {productivityRangeReport.collaborator.turno
+                              ? ` · Turno ${productivityRangeReport.collaborator.turno.name}`
+                              : " · Sem turno definido"}
+                          </p>
+                          <ProductivityGoalDialog
+                            collaborators={collaborators}
+                            activities={activities}
+                            month={refDate.getMonth() + 1}
+                            year={refDate.getFullYear()}
+                            defaultCollaboratorId={collaboratorId}
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                          <StatCard label="Dias trabalhados" value={productivityRangeReport.summary.workDays} />
+                          <StatCard label="Com lançamento" value={productivityRangeReport.summary.daysWithEntries} tone="success" />
+                          <StatCard
+                            label="Sem lançamento"
+                            value={productivityRangeReport.summary.daysMissing}
+                            tone={productivityRangeReport.summary.daysMissing > 0 ? "danger" : "success"}
+                          />
+                          <StatCard label="Total de lançamentos" value={productivityRangeReport.summary.totalEntries} tone="accent" />
+                        </div>
+
+                        {collaboratorGoals.length > 0 && (
+                          <Card>
+                            <CardHeader>
+                              <CardTitle>Metas de {MONTH_LABELS[refDate.getMonth()]} de {refDate.getFullYear()}</CardTitle>
+                            </CardHeader>
+                            <CardContent className="flex flex-col gap-3">
+                              {collaboratorGoals.map(({ goal, achieved, percent }) => (
+                                <div key={goal.id} className="flex items-center gap-3">
+                                  <span className="w-32 shrink-0 truncate text-sm">{goal.activity.name}</span>
+                                  {progressBar(percent)}
+                                  <span className="w-32 shrink-0 text-right text-xs tabular-nums text-foreground-subtle">
+                                    {achieved}/{goal.targetQuantity}{goal.activity.unit ? ` ${goal.activity.unit}` : ""} ({percent}%)
+                                  </span>
+                                </div>
+                              ))}
+                            </CardContent>
+                          </Card>
+                        )}
+
+                        <ProductivityCalendarClient
+                          collaboratorId={collaboratorId!}
+                          collaboratorName={productivityRangeReport.collaborator.name}
+                          activities={activities}
+                          layout={period === "mes" ? "grid" : "list"}
+                          days={productivityRangeReport.days.map((d) => ({
+                            date: localDateKey(d.date),
+                            day: d.date.getDate(),
+                            weekday: WEEKDAY_LABELS[d.date.getDay()],
+                            status: d.status,
+                            entries: d.entries,
+                          }))}
+                        />
+                      </>
                     )}
                   </div>
-
-                  {!collaboratorId && (
-                    <Card>
-                      <CardContent className="py-10 text-center text-sm text-foreground-subtle">
-                        Selecione um colaborador acima pra ver o relatório de produtividade.
-                      </CardContent>
-                    </Card>
-                  )}
-
-                  {productivityRangeReport && (
-                    <>
-                      <p className="text-sm text-foreground-subtle">{productivityRangeReport.collaborator.name}</p>
-
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                        <StatCard label="Turnos trabalhados" value={productivityRangeReport.summary.workDays} />
-                        <StatCard label="Com lançamento" value={productivityRangeReport.summary.daysWithEntries} tone="success" />
-                        <StatCard
-                          label="Sem lançamento"
-                          value={productivityRangeReport.summary.daysMissing}
-                          tone={productivityRangeReport.summary.daysMissing > 0 ? "danger" : "success"}
-                        />
-                        <StatCard label="Total de lançamentos" value={productivityRangeReport.summary.totalEntries} />
-                      </div>
-
-                      <div className="flex flex-col gap-2">
-                        {productivityRangeReport.days.map((d) => {
-                          const isWork = d.status === "TRABALHO";
-                          const future = localDateKey(d.date) > localDateKey(now);
-                          const hasEntries = d.entries.length > 0;
-                          const missing = isWork && !hasEntries && !future;
-                          return (
-                            <div
-                              key={localDateKey(d.date)}
-                              className="flex flex-col gap-1.5 rounded-lg border border-border bg-surface px-4 py-3 text-sm"
-                            >
-                              <div className="flex items-center justify-between gap-3">
-                                <span className="font-medium text-foreground">
-                                  {WEEKDAY_LABELS[d.date.getDay()]} — {formatDate(d.date)}
-                                </span>
-                                <Badge tone={!isWork ? "neutral" : future ? "info" : missing ? "danger" : "success"}>
-                                  {!isWork ? "Folga" : future ? "Agendado" : hasEntries ? "Lançado" : "Sem lançamento"}
-                                </Badge>
-                              </div>
-                              {isWork && hasEntries && (
-                                <p className="text-xs text-foreground-subtle">
-                                  {d.entries
-                                    .map(
-                                      (e) =>
-                                        `${e.activity.name}${e.quantity != null ? `: ${e.quantity}${e.activity.unit ? ` ${e.activity.unit}` : ""}` : ""}`,
-                                    )
-                                    .join(" · ")}
-                                </p>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </>
-                  )}
                 </TabsContent>
               )}
             </Tabs>

@@ -654,7 +654,7 @@ export async function getDailyBriefing(user: CurrentUser, context: DailyBriefing
       messages: [
         {
           role: "system",
-          content: `${SYSTEM_PROMPT}\n\nVocê está escrevendo o briefing que aparece assim que ${user.name.split(" ")[0]} abre o sistema — 2 a 3 frases, tom direto e humano. Os dados vêm marcados por área (ex: [Segurança], [RH], [Gestão]) conforme o que essa pessoa realmente acompanha — ${areaCount > 1 ? "toque em cada área presente, não fique só numa delas" : "fale só da área que foi passada"}. Destaque o que mais importa, não liste todos os números soltos. Se estiver tudo bem, comente isso brevemente sem soar robótico. Nunca invente números além dos que foram passados a você.`,
+          content: `${SYSTEM_PROMPT}\n\nVocê está escrevendo o briefing que aparece assim que ${user.name.split(" ")[0]} abre o sistema — 2 a 3 frases, tom direto e humano. A tela já mostra uma saudação (ex: "Boa tarde, ${user.name.split(" ")[0]}") logo acima do seu texto, então NÃO repita esse cumprimento nem abra com "bom dia/boa tarde/boa noite" — vá direto ao ponto. Os dados vêm marcados por área (ex: [Segurança], [RH], [Gestão]) conforme o que essa pessoa realmente acompanha — ${areaCount > 1 ? "toque em cada área presente, não fique só numa delas" : "fale só da área que foi passada"}. Destaque o que mais importa, não liste todos os números soltos. Se estiver tudo bem, comente isso brevemente sem soar robótico. Nunca invente números além dos que foram passados a você.`,
         },
         { role: "user", content: description },
       ],

@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { formatDate, parseDateOnly } from "@/lib/dates";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { ProductivityCalendarClient } from "../produtividade/productivity-calendar-client";
+import { ProductivityCalendarClient } from "../indicadores/productivity-calendar-client";
 
 const MONTH_LABELS = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",

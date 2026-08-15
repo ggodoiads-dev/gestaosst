@@ -172,9 +172,6 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
   if (p.has(PERMISSIONS.SCHEDULE_MANAGE)) {
     rh.push({ href: "/escalas", label: "Escalas de Trabalho", icon: "schedules" });
   }
-  if (p.has(PERMISSIONS.PRODUCTIVITY_MANAGE)) {
-    rh.push({ href: "/produtividade", label: "Produtividade", icon: "productivity" });
-  }
   if (rh.length > 0) groups.push({ key: "rh", title: "RH", items: rh });
 
   const indicadores: NavItem[] = [];

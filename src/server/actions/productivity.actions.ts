@@ -46,7 +46,8 @@ export async function createProductivityEntryAction(_prev: ActionResult, formDat
       quantity: parsed.quantity ? Number(parsed.quantity) : null,
       notes: parsed.notes,
     });
-    revalidatePath("/produtividade");
+    revalidatePath("/indicadores");
+    revalidatePath("/minha-produtividade");
   });
 }
 
@@ -85,7 +86,8 @@ export async function upsertProductivityGoalAction(_prev: ActionResult, formData
       year: Number(parsed.year),
       targetQuantity,
     });
-    revalidatePath("/produtividade");
+    revalidatePath("/indicadores");
+    revalidatePath("/minha-produtividade");
   });
 }
 

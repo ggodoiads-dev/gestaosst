@@ -15,11 +15,12 @@ import { getDailyBriefing, type DailyBriefingContext } from "@/server/services/r
 import { RicoAvatar } from "@/components/rico/rico-avatar";
 import { getNavGroups } from "@/components/layout/nav-items";
 import { CommandPalette } from "./command-palette";
-import { formatLongDate } from "@/lib/dates";
+import { formatLongDate, APP_TIMEZONE } from "@/lib/dates";
+import { formatInTimeZone } from "date-fns-tz";
 import { cn } from "@/lib/utils";
 
 function greeting(): string {
-  const hour = new Date().getHours();
+  const hour = Number(formatInTimeZone(new Date(), APP_TIMEZONE, "H"));
   if (hour < 12) return "Bom dia";
   if (hour < 18) return "Boa tarde";
   return "Boa noite";
