@@ -60,6 +60,10 @@ export function QuestionField({
     return <Input type="date" value={value ?? ""} onChange={(e) => onChange(e.target.value)} />;
   }
 
-  // TEXTO_CURTO, FOTO (a foto é tratada separadamente pelo campo de anexo), CONFIRMACAO cai no bloco acima
+  // FOTO é tratada só pelo campo de anexo em checklist-runner.tsx — nunca preenche `value`,
+  // então não tem campo de texto aqui (senão o obrigatório nunca fecharia por foto sozinha).
+  if (type === "FOTO") return null;
+
+  // TEXTO_CURTO, CONFIRMACAO caem aqui
   return <Input value={value ?? ""} onChange={(e) => onChange(e.target.value)} />;
 }

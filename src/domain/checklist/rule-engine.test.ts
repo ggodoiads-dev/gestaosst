@@ -22,6 +22,7 @@ function rule(overrides: Partial<QuestionRuleInput> = {}): QuestionRuleInput {
 function question(overrides: Partial<QuestionInput> = {}): QuestionInput {
   return {
     id: "q1",
+    type: "SIM_NAO",
     required: true,
     allowNotApplicable: false,
     rules: [],
@@ -122,6 +123,26 @@ describe("evaluateChecklist", () => {
   it("reporta pendência quando uma pergunta obrigatória não foi respondida", () => {
     const questions = [question({ id: "q1", required: true })];
     const result = evaluateChecklist(questions, []);
+
+    expect(result.valid).toBe(false);
+    expect(result.issues).toEqual([{ questionId: "q1", reason: "RESPOSTA_OBRIGATORIA" }]);
+  });
+
+  it("considera pergunta FOTO obrigatória respondida quando tem foto anexada, mesmo sem value", () => {
+    const questions = [question({ id: "q1", type: "FOTO", required: true })];
+    const answers = [{ questionId: "q1", value: null, comment: null, hasPhoto: true }];
+
+    const result = evaluateChecklist(questions, answers);
+
+    expect(result.valid).toBe(true);
+    expect(result.issues).toEqual([]);
+  });
+
+  it("reporta pendência em pergunta FOTO obrigatória sem foto anexada", () => {
+    const questions = [question({ id: "q1", type: "FOTO", required: true })];
+    const answers = [{ questionId: "q1", value: null, comment: null, hasPhoto: false }];
+
+    const result = evaluateChecklist(questions, answers);
 
     expect(result.valid).toBe(false);
     expect(result.issues).toEqual([{ questionId: "q1", reason: "RESPOSTA_OBRIGATORIA" }]);

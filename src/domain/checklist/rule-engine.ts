@@ -1,4 +1,4 @@
-import type { Criticality, EquipmentStatus, ExecutionResult } from "@/generated/prisma/enums";
+import type { Criticality, EquipmentStatus, ExecutionResult, QuestionType } from "@/generated/prisma/enums";
 import { NOT_APPLICABLE_VALUE } from "@/domain/checklist/answer-values";
 
 /**
@@ -23,10 +23,18 @@ export type QuestionRuleInput = {
 
 export type QuestionInput = {
   id: string;
+  type: QuestionType;
   required: boolean;
   allowNotApplicable: boolean;
   rules: QuestionRuleInput[];
 };
+
+/** Pergunta tipo FOTO nunca preenche `answer.value` (a foto vai por `hasPhoto`) — checar
+ * obrigatoriedade por `value` pra esse tipo sempre acusaria "sem resposta" mesmo com foto anexada. */
+function isAnswered(question: QuestionInput, answer: AnswerInput | null): boolean {
+  if (question.type === "FOTO") return Boolean(answer?.hasPhoto);
+  return Boolean(answer && answer.value !== null && answer.value !== "");
+}
 
 export type AnswerInput = {
   questionId: string;
@@ -88,7 +96,7 @@ export function evaluateChecklist(
   for (const question of questions) {
     const answer = findAnswer(answers, question.id);
 
-    if (question.required && (!answer || answer.value === null || answer.value === "")) {
+    if (question.required && !isAnswered(question, answer)) {
       issues.push({ questionId: question.id, reason: "RESPOSTA_OBRIGATORIA" });
       continue;
     }

@@ -252,6 +252,7 @@ export async function finalizeExecution(
 
   const questions: QuestionInput[] = execution.checklistVersion.questions.map((q) => ({
     id: q.id,
+    type: q.type,
     required: q.required,
     allowNotApplicable: q.allowNotApplicable,
     rules: q.rules.map((r) => ({
