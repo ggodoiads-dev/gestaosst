@@ -13,7 +13,7 @@ const FIELD_ALIASES: Record<ImportField, string[]> = {
   name: ["nome", "colaborador", "funcionario"],
   matricula: ["matricula", "registro", "codigo"],
   cpf: ["cpf"],
-  salary: ["salario", "remuneracao", "vencimento", "sal"],
+  salary: ["salario", "remuneracao", "sal"],
   cargo: ["cargo", "funcao", "posicao", "cbo"],
   phone: ["telefone", "celular", "fone", "contato"],
   admissionDate: ["admissao", "dataadmissao", "contratacao", "admissional"],
