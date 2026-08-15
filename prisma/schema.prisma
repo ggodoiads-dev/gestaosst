@@ -92,6 +92,7 @@ model User {
   productivityEntriesCreated  ProductivityEntry[]   @relation("ProductivityCreatedBy")
   productivityGoalsCreated    ProductivityGoal[]    @relation("ProductivityGoalCreatedBy")
   epiDeliveriesCreated        EpiDelivery[]         @relation("EpiDeliveryCreatedBy")
+  timeClockRecordsImported    TimeClockRecord[]     @relation("TimeClockImportedBy")
   collaboratorProfile         Collaborator?
 
   @@index([roleId])
@@ -759,6 +760,7 @@ model Collaborator {
   ctpsSerie        String?
   admissionDate    DateTime?
   salary           Decimal?  @db.Decimal(12, 2) // dado sensível de RH — só exposto/editável com PERMISSIONS.HR_MANAGE
+  pis              String?   @unique // PIS/NIT — identificador do colaborador no arquivo AFDT do relógio de ponto
   inactivatedAt    DateTime? // preenchido automaticamente quando active vira false (seção "DESLIGAMENTO" da ficha de EPI)
   areaId           String?
   turnoId          String?
@@ -781,6 +783,7 @@ model Collaborator {
   productivityGoals    ProductivityGoal[]
   shiftCheckIns        ShiftCheckIn[]
   epiDeliveries        EpiDelivery[]
+  timeClockRecords     TimeClockRecord[]
 
   @@index([areaId])
   @@index([functionId])
@@ -1145,4 +1148,38 @@ model ShiftCheckIn {
 
   @@unique([collaboratorId, date])
   @@index([collaboratorId, date])
+}
+
+enum TimeClockMarkType {
+  ENTRADA
+  SAIDA
+}
+
+enum TimeClockOrigin {
+  ORIGINAL // batida original do relógio (REP)
+  MANUAL // incluída/corrigida manualmente (ex: "SEM PONTO", "Correção de ponto")
+}
+
+/// Batida de ponto importada de arquivo AFDT (Portaria 671/2021). O casamento com o colaborador
+/// é feito pelo PIS gravado no arquivo; quando nenhum colaborador tem esse PIS cadastrado,
+/// `collaboratorId` fica nulo e a batida entra como "não identificada" pra reconciliação manual
+/// (cadastrar o PIS no colaborador certo e reimportar o mesmo arquivo).
+model TimeClockRecord {
+  id             String            @id @default(uuid())
+  collaboratorId String?
+  pis            String
+  timestamp      DateTime
+  markType       TimeClockMarkType
+  markNumber     Int
+  origin         TimeClockOrigin
+  reason         String?
+  importedById   String
+  importedAt     DateTime          @default(now())
+
+  collaborator Collaborator? @relation(fields: [collaboratorId], references: [id])
+  importedBy   User          @relation("TimeClockImportedBy", fields: [importedById], references: [id])
+
+  @@unique([pis, timestamp, markNumber])
+  @@index([collaboratorId, timestamp])
+  @@index([timestamp])
 }

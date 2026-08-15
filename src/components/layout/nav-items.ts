@@ -33,7 +33,8 @@ export type NavIconKey =
   | "jobFunctions"
   | "rico"
   | "hr"
-  | "hrImport";
+  | "hrImport"
+  | "timeClock";
 
 export type NavItem = {
   href: string;
@@ -109,6 +110,7 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
   if (p.has(PERMISSIONS.HR_MANAGE)) {
     rh.push({ href: "/rh", label: "Colaboradores (RH)", icon: "hr" });
     rh.push({ href: "/rh/importar", label: "Importar Planilha", icon: "hrImport" });
+    rh.push({ href: "/rh/ponto", label: "Importar Ponto (AFDT)", icon: "timeClock" });
   }
   if (p.has(PERMISSIONS.SCHEDULE_MANAGE)) {
     rh.push({ href: "/escalas", label: "Escalas de Trabalho", icon: "schedules" });

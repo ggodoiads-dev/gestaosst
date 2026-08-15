@@ -13,6 +13,7 @@ const FIELD_ALIASES: Record<ImportField, string[]> = {
   name: ["nome", "colaborador", "funcionario"],
   matricula: ["matricula", "registro", "codigo"],
   cpf: ["cpf"],
+  pis: ["pis", "nit", "pisnit", "pispasep"],
   salary: ["salario", "remuneracao", "sal"],
   cargo: ["cargo", "funcao", "posicao", "cbo"],
   phone: ["telefone", "celular", "fone", "contato"],
@@ -121,6 +122,7 @@ export type ImportRowResult = {
   name: string;
   matricula: string | null;
   cpf: string | null;
+  pis: string | null;
   cargo: string | null;
   phone: string | null;
   salary: number | null;
@@ -146,6 +148,7 @@ export async function buildImportPreview(
     const name = getCell(row, mapping, "name");
     const matricula = getCell(row, mapping, "matricula");
     const cpf = getCell(row, mapping, "cpf");
+    const pis = getCell(row, mapping, "pis");
     const cargo = getCell(row, mapping, "cargo");
     const phone = getCell(row, mapping, "phone");
     const salary = parseSalaryCell(getCell(row, mapping, "salary"));
@@ -156,6 +159,7 @@ export async function buildImportPreview(
       name: name ?? "",
       matricula,
       cpf,
+      pis,
       cargo,
       phone,
       salary,
@@ -201,6 +205,7 @@ export async function commitImport(
         name: row.name,
         matricula: row.matricula,
         cpf: row.cpf,
+        pis: row.pis,
         cargo: row.cargo,
         phone: row.phone,
         admissionDate: row.admissionDate ? new Date(`${row.admissionDate}T12:00:00`) : null,

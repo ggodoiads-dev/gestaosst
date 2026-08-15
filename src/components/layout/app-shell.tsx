@@ -36,6 +36,7 @@ import {
   Sparkles,
   Wallet,
   Upload,
+  Clock,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -82,6 +83,7 @@ const ICONS: Record<NavIconKey, LucideIcon> = {
   rico: Sparkles,
   hr: Wallet,
   hrImport: Upload,
+  timeClock: Clock,
 };
 
 /**
