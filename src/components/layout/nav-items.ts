@@ -86,7 +86,7 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
   if (p.has(PERMISSIONS.CHECKLIST_EXECUTE)) {
     sst.push({ href: "/checklist/realizar", label: "Realizar Checklist", icon: "checklist" });
   }
-  if (p.has(PERMISSIONS.COLLABORATOR_MANAGE)) {
+  if (p.has(PERMISSIONS.COLLABORATOR_MANAGE) || p.has(PERMISSIONS.HR_MANAGE)) {
     sst.push({ href: "/colaboradores", label: "Colaboradores", icon: "collaborators" });
   }
   if (p.has(PERMISSIONS.ACCIDENT_MANAGE)) {
@@ -101,14 +101,10 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
   if (sst.length > 0) groups.push({ key: "sst", title: "Segurança", items: sst });
 
   const rh: NavItem[] = [];
-  if (p.has(PERMISSIONS.SHIFT_CHECKIN_SELF)) {
-    rh.push({ href: "/minha-presenca", label: "Minha Presença", icon: "myPresence" });
-  }
   if (p.has(PERMISSIONS.PRODUCTIVITY_SELF_LOG)) {
     rh.push({ href: "/minha-produtividade", label: "Minha Produtividade", icon: "productivity" });
   }
   if (p.has(PERMISSIONS.HR_MANAGE)) {
-    rh.push({ href: "/rh", label: "Colaboradores (RH)", icon: "hr" });
     rh.push({ href: "/rh/importar", label: "Importar Planilha", icon: "hrImport" });
     rh.push({ href: "/rh/ponto", label: "Importar Ponto (AFDT)", icon: "timeClock" });
   }
