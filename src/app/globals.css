@@ -10,15 +10,15 @@
   --foreground-muted: #5b616e;
   --foreground-subtle: #8a8f9a;
 
-  --accent: #b8701f;
-  --accent-hover: #9c5f1a;
+  /* Paleta extraída direto da logo do SIGO: azul (#0068d8), navy escuro (#001840) e ciano (#00d8f0). */
+  --accent: #0068d8;
+  --accent-hover: #0058b8;
   --accent-foreground: #ffffff;
-  --accent-soft: #fbf1e4;
+  --accent-soft: #ebf3fc;
 
-  /* Identidade visual SIGO: azul petróleo (chrome/menu) + cobre (destaque). */
-  --brand: #013a4e;
+  --brand: #001840;
   --brand-foreground: #ffffff;
-  --brand-accent: #c97a2d;
+  --brand-accent: #00d8f0;
 
   --success: #1a7f4b;
   --success-soft: #e6f4ec;
@@ -71,8 +71,12 @@
   --font-sans: var(--font-sans);
 }
 
-* {
-  border-color: var(--border);
+/* Em @layer base pra não vencer utilitários de cor de borda (ex: border-brand-accent) —
+   regras fora de @layer têm prioridade sobre QUALQUER regra em layer, não importa a especificidade. */
+@layer base {
+  * {
+    border-color: var(--border);
+  }
 }
 
 html {
