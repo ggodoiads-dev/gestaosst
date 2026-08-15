@@ -50,11 +50,6 @@ function listEligibleCollaboratorsQuery() {
   });
 }
 
-export function listChecklistEligibleCollaborators(user: CurrentUser) {
-  requirePermission(user, PERMISSIONS.CHECKLIST_COMPLIANCE_VIEW);
-  return listEligibleCollaboratorsQuery();
-}
-
 /** Monta a grade de dias de um colaborador (trabalho/folga + itens de checklist da área
  * cumpridos/pendentes naquele dia) entre duas datas (ambas inclusive). */
 async function buildCollaboratorChecklistDays(collaboratorId: string, from: Date, toInclusive: Date) {

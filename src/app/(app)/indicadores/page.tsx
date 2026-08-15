@@ -12,16 +12,18 @@ import {
 import {
   getChecklistComplianceDashboard,
   getChecklistComplianceRange,
-  listChecklistEligibleCollaborators,
 } from "@/server/services/checklist-compliance.service";
+import { getProductivityDashboard, getProductivityRange } from "@/server/services/productivity.service";
 import { getEquipmentRiskRanking } from "@/server/services/risk-score.service";
 import { getChecklistAdherence } from "@/server/services/time-clock.service";
+import { listActiveCollaboratorsForSupervision } from "@/server/services/collaborator.service";
 import { PageHeader, PageBody } from "@/components/domain/page-header";
 import { StatCard } from "@/components/domain/stat-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableHeader, TableBody, TableHead, TableCell, TableEmpty, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { DonutStat } from "@/components/domain/charts/donut-stat";
 import { HorizontalBarChart } from "@/components/domain/charts/horizontal-bar-chart";
 import { cn } from "@/lib/utils";
@@ -99,6 +101,8 @@ export default async function IndicadoresPage({
   const user = await requireUser();
   requirePermission(user, PERMISSIONS.INDICATORS_VIEW_AREA);
   const canSeeChecklistCompliance = hasPermission(user, PERMISSIONS.CHECKLIST_COMPLIANCE_VIEW);
+  const canSeeProductivity = hasPermission(user, PERMISSIONS.PRODUCTIVITY_MANAGE);
+  const canSeeCollaboratorReport = canSeeChecklistCompliance || canSeeProductivity;
 
   const adherenceTo = new Date();
   const adherenceFrom = new Date();
@@ -113,17 +117,25 @@ export default async function IndicadoresPage({
     getChecklistAdherence(user, { from: adherenceFrom, to: adherenceTo }),
   ]);
 
-  let collaborators: Awaited<ReturnType<typeof listChecklistEligibleCollaborators>> = [];
-  let dashboard: Awaited<ReturnType<typeof getChecklistComplianceDashboard>> | null = null;
-  let rangeReport: Awaited<ReturnType<typeof getChecklistComplianceRange>> | null = null;
+  let collaborators: Awaited<ReturnType<typeof listActiveCollaboratorsForSupervision>> = [];
+  let checklistDashboard: Awaited<ReturnType<typeof getChecklistComplianceDashboard>> | null = null;
+  let checklistRangeReport: Awaited<ReturnType<typeof getChecklistComplianceRange>> | null = null;
+  let productivityDashboard: Awaited<ReturnType<typeof getProductivityDashboard>> | null = null;
+  let productivityRangeReport: Awaited<ReturnType<typeof getProductivityRange>> | null = null;
 
+  if (canSeeCollaboratorReport) {
+    collaborators = await listActiveCollaboratorsForSupervision(user);
+  }
   if (canSeeChecklistCompliance) {
-    [collaborators, dashboard] = await Promise.all([
-      listChecklistEligibleCollaborators(user),
-      getChecklistComplianceDashboard(user),
-    ]);
+    checklistDashboard = await getChecklistComplianceDashboard(user);
     if (collaboratorId) {
-      rangeReport = await getChecklistComplianceRange(user, { collaboratorId, from: rangeFrom, to: rangeTo });
+      checklistRangeReport = await getChecklistComplianceRange(user, { collaboratorId, from: rangeFrom, to: rangeTo });
+    }
+  }
+  if (canSeeProductivity) {
+    productivityDashboard = await getProductivityDashboard(user);
+    if (collaboratorId) {
+      productivityRangeReport = await getProductivityRange(user, { collaboratorId, from: rangeFrom, to: rangeTo });
     }
   }
 
@@ -174,170 +186,363 @@ export default async function IndicadoresPage({
           </CardContent>
         </Card>
 
-        {canSeeChecklistCompliance && dashboard && (
+        {canSeeCollaboratorReport && (
           <section className="flex flex-col gap-3 border-t border-border pt-6">
-            <h2 className="text-sm font-semibold text-foreground">Conformidade de checklist por colaborador</h2>
+            <h2 className="text-sm font-semibold text-foreground">Relatório por colaborador</h2>
             <p className="text-sm text-foreground-subtle">
-              Quem, marcado como &quot;Faz checklist&quot;, cumpriu o checklist dos equipamentos da própria área em cada turno
-              escalado — e quem ficou pendente.
+              Selecione um colaborador cadastrado em RH pra ver o checklist e a produtividade dele lado a lado.
             </p>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Hoje — {formatDate(dashboard.date)}</CardTitle>
-                </CardHeader>
-                <CardContent className="flex flex-col gap-4">
-                  <DonutStat
-                    centerLabel="em dia"
-                    centerValue={
-                      dashboard.today.collaboratorsScheduled === 0
-                        ? "100%"
-                        : `${Math.round((dashboard.today.collaboratorsComplete / dashboard.today.collaboratorsScheduled) * 100)}%`
-                    }
-                    segments={[
-                      { label: "Cumpriram tudo", value: dashboard.today.collaboratorsComplete, color: "var(--success)" },
-                      { label: "Com pendência", value: dashboard.today.collaboratorsIncomplete.length, color: "var(--danger)" },
-                    ]}
-                  />
-                  {dashboard.today.collaboratorsIncomplete.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      {dashboard.today.collaboratorsIncomplete.map((c) => (
-                        <Badge key={c.id} tone="danger">
-                          {c.name} — {c.pendingCount} pendente{c.pendingCount > 1 ? "s" : ""}
-                        </Badge>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+            <Tabs defaultValue={canSeeChecklistCompliance ? "checklist" : "produtividade"}>
+              <TabsList>
+                {canSeeChecklistCompliance && <TabsTrigger value="checklist">Checklist</TabsTrigger>}
+                {canSeeProductivity && <TabsTrigger value="produtividade">Produtividade</TabsTrigger>}
+              </TabsList>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Mês — {MONTH_LABELS[now.getMonth()]} de {now.getFullYear()}</CardTitle>
-                </CardHeader>
-                <CardContent className="flex flex-col gap-4">
-                  <DonutStat
-                    centerLabel="em dia"
-                    centerValue={
-                      dashboard.month.collaboratorsScheduled === 0
-                        ? "100%"
-                        : `${Math.round((dashboard.month.collaboratorsComplete / dashboard.month.collaboratorsScheduled) * 100)}%`
-                    }
-                    segments={[
-                      { label: "Em dia o mês todo", value: dashboard.month.collaboratorsComplete, color: "var(--success)" },
-                      { label: "Com pendência", value: dashboard.month.collaboratorsIncomplete.length, color: "var(--warning)" },
-                    ]}
-                  />
-                  {dashboard.month.collaboratorsIncomplete.length > 0 && (
-                    <div className="flex flex-col divide-y divide-border">
-                      {dashboard.month.collaboratorsIncomplete
-                        .sort((a, b) => b.pendingCount - a.pendingCount)
-                        .map((c) => (
-                          <div key={c.id} className="flex items-center justify-between px-1 py-2 text-sm">
-                            <span>{c.name}</span>
-                            <span className="font-semibold tabular-nums text-danger">
-                              {c.pendingCount} pendente{c.pendingCount > 1 ? "s" : ""}
-                            </span>
+              {canSeeChecklistCompliance && checklistDashboard && (
+                <TabsContent value="checklist" className="flex flex-col gap-5">
+                  <p className="text-sm text-foreground-subtle">
+                    Quem, marcado como &quot;Faz checklist&quot;, cumpriu o checklist dos equipamentos da própria área em
+                    cada turno escalado — e quem ficou pendente.
+                  </p>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Hoje — {formatDate(checklistDashboard.date)}</CardTitle>
+                      </CardHeader>
+                      <CardContent className="flex flex-col gap-4">
+                        <DonutStat
+                          centerLabel="em dia"
+                          centerValue={
+                            checklistDashboard.today.collaboratorsScheduled === 0
+                              ? "100%"
+                              : `${Math.round((checklistDashboard.today.collaboratorsComplete / checklistDashboard.today.collaboratorsScheduled) * 100)}%`
+                          }
+                          segments={[
+                            { label: "Cumpriram tudo", value: checklistDashboard.today.collaboratorsComplete, color: "var(--success)" },
+                            { label: "Com pendência", value: checklistDashboard.today.collaboratorsIncomplete.length, color: "var(--danger)" },
+                          ]}
+                        />
+                        {checklistDashboard.today.collaboratorsIncomplete.length > 0 && (
+                          <div className="flex flex-wrap gap-2">
+                            {checklistDashboard.today.collaboratorsIncomplete.map((c) => (
+                              <Badge key={c.id} tone="danger">
+                                {c.name} — {c.pendingCount} pendente{c.pendingCount > 1 ? "s" : ""}
+                              </Badge>
+                            ))}
                           </div>
-                        ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-
-            <div className="flex flex-wrap items-end justify-between gap-3">
-              <ChecklistComplianceCollaboratorPicker collaborators={collaborators} selectedId={collaboratorId} />
-              {collaboratorId && (
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="flex overflow-hidden rounded-md border border-border-strong">
-                    {(["dia", "semana", "mes"] as const).map((p) => (
-                      <Link
-                        key={p}
-                        href={buildHref({ collaboratorId, period: p, ref: localDateKey(refDate) })}
-                        className={cn(
-                          "px-3 py-1.5 text-xs font-medium",
-                          period === p ? "bg-accent text-accent-foreground" : "bg-surface text-foreground-subtle hover:bg-surface-muted",
                         )}
-                      >
-                        {p === "mes" ? "Mês" : p === "semana" ? "Semana" : "Dia"}
-                      </Link>
-                    ))}
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Mês — {MONTH_LABELS[now.getMonth()]} de {now.getFullYear()}</CardTitle>
+                      </CardHeader>
+                      <CardContent className="flex flex-col gap-4">
+                        <DonutStat
+                          centerLabel="em dia"
+                          centerValue={
+                            checklistDashboard.month.collaboratorsScheduled === 0
+                              ? "100%"
+                              : `${Math.round((checklistDashboard.month.collaboratorsComplete / checklistDashboard.month.collaboratorsScheduled) * 100)}%`
+                          }
+                          segments={[
+                            { label: "Em dia o mês todo", value: checklistDashboard.month.collaboratorsComplete, color: "var(--success)" },
+                            { label: "Com pendência", value: checklistDashboard.month.collaboratorsIncomplete.length, color: "var(--warning)" },
+                          ]}
+                        />
+                        {checklistDashboard.month.collaboratorsIncomplete.length > 0 && (
+                          <div className="flex flex-col divide-y divide-border">
+                            {checklistDashboard.month.collaboratorsIncomplete
+                              .sort((a, b) => b.pendingCount - a.pendingCount)
+                              .map((c) => (
+                                <div key={c.id} className="flex items-center justify-between px-1 py-2 text-sm">
+                                  <span>{c.name}</span>
+                                  <span className="font-semibold tabular-nums text-danger">
+                                    {c.pendingCount} pendente{c.pendingCount > 1 ? "s" : ""}
+                                  </span>
+                                </div>
+                              ))}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
                   </div>
-                  <Button size="icon" variant="secondary" asChild>
-                    <Link href={buildHref({ collaboratorId, period, ref: localDateKey(prevRef) })} aria-label="Anterior">
-                      <ChevronLeft className="size-4" />
-                    </Link>
-                  </Button>
-                  <span className="min-w-40 text-center text-sm font-medium text-foreground">{rangeLabel}</span>
-                  <Button size="icon" variant="secondary" asChild>
-                    <Link href={buildHref({ collaboratorId, period, ref: localDateKey(nextRef) })} aria-label="Próximo">
-                      <ChevronRight className="size-4" />
-                    </Link>
-                  </Button>
-                </div>
-              )}
-            </div>
 
-            {!collaboratorId && (
-              <Card>
-                <CardContent className="py-10 text-center text-sm text-foreground-subtle">
-                  Selecione um colaborador acima pra ver o relatório de conformidade.
-                </CardContent>
-              </Card>
-            )}
-
-            {rangeReport && (
-              <>
-                <p className="text-sm text-foreground-subtle">
-                  {rangeReport.collaborator.name}
-                  {rangeReport.collaborator.area ? ` · Área ${rangeReport.collaborator.area.name}` : " · Sem área definida"}
-                </p>
-
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                  <StatCard label="Turnos trabalhados" value={rangeReport.summary.workDays} />
-                  <StatCard label="Cumpriu tudo" value={rangeReport.summary.completeDays} tone="success" />
-                  <StatCard
-                    label="Com pendência"
-                    value={rangeReport.summary.incompleteDays}
-                    tone={rangeReport.summary.incompleteDays > 0 ? "danger" : "success"}
-                  />
-                </div>
-
-                <div className="flex flex-col gap-2">
-                  {rangeReport.days.map((d) => {
-                    const isWork = d.status === "TRABALHO";
-                    const hasRequired = d.required.length > 0;
-                    const complete = isWork && hasRequired && d.pending.length === 0;
-                    const incomplete = isWork && hasRequired && d.pending.length > 0 && !d.future;
-                    return (
-                      <div
-                        key={localDateKey(d.date)}
-                        className="flex flex-col gap-1.5 rounded-lg border border-border bg-surface px-4 py-3 text-sm"
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <span className="font-medium text-foreground">
-                            {WEEKDAY_LABELS[d.date.getDay()]} — {formatDate(d.date)}
-                          </span>
-                          <Badge tone={!isWork ? "neutral" : !hasRequired ? "neutral" : d.future ? "info" : incomplete ? "danger" : "success"}>
-                            {!isWork ? "Folga" : !hasRequired ? "Sem checklist na área" : d.future ? "Agendado" : complete ? "Completo" : "Pendente"}
-                          </Badge>
+                  <div className="flex flex-wrap items-end justify-between gap-3">
+                    <ChecklistComplianceCollaboratorPicker collaborators={collaborators} selectedId={collaboratorId} />
+                    {collaboratorId && (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="flex overflow-hidden rounded-md border border-border-strong">
+                          {(["dia", "semana", "mes"] as const).map((p) => (
+                            <Link
+                              key={p}
+                              href={buildHref({ collaboratorId, period: p, ref: localDateKey(refDate) })}
+                              className={cn(
+                                "px-3 py-1.5 text-xs font-medium",
+                                period === p ? "bg-accent text-accent-foreground" : "bg-surface text-foreground-subtle hover:bg-surface-muted",
+                              )}
+                            >
+                              {p === "mes" ? "Mês" : p === "semana" ? "Semana" : "Dia"}
+                            </Link>
+                          ))}
                         </div>
-                        {isWork && hasRequired && !d.future && (
-                          <p className="text-xs text-foreground-subtle">
-                            {d.completed.length}/{d.required.length} feito
-                            {d.pending.length > 0 && (
-                              <> — faltou: {d.pending.map((e) => e.code).join(", ")}</>
-                            )}
-                          </p>
-                        )}
+                        <Button size="icon" variant="secondary" asChild>
+                          <Link href={buildHref({ collaboratorId, period, ref: localDateKey(prevRef) })} aria-label="Anterior">
+                            <ChevronLeft className="size-4" />
+                          </Link>
+                        </Button>
+                        <span className="min-w-40 text-center text-sm font-medium text-foreground">{rangeLabel}</span>
+                        <Button size="icon" variant="secondary" asChild>
+                          <Link href={buildHref({ collaboratorId, period, ref: localDateKey(nextRef) })} aria-label="Próximo">
+                            <ChevronRight className="size-4" />
+                          </Link>
+                        </Button>
                       </div>
-                    );
-                  })}
-                </div>
-              </>
-            )}
+                    )}
+                  </div>
+
+                  {!collaboratorId && (
+                    <Card>
+                      <CardContent className="py-10 text-center text-sm text-foreground-subtle">
+                        Selecione um colaborador acima pra ver o relatório de conformidade.
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {checklistRangeReport && (
+                    <>
+                      <p className="text-sm text-foreground-subtle">
+                        {checklistRangeReport.collaborator.name}
+                        {checklistRangeReport.collaborator.area
+                          ? ` · Área ${checklistRangeReport.collaborator.area.name}`
+                          : " · Sem área definida"}
+                      </p>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                        <StatCard label="Turnos trabalhados" value={checklistRangeReport.summary.workDays} />
+                        <StatCard label="Cumpriu tudo" value={checklistRangeReport.summary.completeDays} tone="success" />
+                        <StatCard
+                          label="Com pendência"
+                          value={checklistRangeReport.summary.incompleteDays}
+                          tone={checklistRangeReport.summary.incompleteDays > 0 ? "danger" : "success"}
+                        />
+                      </div>
+
+                      <div className="flex flex-col gap-2">
+                        {checklistRangeReport.days.map((d) => {
+                          const isWork = d.status === "TRABALHO";
+                          const hasRequired = d.required.length > 0;
+                          const complete = isWork && hasRequired && d.pending.length === 0;
+                          const incomplete = isWork && hasRequired && d.pending.length > 0 && !d.future;
+                          return (
+                            <div
+                              key={localDateKey(d.date)}
+                              className="flex flex-col gap-1.5 rounded-lg border border-border bg-surface px-4 py-3 text-sm"
+                            >
+                              <div className="flex items-center justify-between gap-3">
+                                <span className="font-medium text-foreground">
+                                  {WEEKDAY_LABELS[d.date.getDay()]} — {formatDate(d.date)}
+                                </span>
+                                <Badge tone={!isWork ? "neutral" : !hasRequired ? "neutral" : d.future ? "info" : incomplete ? "danger" : "success"}>
+                                  {!isWork ? "Folga" : !hasRequired ? "Sem checklist na área" : d.future ? "Agendado" : complete ? "Completo" : "Pendente"}
+                                </Badge>
+                              </div>
+                              {isWork && hasRequired && !d.future && (
+                                <p className="text-xs text-foreground-subtle">
+                                  {d.completed.length}/{d.required.length} feito
+                                  {d.pending.length > 0 && (
+                                    <> — faltou: {d.pending.map((e) => e.code).join(", ")}</>
+                                  )}
+                                </p>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
+                </TabsContent>
+              )}
+
+              {canSeeProductivity && productivityDashboard && (
+                <TabsContent value="produtividade" className="flex flex-col gap-5">
+                  <p className="text-sm text-foreground-subtle">
+                    Quem tinha turno de trabalho e lançou (ou não) a própria produção — e o total por atividade no
+                    período.
+                  </p>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Hoje — {formatDate(productivityDashboard.date)}</CardTitle>
+                      </CardHeader>
+                      <CardContent className="flex flex-col gap-4">
+                        <DonutStat
+                          centerLabel="lançaram"
+                          centerValue={
+                            productivityDashboard.today.collaboratorsScheduled === 0
+                              ? "100%"
+                              : `${Math.round((productivityDashboard.today.collaboratorsLogged / productivityDashboard.today.collaboratorsScheduled) * 100)}%`
+                          }
+                          segments={[
+                            { label: "Lançaram", value: productivityDashboard.today.collaboratorsLogged, color: "var(--success)" },
+                            {
+                              label: "Sem lançamento",
+                              value: Math.max(
+                                productivityDashboard.today.collaboratorsScheduled - productivityDashboard.today.collaboratorsLogged,
+                                0,
+                              ),
+                              color: "var(--danger)",
+                            },
+                          ]}
+                        />
+                        {productivityDashboard.today.missingCollaborators.length > 0 && (
+                          <div className="flex flex-wrap gap-2">
+                            {productivityDashboard.today.missingCollaborators.map((c) => (
+                              <Badge key={c.id} tone="danger">{c.name}</Badge>
+                            ))}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Mês — {MONTH_LABELS[now.getMonth()]} de {now.getFullYear()}</CardTitle>
+                      </CardHeader>
+                      <CardContent className="flex flex-col gap-4">
+                        <DonutStat
+                          centerLabel="lançaram"
+                          centerValue={
+                            productivityDashboard.month.collaboratorsScheduled === 0
+                              ? "100%"
+                              : `${Math.round((productivityDashboard.month.collaboratorsLogged / productivityDashboard.month.collaboratorsScheduled) * 100)}%`
+                          }
+                          segments={[
+                            { label: "Lançaram no mês", value: productivityDashboard.month.collaboratorsLogged, color: "var(--success)" },
+                            {
+                              label: "Sem lançamento",
+                              value: Math.max(
+                                productivityDashboard.month.collaboratorsScheduled - productivityDashboard.month.collaboratorsLogged,
+                                0,
+                              ),
+                              color: "var(--warning)",
+                            },
+                          ]}
+                        />
+                        {productivityDashboard.month.byActivity.length > 0 && (
+                          <div className="flex flex-col divide-y divide-border">
+                            {productivityDashboard.month.byActivity.slice(0, 5).map((a) => (
+                              <div key={a.activityId} className="flex items-center justify-between px-1 py-2 text-sm">
+                                <span>{a.activityName}</span>
+                                <span className="font-semibold tabular-nums">
+                                  {a.totalQuantity}{a.unit ? ` ${a.unit}` : ""} · {a.count} lanç.
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  <div className="flex flex-wrap items-end justify-between gap-3">
+                    <ChecklistComplianceCollaboratorPicker collaborators={collaborators} selectedId={collaboratorId} />
+                    {collaboratorId && (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="flex overflow-hidden rounded-md border border-border-strong">
+                          {(["dia", "semana", "mes"] as const).map((p) => (
+                            <Link
+                              key={p}
+                              href={buildHref({ collaboratorId, period: p, ref: localDateKey(refDate) })}
+                              className={cn(
+                                "px-3 py-1.5 text-xs font-medium",
+                                period === p ? "bg-accent text-accent-foreground" : "bg-surface text-foreground-subtle hover:bg-surface-muted",
+                              )}
+                            >
+                              {p === "mes" ? "Mês" : p === "semana" ? "Semana" : "Dia"}
+                            </Link>
+                          ))}
+                        </div>
+                        <Button size="icon" variant="secondary" asChild>
+                          <Link href={buildHref({ collaboratorId, period, ref: localDateKey(prevRef) })} aria-label="Anterior">
+                            <ChevronLeft className="size-4" />
+                          </Link>
+                        </Button>
+                        <span className="min-w-40 text-center text-sm font-medium text-foreground">{rangeLabel}</span>
+                        <Button size="icon" variant="secondary" asChild>
+                          <Link href={buildHref({ collaboratorId, period, ref: localDateKey(nextRef) })} aria-label="Próximo">
+                            <ChevronRight className="size-4" />
+                          </Link>
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+
+                  {!collaboratorId && (
+                    <Card>
+                      <CardContent className="py-10 text-center text-sm text-foreground-subtle">
+                        Selecione um colaborador acima pra ver o relatório de produtividade.
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {productivityRangeReport && (
+                    <>
+                      <p className="text-sm text-foreground-subtle">{productivityRangeReport.collaborator.name}</p>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                        <StatCard label="Turnos trabalhados" value={productivityRangeReport.summary.workDays} />
+                        <StatCard label="Com lançamento" value={productivityRangeReport.summary.daysWithEntries} tone="success" />
+                        <StatCard
+                          label="Sem lançamento"
+                          value={productivityRangeReport.summary.daysMissing}
+                          tone={productivityRangeReport.summary.daysMissing > 0 ? "danger" : "success"}
+                        />
+                        <StatCard label="Total de lançamentos" value={productivityRangeReport.summary.totalEntries} />
+                      </div>
+
+                      <div className="flex flex-col gap-2">
+                        {productivityRangeReport.days.map((d) => {
+                          const isWork = d.status === "TRABALHO";
+                          const future = localDateKey(d.date) > localDateKey(now);
+                          const hasEntries = d.entries.length > 0;
+                          const missing = isWork && !hasEntries && !future;
+                          return (
+                            <div
+                              key={localDateKey(d.date)}
+                              className="flex flex-col gap-1.5 rounded-lg border border-border bg-surface px-4 py-3 text-sm"
+                            >
+                              <div className="flex items-center justify-between gap-3">
+                                <span className="font-medium text-foreground">
+                                  {WEEKDAY_LABELS[d.date.getDay()]} — {formatDate(d.date)}
+                                </span>
+                                <Badge tone={!isWork ? "neutral" : future ? "info" : missing ? "danger" : "success"}>
+                                  {!isWork ? "Folga" : future ? "Agendado" : hasEntries ? "Lançado" : "Sem lançamento"}
+                                </Badge>
+                              </div>
+                              {isWork && hasEntries && (
+                                <p className="text-xs text-foreground-subtle">
+                                  {d.entries
+                                    .map(
+                                      (e) =>
+                                        `${e.activity.name}${e.quantity != null ? `: ${e.quantity}${e.activity.unit ? ` ${e.activity.unit}` : ""}` : ""}`,
+                                    )
+                                    .join(" · ")}
+                                </p>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
+                </TabsContent>
+              )}
+            </Tabs>
           </section>
         )}
 

@@ -111,11 +111,12 @@ export async function setCollaboratorRequiresChecklist(user: CurrentUser, id: st
   return collaborator;
 }
 
-/** Colaboradores ativos pro seletor do "Relatório por colaborador" em Indicadores — sem exigir
- * `checklistEnabled`/`userId` como `listChecklistEligibleCollaborators`, porque o mesmo seletor
- * também alimenta a aba de Produtividade, que não depende de acesso ao sistema (lançamento pode
- * ser feito por quem gerencia, em nome do colaborador). Cobre qualquer colaborador cadastrado
- * em RH, não só o subconjunto técnico habilitado pra checklist. */
+/** Colaboradores ativos pro seletor do "Relatório por colaborador" em Indicadores (abas Checklist
+ * e Produtividade) — sem exigir `checklistEnabled`/`userId` como o cálculo interno de conformidade
+ * de checklist exige, porque o mesmo seletor também alimenta a aba de Produtividade, que não
+ * depende de acesso ao sistema (lançamento pode ser feito por quem gerencia, em nome do
+ * colaborador). Cobre qualquer colaborador cadastrado em RH, não só o subconjunto técnico
+ * habilitado pra checklist. */
 export function listActiveCollaboratorsForSupervision(user: CurrentUser) {
   if (!hasPermission(user, PERMISSIONS.CHECKLIST_COMPLIANCE_VIEW) && !hasPermission(user, PERMISSIONS.PRODUCTIVITY_MANAGE)) {
     throw new ForbiddenError();
