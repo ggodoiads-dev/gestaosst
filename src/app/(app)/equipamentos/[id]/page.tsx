@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { headers } from "next/headers";
-import { ClipboardCheck } from "lucide-react";
+import { ClipboardCheck, Printer } from "lucide-react";
 import { requireUser, hasPermission } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
 import { db } from "@/server/db";
@@ -215,6 +215,11 @@ export default async function EquipamentoDetailPage({
           <Card>
             <CardHeader>
               <CardTitle>QR Code</CardTitle>
+              <Button asChild variant="secondary" size="sm">
+                <Link href={`/equipamentos/${equipment.id}/qrcode/imprimir`} target="_blank">
+                  <Printer className="size-3.5" /> Imprimir
+                </Link>
+              </Button>
             </CardHeader>
             <CardContent className="flex flex-col items-center gap-2">
               {/* eslint-disable-next-line @next/next/no-img-element */}

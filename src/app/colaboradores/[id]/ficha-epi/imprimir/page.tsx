@@ -2,7 +2,7 @@ import { requireUser } from "@/server/auth/current-user";
 import { getCollaboratorDetail } from "@/server/services/collaborator.service";
 import { listEpiDeliveriesForCollaborator } from "@/server/services/epi.service";
 import { formatDate } from "@/lib/dates";
-import { PrintButton } from "./print-button";
+import { PrintButton } from "@/components/domain/print-button";
 
 const REASON_LABELS: Record<string, string> = {
   PRIMEIRA_ENTREGA: "1",

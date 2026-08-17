@@ -64,6 +64,19 @@ export async function setActivityActiveAction(id: string, active: boolean) {
   revalidatePath(`/atividades/${id}`);
 }
 
+export async function setCollaboratorActivityAptitudesAction(collaboratorId: string, activityIds: string[]): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    await activityService.setCollaboratorActivityAptitudes(user, collaboratorId, activityIds);
+    revalidatePath(`/colaboradores/${collaboratorId}`);
+    return { ok: true };
+  } catch (error) {
+    if (error instanceof ForbiddenError) return { ok: false, error: error.message };
+    console.error(error);
+    return { ok: false, error: "Não foi possível salvar as aptidões." };
+  }
+}
+
 export async function uploadActivityDocumentAction(
   activityId: string,
   docType: "POP" | "AR_VR" | "LISTA_TREINAMENTO",

@@ -117,6 +117,56 @@ export async function setActivityActive(user: CurrentUser, id: string, active: b
   return activity;
 }
 
+/** Atividades ativas + quais delas este colaborador está apto a realizar — base do card
+ * "Atividades" e do diálogo de edição na ficha do colaborador. */
+export async function listActivityAptitudesForCollaborator(user: CurrentUser, collaboratorId: string) {
+  requirePermission(user, PERMISSIONS.COLLABORATOR_MANAGE);
+
+  const [activities, aptitudes] = await Promise.all([
+    db.activity.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
+    db.collaboratorActivity.findMany({ where: { collaboratorId }, select: { activityId: true } }),
+  ]);
+
+  const aptActivityIds = new Set(aptitudes.map((a) => a.activityId));
+  return activities.map((activity) => ({ activity, apt: aptActivityIds.has(activity.id) }));
+}
+
+/** Substitui o conjunto inteiro de atividades que o colaborador está apto a realizar (marca as
+ * novas, desmarca as que saíram) — mais simples de operar num diálogo de checkboxes do que
+ * conceder/revogar uma de cada vez. */
+export async function setCollaboratorActivityAptitudes(user: CurrentUser, collaboratorId: string, activityIds: string[]) {
+  requirePermission(user, PERMISSIONS.COLLABORATOR_MANAGE);
+
+  const before = await db.collaboratorActivity.findMany({ where: { collaboratorId }, select: { activityId: true } });
+  const beforeIds = new Set(before.map((a) => a.activityId));
+  const afterIds = new Set(activityIds);
+
+  await db.$transaction(async (tx) => {
+    const toRemove = [...beforeIds].filter((id) => !afterIds.has(id));
+    const toAdd = [...afterIds].filter((id) => !beforeIds.has(id));
+
+    if (toRemove.length > 0) {
+      await tx.collaboratorActivity.deleteMany({ where: { collaboratorId, activityId: { in: toRemove } } });
+    }
+    if (toAdd.length > 0) {
+      await tx.collaboratorActivity.createMany({
+        data: toAdd.map((activityId) => ({ collaboratorId, activityId, grantedById: user.id })),
+      });
+    }
+    await recordAudit(
+      {
+        userId: user.id,
+        action: "UPDATE",
+        entityType: "Collaborator",
+        entityId: collaboratorId,
+        previousValue: { activityIds: [...beforeIds] },
+        newValue: { activityIds: [...afterIds] },
+      },
+      tx,
+    );
+  });
+}
+
 /** Anexa uma nova versão de POP ou AR/VR — versões anteriores continuam no histórico (seção 44: nunca sobrescrever). */
 export async function attachActivityDocument(
   user: CurrentUser,

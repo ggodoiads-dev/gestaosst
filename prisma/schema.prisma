@@ -83,18 +83,19 @@ model User {
   auditLogs              AuditLog[]
   uploadedAttachments    Attachment[]
 
-  accidentsInvestigated       Accident[]            @relation("AccidentInvestigatedBy")
-  accidentsReported           Accident[]            @relation("AccidentReportedBy")
-  accidentActionsResponsible  AccidentAction[]      @relation("AccidentActionResponsibleUser")
-  qualificationRecordsCreated QualificationRecord[] @relation("QualificationCreatedBy")
-  turnosCreated               Turno[]               @relation("TurnoCreatedBy")
-  scheduleDayNotesCreated     ScheduleDayNote[]     @relation("ScheduleDayNoteCreatedBy")
-  productivityEntriesCreated  ProductivityEntry[]   @relation("ProductivityCreatedBy")
-  productivityGoalsCreated    ProductivityGoal[]    @relation("ProductivityGoalCreatedBy")
-  epiDeliveriesCreated        EpiDelivery[]         @relation("EpiDeliveryCreatedBy")
-  timeClockRecordsImported    TimeClockRecord[]     @relation("TimeClockImportedBy")
-  checklistJustificationsMade ChecklistJustification[] @relation("ChecklistJustificationCreatedBy")
-  collaboratorProfile         Collaborator?
+  accidentsInvestigated         Accident[]               @relation("AccidentInvestigatedBy")
+  accidentsReported             Accident[]               @relation("AccidentReportedBy")
+  accidentActionsResponsible    AccidentAction[]         @relation("AccidentActionResponsibleUser")
+  qualificationRecordsCreated   QualificationRecord[]    @relation("QualificationCreatedBy")
+  turnosCreated                 Turno[]                  @relation("TurnoCreatedBy")
+  scheduleDayNotesCreated       ScheduleDayNote[]        @relation("ScheduleDayNoteCreatedBy")
+  productivityEntriesCreated    ProductivityEntry[]      @relation("ProductivityCreatedBy")
+  productivityGoalsCreated      ProductivityGoal[]       @relation("ProductivityGoalCreatedBy")
+  epiDeliveriesCreated          EpiDelivery[]            @relation("EpiDeliveryCreatedBy")
+  timeClockRecordsImported      TimeClockRecord[]        @relation("TimeClockImportedBy")
+  checklistJustificationsMade   ChecklistJustification[] @relation("ChecklistJustificationCreatedBy")
+  collaboratorActivitiesGranted CollaboratorActivity[]   @relation("CollaboratorActivityGrantedBy")
+  collaboratorProfile           Collaborator?
 
   @@index([roleId])
 }
@@ -751,43 +752,45 @@ model Notification {
 // =========================================================================
 
 model Collaborator {
-  id               String    @id @default(uuid())
-  name             String
-  matricula        String?   @unique
-  cargo            String? // espelha jobFunction.name quando functionId é definido (compatibilidade com busca/listagem existentes)
-  functionId       String?
-  cpf              String?
-  ctps             String?
-  ctpsSerie        String?
-  admissionDate    DateTime?
-  salary           Decimal?  @db.Decimal(12, 2) // dado sensível de RH — só exposto/editável com PERMISSIONS.HR_MANAGE
-  pis              String?   @unique // PIS/NIT — identificador do colaborador no arquivo AFDT do relógio de ponto
-  inactivatedAt    DateTime? // preenchido automaticamente quando active vira false (seção "DESLIGAMENTO" da ficha de EPI)
-  areaId           String?
-  turnoId          String?
+  id                String    @id @default(uuid())
+  name              String
+  matricula         String?   @unique
+  cargo             String? // espelha jobFunction.name quando functionId é definido (compatibilidade com busca/listagem existentes)
+  functionId        String?
+  cpf               String?
+  ctps              String?
+  ctpsSerie         String?
+  admissionDate     DateTime?
+  salary            Decimal?  @db.Decimal(12, 2) // dado sensível de RH — só exposto/editável com PERMISSIONS.HR_MANAGE
+  pis               String?   @unique // PIS/NIT — identificador do colaborador no arquivo AFDT do relógio de ponto
+  inactivatedAt     DateTime? // preenchido automaticamente quando active vira false (seção "DESLIGAMENTO" da ficha de EPI)
+  areaId            String?
+  turnoId           String?
   scheduleStartDate DateTime? // dia 1 do ciclo pessoal (trabalho) — calculado a partir do 1º dia de folga informado no cadastro da escala; sobrepõe Turno.startDate quando definido
-  phone            String?
-  checklistEnabled Boolean   @default(false) // se true, este colaborador precisa de um User pra fazer checklist
-  requiresChecklist Boolean  @default(false) // classificação manual de RH/Supervisão: esse colaborador é cobrado por checklist no relatório de ponto (independe de já ter acesso ao sistema)
-  userId           String?   @unique // User provisionado automaticamente quando checklistEnabled
-  active           Boolean   @default(true)
-  createdAt        DateTime  @default(now())
+  phone             String?
+  checklistEnabled  Boolean   @default(false) // se true, este colaborador precisa de um User pra fazer checklist
+  requiresChecklist Boolean   @default(false) // classificação manual de RH/Supervisão: esse colaborador é cobrado por checklist no relatório de ponto (independe de já ter acesso ao sistema)
+  userId            String?   @unique // User provisionado automaticamente quando checklistEnabled
+  active            Boolean   @default(true)
+  createdAt         DateTime  @default(now())
+  qrToken           String?   @unique @default(uuid()) // usado pelo QR Code impresso na ficha do colaborador
 
   area     Area?        @relation(fields: [areaId], references: [id])
   turno    Turno?       @relation(fields: [turnoId], references: [id])
   user     User?        @relation(fields: [userId], references: [id])
   function JobFunction? @relation(fields: [functionId], references: [id])
 
-  accidentInvolvements AccidentInvolvement[]
-  accidentActions      AccidentAction[]
-  qualificationRecords QualificationRecord[]
-  scheduleDayNotes     ScheduleDayNote[]
-  productivityEntries  ProductivityEntry[]
-  productivityGoals    ProductivityGoal[]
-  shiftCheckIns        ShiftCheckIn[]
-  epiDeliveries        EpiDelivery[]
-  timeClockRecords     TimeClockRecord[]
+  accidentInvolvements    AccidentInvolvement[]
+  accidentActions         AccidentAction[]
+  qualificationRecords    QualificationRecord[]
+  scheduleDayNotes        ScheduleDayNote[]
+  productivityEntries     ProductivityEntry[]
+  productivityGoals       ProductivityGoal[]
+  shiftCheckIns           ShiftCheckIn[]
+  epiDeliveries           EpiDelivery[]
+  timeClockRecords        TimeClockRecord[]
   checklistJustifications ChecklistJustification[]
+  activityAptitudes       CollaboratorActivity[]
 
   @@index([areaId])
   @@index([functionId])
@@ -1023,9 +1026,29 @@ model Activity {
   active      Boolean  @default(true)
   createdAt   DateTime @default(now())
 
-  attachments         Attachment[]
-  productivityEntries ProductivityEntry[]
-  productivityGoals   ProductivityGoal[]
+  attachments           Attachment[]
+  productivityEntries   ProductivityEntry[]
+  productivityGoals     ProductivityGoal[]
+  collaboratorAptitudes CollaboratorActivity[]
+}
+
+/// Aptidão de um colaborador pra realizar uma atividade (ex: "apto pra operar paleteira") —
+/// concedida manualmente por quem gerencia colaboradores, sem prazo de validade (diferente de
+/// QualificationRecord, que é uma certificação formal com validade). Uma linha por par
+/// colaborador+atividade.
+model CollaboratorActivity {
+  id             String   @id @default(uuid())
+  collaboratorId String
+  activityId     String
+  grantedById    String
+  notes          String?
+  createdAt      DateTime @default(now())
+
+  collaborator Collaborator @relation(fields: [collaboratorId], references: [id])
+  activity     Activity     @relation(fields: [activityId], references: [id])
+  grantedBy    User         @relation("CollaboratorActivityGrantedBy", fields: [grantedById], references: [id])
+
+  @@unique([collaboratorId, activityId])
 }
 
 // =========================================================================
@@ -1202,13 +1225,13 @@ enum ChecklistJustificationReason {
 /// e não fez — cada motivo já tem fixado se conta como cumprido pra aderência (ver
 /// checklist-justification-reasons.ts). Uma por colaborador/dia; justificar de novo substitui.
 model ChecklistJustification {
-  id             String                        @id @default(uuid())
+  id             String                       @id @default(uuid())
   collaboratorId String
   date           DateTime // dia do checklist não realizado, meio-dia local (mesmo padrão de ScheduleDayNote.date)
   reason         ChecklistJustificationReason
   note           String?
   createdById    String
-  createdAt      DateTime                      @default(now())
+  createdAt      DateTime                     @default(now())
 
   collaborator Collaborator @relation(fields: [collaboratorId], references: [id])
   createdBy    User         @relation("ChecklistJustificationCreatedBy", fields: [createdById], references: [id])

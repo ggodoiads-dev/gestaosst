@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { headers } from "next/headers";
-import { AlertTriangle, GraduationCap, HardHat, Printer } from "lucide-react";
+import { AlertTriangle, GraduationCap, HardHat, Printer, ClipboardList, QrCode } from "lucide-react";
 import { requireUser, hasPermission } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
 import { getCollaboratorProntuario } from "@/server/services/collaborator.service";
@@ -12,11 +12,13 @@ import {
   listEpiTypes,
   listJobFunctionsForCollaboratorForm,
 } from "@/server/services/epi.service";
-import { generateEpiDeliveryQrCode } from "@/server/services/qrcode.service";
+import { generateEpiDeliveryQrCode, generateCollaboratorQrCode } from "@/server/services/qrcode.service";
+import { listActivityAptitudesForCollaborator } from "@/server/services/activity.service";
+import { listQualificationTypes } from "@/server/services/qualification.service";
 import { PageHeader, PageBody } from "@/components/domain/page-header";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, TableEmpty } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
+import { Badge, type BadgeTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/dates";
 import { formatCurrency } from "@/lib/format";
@@ -28,6 +30,16 @@ import { EditSalaryDialog } from "../salary-dialog";
 import { RequiresChecklistToggle } from "../requires-checklist-toggle";
 import { RegisterEpiDeliveryDialog } from "./register-epi-delivery-dialog";
 import { MarkEpiReturnedButton } from "./mark-epi-returned-button";
+import { ActivityAptitudeDialog } from "./activity-aptitude-dialog";
+import { CreateQualificationRecordDialog } from "@/app/(app)/qualificacoes/qualification-record-dialog";
+
+function qualificationStatus(expiresAt: Date | null): { label: string; tone: BadgeTone } {
+  if (!expiresAt) return { label: "Sem vencimento", tone: "success" };
+  const daysLeft = Math.ceil((expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+  if (daysLeft < 0) return { label: `Vencida em ${formatDate(expiresAt)}`, tone: "danger" };
+  if (daysLeft <= 30) return { label: `Vence em ${formatDate(expiresAt)}`, tone: "warning" };
+  return { label: `Válida até ${formatDate(expiresAt)}`, tone: "success" };
+}
 
 const EPI_REASON_LABELS: Record<string, string> = {
   PRIMEIRA_ENTREGA: "1 — Primeira entrega",
@@ -47,16 +59,28 @@ export default async function ColaboradorDetailPage({
   const canManage = hasPermission(user, PERMISSIONS.COLLABORATOR_MANAGE);
   const canSeeHr = hasPermission(user, PERMISSIONS.HR_MANAGE);
   const canManageCheckIn = hasPermission(user, PERMISSIONS.SHIFT_CHECKIN_MANAGE);
-  const [{ collaborator, history }, areas, turnos, jobFunctions, epiDeliveries, epiTypes, shiftCheckIn] =
-    await Promise.all([
-      getCollaboratorProntuario(user, id),
-      listAreas(),
-      listTurnos(user),
-      listJobFunctionsForCollaboratorForm(user),
-      listEpiDeliveriesForCollaborator(user, id),
-      listEpiTypes(user, { onlyActive: true }),
-      canManageCheckIn ? getShiftCheckInStatusFor(user, id) : Promise.resolve(null),
-    ]);
+  const canManageQualifications = hasPermission(user, PERMISSIONS.QUALIFICATION_MANAGE);
+  const [
+    { collaborator, history, qualifications },
+    areas,
+    turnos,
+    jobFunctions,
+    epiDeliveries,
+    epiTypes,
+    shiftCheckIn,
+    activityAptitudes,
+    qualificationTypes,
+  ] = await Promise.all([
+    getCollaboratorProntuario(user, id),
+    listAreas(),
+    listTurnos(user),
+    listJobFunctionsForCollaboratorForm(user),
+    listEpiDeliveriesForCollaborator(user, id),
+    listEpiTypes(user, { onlyActive: true }),
+    canManageCheckIn ? getShiftCheckInStatusFor(user, id) : Promise.resolve(null),
+    canManage ? listActivityAptitudesForCollaborator(user, id) : Promise.resolve([]),
+    canManageQualifications ? listQualificationTypes(user, { onlyActive: true }) : Promise.resolve([]),
+  ]);
 
   const headerList = await headers();
   const host = headerList.get("x-forwarded-host") ?? headerList.get("host") ?? "localhost:3000";
@@ -69,6 +93,18 @@ export default async function ColaboradorDetailPage({
         .map(async (d) => [d.id, await generateEpiDeliveryQrCode(d.qrToken!, baseUrl)] as const),
     ),
   );
+  const collaboratorQrDataUrl = collaborator.qrToken
+    ? await generateCollaboratorQrCode(collaborator.qrToken, baseUrl)
+    : null;
+  const collaboratorQrUrl = collaborator.qrToken ? `${baseUrl}/q/${collaborator.qrToken}` : null;
+
+  const currentQualifications: typeof qualifications = [];
+  const seenTypeIds = new Set<string>();
+  for (const record of qualifications) {
+    if (seenTypeIds.has(record.qualificationTypeId)) continue;
+    seenTypeIds.add(record.qualificationTypeId);
+    currentQualifications.push(record);
+  }
 
   return (
     <>
@@ -164,6 +200,59 @@ export default async function ColaboradorDetailPage({
             </Card>
           )}
 
+          <Card>
+            <CardHeader>
+              <CardTitle>
+                <span className="flex items-center gap-2"><GraduationCap className="size-4" /> Qualificações</span>
+              </CardTitle>
+              {canManageQualifications && (
+                <CreateQualificationRecordDialog
+                  collaborators={[collaborator]}
+                  types={qualificationTypes}
+                  defaultCollaboratorId={collaborator.id}
+                />
+              )}
+            </CardHeader>
+            <CardContent className="flex flex-wrap gap-2">
+              {currentQualifications.length === 0 && (
+                <p className="text-sm text-foreground-subtle">Nenhuma qualificação registrada ainda.</p>
+              )}
+              {currentQualifications.map((record) => {
+                const status = qualificationStatus(record.expiresAt);
+                return (
+                  <Badge key={record.id} tone={status.tone}>
+                    {record.qualificationType.name} — {status.label}
+                  </Badge>
+                );
+              })}
+            </CardContent>
+          </Card>
+
+          {canManage && (
+            <Card>
+              <CardHeader>
+                <CardTitle>
+                  <span className="flex items-center gap-2"><ClipboardList className="size-4" /> Atividades</span>
+                </CardTitle>
+                <ActivityAptitudeDialog
+                  collaboratorId={collaborator.id}
+                  activities={activityAptitudes.map((a) => a.activity)}
+                  aptActivityIds={activityAptitudes.filter((a) => a.apt).map((a) => a.activity.id)}
+                />
+              </CardHeader>
+              <CardContent className="flex flex-wrap gap-2">
+                {activityAptitudes.filter((a) => a.apt).length === 0 && (
+                  <p className="text-sm text-foreground-subtle">Nenhuma atividade marcada como apto ainda.</p>
+                )}
+                {activityAptitudes
+                  .filter((a) => a.apt)
+                  .map((a) => (
+                    <Badge key={a.activity.id} tone="info">{a.activity.name}</Badge>
+                  ))}
+              </CardContent>
+            </Card>
+          )}
+
           <CollaboratorAccessPanel
             collaboratorId={collaborator.id}
             checklistEnabled={collaborator.checklistEnabled}
@@ -178,6 +267,30 @@ export default async function ColaboradorDetailPage({
               checkedInAt={shiftCheckIn.checkedInAt}
             />
           )}
+
+          <Card>
+            <CardHeader>
+              <CardTitle>
+                <span className="flex items-center gap-2"><QrCode className="size-4" /> QR Code</span>
+              </CardTitle>
+              <Button asChild variant="secondary" size="sm">
+                <Link href={`/colaboradores/${collaborator.id}/qrcode/imprimir`} target="_blank">
+                  <Printer className="size-3.5" /> Imprimir
+                </Link>
+              </Button>
+            </CardHeader>
+            <CardContent className="flex flex-col items-center gap-2">
+              {collaboratorQrDataUrl ? (
+                <>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={collaboratorQrDataUrl} alt={`QR Code de ${collaborator.name}`} className="size-40" />
+                  <p className="text-xs text-foreground-subtle text-center break-all">{collaboratorQrUrl}</p>
+                </>
+              ) : (
+                <p className="text-sm text-foreground-subtle">QR Code ainda não gerado.</p>
+              )}
+            </CardContent>
+          </Card>
         </div>
 
         <div className="lg:col-span-2 flex flex-col gap-5">

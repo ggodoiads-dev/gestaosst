@@ -27,6 +27,8 @@ export interface BadgeProps
   dot?: boolean;
 }
 
+export type BadgeTone = NonNullable<BadgeProps["tone"]>;
+
 export function Badge({ className, tone, dot, children, ...props }: BadgeProps) {
   return (
     <span className={cn(badgeVariants({ tone }), className)} {...props}>

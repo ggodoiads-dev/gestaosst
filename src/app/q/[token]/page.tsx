@@ -23,5 +23,8 @@ export default async function QrResolverPage({
   const epiDelivery = await db.epiDelivery.findUnique({ where: { qrToken: token } });
   if (epiDelivery) redirect(`/colaboradores/${epiDelivery.collaboratorId}#epi-${epiDelivery.id}`);
 
+  const collaborator = await db.collaborator.findUnique({ where: { qrToken: token } });
+  if (collaborator) redirect(`/colaboradores/${collaborator.id}`);
+
   notFound();
 }
