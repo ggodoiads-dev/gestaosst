@@ -1,6 +1,7 @@
 import "server-only";
 import { db } from "@/server/db";
 import { recordAudit } from "@/server/services/audit";
+import { getMyCollaboratorProfile } from "@/server/services/productivity.service";
 import type { CurrentUser } from "@/server/auth/current-user";
 import { requirePermission } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
@@ -14,6 +15,14 @@ export type WarningInput = {
 export function listWarningsForCollaborator(user: CurrentUser, collaboratorId: string) {
   requirePermission(user, PERMISSIONS.HR_MANAGE);
   return db.warning.findMany({ where: { collaboratorId }, orderBy: { date: "desc" } });
+}
+
+/** Advertências do próprio colaborador logado — `null` se o usuário não estiver vinculado. */
+export async function listMyWarnings(user: CurrentUser) {
+  requirePermission(user, PERMISSIONS.WARNING_SELF_VIEW);
+  const collaborator = await getMyCollaboratorProfile(user);
+  if (!collaborator) return null;
+  return db.warning.findMany({ where: { collaboratorId: collaborator.id }, orderBy: { date: "desc" } });
 }
 
 export async function createWarning(user: CurrentUser, data: WarningInput) {

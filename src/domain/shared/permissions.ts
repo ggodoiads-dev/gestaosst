@@ -40,11 +40,13 @@ export const PERMISSIONS = {
   EPI_MANAGE: "epi.manage",
   ACTIVITY_MANAGE: "activity.manage",
   SCHEDULE_MANAGE: "schedule.manage",
+  SCHEDULE_SELF_VIEW: "schedule.self_view",
   PRODUCTIVITY_MANAGE: "productivity.manage",
   PRODUCTIVITY_SELF_LOG: "productivity.self_log",
   SHIFT_CHECKIN_SELF: "shift.checkin_self",
   SHIFT_CHECKIN_MANAGE: "shift.checkin_manage",
   REPORTS_VIEW: "reports.view",
+  WARNING_SELF_VIEW: "warning.self_view",
 
   HR_MANAGE: "hr.manage",
 } as const;
@@ -86,11 +88,13 @@ export const PERMISSION_DESCRIPTIONS: Record<PermissionKey, string> = {
   [PERMISSIONS.EPI_MANAGE]: "Gerenciar funções, tipos de EPI e fichas de entrega dos colaboradores",
   [PERMISSIONS.ACTIVITY_MANAGE]: "Gerenciar atividades e documentos (POP/AR-VR)",
   [PERMISSIONS.SCHEDULE_MANAGE]: "Gerenciar escalas de trabalho dos colaboradores",
+  [PERMISSIONS.SCHEDULE_SELF_VIEW]: "Ver a própria escala de trabalho",
   [PERMISSIONS.PRODUCTIVITY_MANAGE]: "Lançar e consultar produtividade dos colaboradores",
   [PERMISSIONS.PRODUCTIVITY_SELF_LOG]: "Lançar a própria produtividade",
   [PERMISSIONS.SHIFT_CHECKIN_SELF]: "Confirmar a própria presença no turno",
   [PERMISSIONS.SHIFT_CHECKIN_MANAGE]: "Confirmar presença de qualquer colaborador (quando ele esquece)",
   [PERMISSIONS.REPORTS_VIEW]: "Gerar e baixar relatórios",
+  [PERMISSIONS.WARNING_SELF_VIEW]: "Ver as próprias advertências",
 
   [PERMISSIONS.HR_MANAGE]: "Acessar dados de RH (salário) e importar planilha de colaboradores",
 };
@@ -117,6 +121,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<RoleKeyValue, PermissionKey[]> = {
     PERMISSIONS.EQUIPMENT_VIEW,
     PERMISSIONS.CHECKLIST_EXECUTE,
     PERMISSIONS.SHIFT_CHECKIN_SELF,
+    PERMISSIONS.WARNING_SELF_VIEW,
+    PERMISSIONS.SCHEDULE_SELF_VIEW,
   ],
   LIDER_SUPERVISOR: [
     PERMISSIONS.EQUIPMENT_VIEW,

@@ -15,6 +15,7 @@ import { CreateCollaboratorDialog, EditCollaboratorDialog } from "./collaborator
 import { DeleteCollaboratorButton, ReactivateCollaboratorButton } from "./collaborator-delete-button";
 import { EditSalaryDialog } from "./salary-dialog";
 import { RequiresChecklistToggle } from "./requires-checklist-toggle";
+import { BulkAccessButton } from "./bulk-access-button";
 
 export default async function ColaboradoresPage() {
   const user = await requireUser();
@@ -45,7 +46,12 @@ export default async function ColaboradoresPage() {
         <Card>
           <CardHeader>
             <CardTitle>Colaboradores ({collaborators.length})</CardTitle>
-            {canManage && <CreateCollaboratorDialog areas={areas} turnos={turnos} jobFunctions={jobFunctions} />}
+            {canManage && (
+              <div className="flex items-center gap-2">
+                <BulkAccessButton />
+                <CreateCollaboratorDialog areas={areas} turnos={turnos} jobFunctions={jobFunctions} />
+              </div>
+            )}
           </CardHeader>
           <CardContent className="p-0">
             <Table>

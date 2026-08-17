@@ -3,7 +3,7 @@ import { db } from "@/server/db";
 import { recordAudit } from "@/server/services/audit";
 import * as userService from "@/server/services/user.service";
 import { applyJobFunctionKit } from "@/server/services/epi.service";
-import { generateLoginEmail, generatePassword } from "@/domain/shared/credentials";
+import { generateLoginEmail, generatePassword, DEFAULT_INITIAL_PASSWORD } from "@/domain/shared/credentials";
 import type { CurrentUser } from "@/server/auth/current-user";
 import { requirePermission, hasPermission, ForbiddenError } from "@/server/auth/current-user";
 import { PERMISSIONS, ROLE_KEYS } from "@/domain/shared/permissions";
@@ -325,7 +325,7 @@ export async function provisionCollaboratorAccess(admin: CurrentUser, collaborat
   ]);
 
   const email = generateLoginEmail(collaborator.name, new Set(existingUsers.map((u) => u.email)));
-  const password = generatePassword();
+  const password = DEFAULT_INITIAL_PASSWORD;
 
   const createdUser = await userService.createUserRecord(admin.id, {
     name: collaborator.name,
@@ -346,6 +346,54 @@ export async function provisionCollaboratorAccess(admin: CurrentUser, collaborat
   });
 
   return { email, password };
+}
+
+/**
+ * Cria acesso pra todos os colaboradores ativos que ainda não têm (`userId` nulo) — mesmo
+ * provisionamento de `provisionCollaboratorAccess`, só em lote. A senha é a mesma pra todos
+ * (`DEFAULT_INITIAL_PASSWORD`), então não precisa reexibir por linha, só o e-mail gerado.
+ * Idempotente: rodar de novo só provisiona quem ainda não tinha acesso.
+ */
+export async function provisionAllCollaboratorsAccess(admin: CurrentUser) {
+  requirePermission(admin, PERMISSIONS.COLLABORATOR_MANAGE);
+
+  const [role, collaborators, existingUsers] = await Promise.all([
+    db.role.findUniqueOrThrow({ where: { key: ROLE_KEYS.COLABORADOR } }),
+    db.collaborator.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
+    db.user.findMany({ select: { email: true } }),
+  ]);
+
+  const existingEmails = new Set(existingUsers.map((u) => u.email));
+  const toProvision = collaborators.filter((c) => !c.userId);
+  const created: { name: string; email: string }[] = [];
+
+  for (const collaborator of toProvision) {
+    const email = generateLoginEmail(collaborator.name, existingEmails);
+    existingEmails.add(email);
+
+    const createdUser = await userService.createUserRecord(admin.id, {
+      name: collaborator.name,
+      email,
+      password: DEFAULT_INITIAL_PASSWORD,
+      roleId: role.id,
+      unitId: null,
+      areaIds: collaborator.areaId ? [collaborator.areaId] : [],
+    });
+    await db.collaborator.update({ where: { id: collaborator.id }, data: { userId: createdUser.id } });
+    created.push({ name: collaborator.name, email });
+  }
+
+  if (created.length > 0) {
+    await recordAudit({
+      userId: admin.id,
+      action: "CREATE",
+      entityType: "Collaborator",
+      entityId: "bulk",
+      newValue: { bulkProvisioned: created.length },
+    });
+  }
+
+  return { created, alreadyLinked: collaborators.length - toProvision.length };
 }
 
 /** Gera uma nova senha pro usuário já vinculado ao colaborador e a retorna em texto plano (uma única vez). */

@@ -127,6 +127,25 @@ export async function provisionCollaboratorAccessAction(collaboratorId: string):
   }
 }
 
+export type BulkProvisionResult =
+  | { ok: true; created: { name: string; email: string }[]; alreadyLinked: number }
+  | { ok: false; error: string };
+
+export async function provisionAllCollaboratorsAccessAction(): Promise<BulkProvisionResult> {
+  try {
+    const user = await requireUser();
+    const { created, alreadyLinked } = await collaboratorService.provisionAllCollaboratorsAccess(user);
+    revalidatePath("/colaboradores");
+    revalidatePath("/usuarios");
+    return { ok: true, created, alreadyLinked };
+  } catch (error) {
+    if (error instanceof ForbiddenError) return { ok: false, error: error.message };
+    if (error instanceof Error) return { ok: false, error: error.message };
+    console.error(error);
+    return { ok: false, error: "Não foi possível criar os acessos." };
+  }
+}
+
 export async function resetCollaboratorAccessPasswordAction(collaboratorId: string): Promise<CredentialsResult> {
   try {
     const user = await requireUser();

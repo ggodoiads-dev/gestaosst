@@ -7,6 +7,7 @@ import {
   isSecondRestDayConsistent,
   type ScheduleDayComputedStatus,
 } from "@/domain/schedule/schedule-calendar";
+import { getMyCollaboratorProfile } from "@/server/services/productivity.service";
 import type { CurrentUser } from "@/server/auth/current-user";
 import { requirePermission } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
@@ -291,4 +292,37 @@ export async function getScheduleGrid(user: CurrentUser, params: { month: number
   });
 
   return { rows, daysInMonth };
+}
+
+/** Escala do próprio colaborador logado num mês — mesma lógica de `getScheduleGrid`, só que
+ * pra um colaborador em vez da grade inteira. `null` se o usuário não estiver vinculado. */
+export async function getMySchedule(user: CurrentUser, params: { month: number; year: number }) {
+  requirePermission(user, PERMISSIONS.SCHEDULE_SELF_VIEW);
+  const collaborator = await getMyCollaboratorProfile(user);
+  if (!collaborator) return null;
+
+  const monthStart = new Date(params.year, params.month - 1, 1);
+  const daysInMonth = new Date(params.year, params.month, 0).getDate();
+  const nextMonthStart = new Date(params.year, params.month, 1);
+
+  const notes = await db.scheduleDayNote.findMany({
+    where: { collaboratorId: collaborator.id, date: { gte: monthStart, lt: nextMonthStart } },
+  });
+  const notesByKey = new Map(notes.map((note) => [localDateKey(note.date), note]));
+
+  const days: DayCell[] = [];
+  for (let day = 1; day <= daysInMonth; day++) {
+    const date = new Date(params.year, params.month - 1, day);
+    const note = notesByKey.get(localDateKey(date)) ?? null;
+    const computed = getCollaboratorDayStatus(date, collaborator);
+    days.push({
+      date,
+      computed: note ? note.overrideStatus : computed,
+      note: note
+        ? { id: note.id, status: note.status, notes: note.notes, overrideStatus: note.overrideStatus, attachments: [] }
+        : null,
+    });
+  }
+
+  return { collaborator, turno: collaborator.turno, days, daysInMonth };
 }

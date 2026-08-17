@@ -168,6 +168,12 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
   if (p.has(PERMISSIONS.PRODUCTIVITY_SELF_LOG)) {
     rh.push({ href: "/minha-produtividade", label: "Minha Produtividade", icon: "productivity" });
   }
+  if (p.has(PERMISSIONS.WARNING_SELF_VIEW)) {
+    rh.push({ href: "/minhas-advertencias", label: "Minhas Advertências", icon: "alert" });
+  }
+  if (p.has(PERMISSIONS.SCHEDULE_SELF_VIEW)) {
+    rh.push({ href: "/minha-escala", label: "Minha Escala", icon: "schedules" });
+  }
   if (p.has(PERMISSIONS.HR_MANAGE)) {
     rh.push({ href: "/rh/importar", label: "Importar Planilha", icon: "hrImport" });
     rh.push({ href: "/rh/ponto", label: "Importar Ponto (AFDT)", icon: "timeClock" });

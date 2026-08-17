@@ -15,9 +15,13 @@ export type ProductivityEntryInput = {
   notes?: string | null;
 };
 
-/** Colaborador vinculado ao usuário logado (via `Collaborator.userId`), se houver. */
+/** Colaborador vinculado ao usuário logado (via `Collaborator.userId`), se houver. Inclui
+ * turno/tipo de escala pra também servir a tela de "Minha Escala", sem duplicar a query. */
 export function getMyCollaboratorProfile(user: CurrentUser) {
-  return db.collaborator.findUnique({ where: { userId: user.id } });
+  return db.collaborator.findUnique({
+    where: { userId: user.id },
+    include: { turno: { include: { scheduleType: true } } },
+  });
 }
 
 /** Libera acesso a dados de produtividade de `collaboratorId` pra quem gerencia produtividade

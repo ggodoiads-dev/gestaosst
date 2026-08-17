@@ -1,25 +1,23 @@
 import { randomInt } from "node:crypto";
 
-/** Remove acentos e caracteres especiais, deixando só letras/números/ponto (sem dependência de banco). */
-function slugifyName(name: string): string {
-  return name
+/** Remove acentos e caracteres especiais, deixando só letras/números (sem dependência de banco). */
+function slugifyWord(word: string): string {
+  return word
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "") // remove marcas diacríticas combinantes (acentos) deixadas pelo NFD
     .toLowerCase()
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .join(".")
-    .replace(/[^a-z0-9.]/g, "");
+    .replace(/[^a-z0-9]/g, "");
 }
 
 /**
- * Gera um e-mail de login a partir do nome (ex: "João da Silva" -> "joao.da.silva@log20.local"),
- * resolvendo colisão anexando um número — não precisa ser um e-mail real, só um identificador
- * único de login para colaboradores que não têm e-mail corporativo.
+ * Gera um e-mail de login a partir do primeiro nome (ex: "João da Silva" -> "joao@log20.com.br"),
+ * resolvendo colisão anexando um número — não precisa ser um e-mail real (a maioria dos
+ * colaboradores não tem e-mail corporativo próprio), só um identificador único de login fácil de
+ * lembrar. Só o primeiro nome é usado de propósito — colisão é esperada e resolvida pelo sufixo.
  */
-export function generateLoginEmail(name: string, existingEmails: Set<string>, domain = "log20.local"): string {
-  const base = slugifyName(name) || "colaborador";
+export function generateLoginEmail(name: string, existingEmails: Set<string>, domain = "log20.com.br"): string {
+  const firstName = name.trim().split(/\s+/)[0] ?? "";
+  const base = slugifyWord(firstName) || "colaborador";
   let candidate = `${base}@${domain}`;
   let suffix = 2;
   while (existingEmails.has(candidate)) {
@@ -28,6 +26,12 @@ export function generateLoginEmail(name: string, existingEmails: Set<string>, do
   }
   return candidate;
 }
+
+/**
+ * Senha padrão do primeiro acesso, igual pra todo mundo — usada só no provisionamento inicial
+ * (nunca em redefinição, que sempre gera uma senha aleatória via `generatePassword`).
+ */
+export const DEFAULT_INITIAL_PASSWORD = "12345678";
 
 const PASSWORD_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789"; // sem 0/O, 1/l/I
 
