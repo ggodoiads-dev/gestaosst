@@ -40,13 +40,13 @@ export const SelectContent = React.forwardRef<
       ref={ref}
       position={position}
       className={cn(
-        "z-50 min-w-[8rem] overflow-hidden rounded-md border border-border bg-surface shadow-md",
+        "z-50 min-w-[8rem] max-h-[var(--radix-select-content-available-height)] overflow-hidden rounded-md border border-border bg-surface shadow-md",
         position === "popper" && "translate-y-1",
         className,
       )}
       {...props}
     >
-      <SelectPrimitive.Viewport className="p-1">{children}</SelectPrimitive.Viewport>
+      <SelectPrimitive.Viewport className="max-h-72 overflow-y-auto p-1">{children}</SelectPrimitive.Viewport>
     </SelectPrimitive.Content>
   </SelectPrimitive.Portal>
 ));
