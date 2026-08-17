@@ -51,8 +51,16 @@ export function QuestionField({
   }
 
   if (type === "NUMERO") {
+    // input[type=number] zera sozinho quando o texto digitado não é um número válido pro HTML
+    // (que só aceita ponto como separador decimal) — em pt-BR o usuário digita vírgula ("10,5"),
+    // o navegador rejeita e manda value="", e a resposta (visível na tela) some antes de finalizar.
     return (
-      <Input type="number" inputMode="decimal" value={value ?? ""} onChange={(e) => onChange(e.target.value)} />
+      <Input
+        type="text"
+        inputMode="decimal"
+        value={value ?? ""}
+        onChange={(e) => onChange(e.target.value.replace(",", "."))}
+      />
     );
   }
 

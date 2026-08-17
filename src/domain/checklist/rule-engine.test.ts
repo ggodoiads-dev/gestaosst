@@ -185,6 +185,26 @@ describe("evaluateChecklist", () => {
     expect(result.triggeredDeviations).toHaveLength(0);
   });
 
+  it("considera pergunta NUMERO respondida com valor decimal (ponto), sem pendência", () => {
+    const questions = [question({ id: "q1", type: "NUMERO", required: true })];
+    const answers = [{ questionId: "q1", value: "10.5", comment: null, hasPhoto: false }];
+
+    const result = evaluateChecklist(questions, answers);
+
+    expect(result.valid).toBe(true);
+    expect(result.issues).toEqual([]);
+  });
+
+  it("reporta pendência em pergunta NUMERO obrigatória quando o valor ficou vazio", () => {
+    const questions = [question({ id: "q1", type: "NUMERO", required: true })];
+    const answers = [{ questionId: "q1", value: "", comment: null, hasPhoto: false }];
+
+    const result = evaluateChecklist(questions, answers);
+
+    expect(result.valid).toBe(false);
+    expect(result.issues).toEqual([{ questionId: "q1", reason: "RESPOSTA_OBRIGATORIA" }]);
+  });
+
   it("considera apenas a regra cujo valor de disparo corresponde à resposta", () => {
     const questions = [
       question({
