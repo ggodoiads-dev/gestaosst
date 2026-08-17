@@ -1,0 +1,5 @@
+# gradlew é um script shell que roda no CI (Linux) — nunca pode ir pro
+# repositório com quebra de linha CRLF (o autocrlf do Windows converteria),
+# senão o build do .apk quebra com erro de shell.
+/android/gradlew text eol=lf
+/android/gradlew.bat text eol=crlf
