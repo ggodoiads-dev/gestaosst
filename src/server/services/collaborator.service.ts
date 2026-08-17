@@ -118,11 +118,14 @@ export async function setCollaboratorRequiresChecklist(user: CurrentUser, id: st
  * colaborador). Cobre qualquer colaborador cadastrado em RH, não só o subconjunto técnico
  * habilitado pra checklist. */
 export function listActiveCollaboratorsForSupervision(user: CurrentUser) {
-  if (!hasPermission(user, PERMISSIONS.CHECKLIST_COMPLIANCE_VIEW) && !hasPermission(user, PERMISSIONS.PRODUCTIVITY_MANAGE)) {
+  const canSeeAll =
+    hasPermission(user, PERMISSIONS.CHECKLIST_COMPLIANCE_VIEW) || hasPermission(user, PERMISSIONS.PRODUCTIVITY_MANAGE);
+  const canSeeTeam = hasPermission(user, PERMISSIONS.PRODUCTIVITY_MANAGE_TEAM);
+  if (!canSeeAll && !canSeeTeam) {
     throw new ForbiddenError();
   }
   return db.collaborator.findMany({
-    where: { active: true },
+    where: { active: true, functionId: canSeeAll ? undefined : { in: Array.from(user.functionIds) } },
     orderBy: { name: "asc" },
   });
 }

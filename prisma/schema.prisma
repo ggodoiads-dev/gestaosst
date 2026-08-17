@@ -64,7 +64,8 @@ model User {
   role Role  @relation(fields: [roleId], references: [id])
   unit Unit? @relation(fields: [unitId], references: [id])
 
-  userAreas UserArea[]
+  userAreas     UserArea[]
+  userFunctions UserFunction[]
 
   responsibleEquipments  Equipment[]            @relation("EquipmentResponsible")
   registeredEquipments   Equipment[]            @relation("EquipmentRegisteredBy")
@@ -109,6 +110,18 @@ model UserArea {
   area Area @relation(fields: [areaId], references: [id], onDelete: Cascade)
 
   @@id([userId, areaId])
+}
+
+/// Times/funções que um usuário líder gerencia — mesma ideia de `UserArea`, mas por função
+/// (ex: "líder de amarração"), não por área física do armazém.
+model UserFunction {
+  userId     String
+  functionId String
+
+  user     User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  function JobFunction @relation(fields: [functionId], references: [id], onDelete: Cascade)
+
+  @@id([userId, functionId])
 }
 
 // =========================================================================
@@ -815,6 +828,7 @@ model JobFunction {
 
   collaborators Collaborator[]
   kitItems      JobFunctionEpiKitItem[]
+  userFunctions UserFunction[]
 }
 
 model JobFunctionEpiKitItem {

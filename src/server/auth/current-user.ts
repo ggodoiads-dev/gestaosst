@@ -25,6 +25,7 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
     include: {
       role: { include: { rolePermissions: { include: { permission: true } } } },
       userAreas: true,
+      userFunctions: true,
     },
   });
 
@@ -41,6 +42,7 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
     unitId: user.unitId,
     permissions: new Set(user.role.rolePermissions.map((rp) => rp.permission.key)),
     areaIds: new Set(user.userAreas.map((ua) => ua.areaId)),
+    functionIds: new Set(user.userFunctions.map((uf) => uf.functionId)),
   };
 });
 

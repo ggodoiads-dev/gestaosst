@@ -165,7 +165,7 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
   if (sst.length > 0) groups.push({ key: "sst", title: "Segurança", items: sst });
 
   const rh: NavItem[] = [];
-  if (p.has(PERMISSIONS.PRODUCTIVITY_SELF_LOG)) {
+  if (p.has(PERMISSIONS.PRODUCTIVITY_SELF_LOG) || p.has(PERMISSIONS.PRODUCTIVITY_SELF_VIEW)) {
     rh.push({ href: "/minha-produtividade", label: "Minha Produtividade", icon: "productivity" });
   }
   if (p.has(PERMISSIONS.WARNING_SELF_VIEW)) {

@@ -24,11 +24,11 @@ import {
 } from "@/server/actions/user.actions";
 import { useCloseOnSuccess } from "@/lib/use-close-on-success";
 import { ROLE_LABELS, type RoleKeyValue } from "@/domain/shared/permissions";
-import type { Area, Role, Unit, User } from "@/generated/prisma/client";
+import type { Area, JobFunction, Role, Unit, User } from "@/generated/prisma/client";
 
 const initialState: ActionResult = { ok: true };
 
-type FormProps = { roles: Role[]; units: Unit[]; areas: Area[] };
+type FormProps = { roles: Role[]; units: Unit[]; areas: Area[]; functions: JobFunction[] };
 
 function AreaChecklist({
   areas,
@@ -54,16 +54,52 @@ function AreaChecklist({
   );
 }
 
-export function CreateUserDialog({ roles, units, areas }: FormProps) {
+/** Funções que um usuário Líder gerencia (produtividade do próprio time) — mesmo padrão de
+ * `AreaChecklist`, só que por `JobFunction` em vez de `Area`. */
+function FunctionChecklist({
+  functions,
+  selected,
+  onToggle,
+}: {
+  functions: JobFunction[];
+  selected: Set<string>;
+  onToggle: (id: string) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5 max-h-40 overflow-y-auto rounded-md border border-border p-2.5">
+      {functions.map((fn) => (
+        <label key={fn.id} className="flex items-center gap-2 text-sm text-foreground-muted">
+          <Checkbox
+            checked={selected.has(fn.id)}
+            onCheckedChange={() => onToggle(fn.id)}
+          />
+          {fn.name}
+        </label>
+      ))}
+    </div>
+  );
+}
+
+export function CreateUserDialog({ roles, units, areas, functions }: FormProps) {
   const [open, setOpen] = useState(false);
   const [state, formAction, pending] = useActionState(createUserAction, initialState);
   useCloseOnSuccess(pending, state, () => setOpen(false));
   const [roleId, setRoleId] = useState(roles[0]?.id ?? "");
   const [unitId, setUnitId] = useState(units[0]?.id ?? "");
   const [selectedAreas, setSelectedAreas] = useState<Set<string>>(new Set());
+  const [selectedFunctions, setSelectedFunctions] = useState<Set<string>>(new Set());
 
   function toggleArea(id: string) {
     setSelectedAreas((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleFunction(id: string) {
+    setSelectedFunctions((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -85,6 +121,9 @@ export function CreateUserDialog({ roles, units, areas }: FormProps) {
           <input type="hidden" name="unitId" value={unitId} />
           {[...selectedAreas].map((id) => (
             <input key={id} type="hidden" name="areaIds" value={id} />
+          ))}
+          {[...selectedFunctions].map((id) => (
+            <input key={id} type="hidden" name="functionIds" value={id} />
           ))}
           <DialogBody className="flex flex-col gap-4">
             <FormField label="Nome" htmlFor="name" required>
@@ -124,6 +163,10 @@ export function CreateUserDialog({ roles, units, areas }: FormProps) {
               <Label>Áreas com acesso</Label>
               <AreaChecklist areas={areas} selected={selectedAreas} onToggle={toggleArea} />
             </div>
+            <div className="flex flex-col gap-1.5">
+              <Label>Funções lideradas (produtividade do time)</Label>
+              <FunctionChecklist functions={functions} selected={selectedFunctions} onToggle={toggleFunction} />
+            </div>
             {!state.ok && <p className="text-sm text-danger">{state.error}</p>}
           </DialogBody>
           <DialogFooter>
@@ -138,9 +181,9 @@ export function CreateUserDialog({ roles, units, areas }: FormProps) {
   );
 }
 
-type UserWithAreas = User & { userAreas: { areaId: string }[] };
+type UserWithAreas = User & { userAreas: { areaId: string }[] } & { userFunctions: { functionId: string }[] };
 
-export function EditUserDialog({ user, roles, units, areas }: FormProps & { user: UserWithAreas }) {
+export function EditUserDialog({ user, roles, units, areas, functions }: FormProps & { user: UserWithAreas }) {
   const [open, setOpen] = useState(false);
   const [state, formAction, pending] = useActionState(updateUserAction, initialState);
   useCloseOnSuccess(pending, state, () => setOpen(false));
@@ -149,9 +192,21 @@ export function EditUserDialog({ user, roles, units, areas }: FormProps & { user
   const [selectedAreas, setSelectedAreas] = useState<Set<string>>(
     new Set(user.userAreas.map((ua) => ua.areaId)),
   );
+  const [selectedFunctions, setSelectedFunctions] = useState<Set<string>>(
+    new Set(user.userFunctions.map((uf) => uf.functionId)),
+  );
 
   function toggleArea(id: string) {
     setSelectedAreas((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleFunction(id: string) {
+    setSelectedFunctions((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -174,6 +229,9 @@ export function EditUserDialog({ user, roles, units, areas }: FormProps & { user
           <input type="hidden" name="unitId" value={unitId} />
           {[...selectedAreas].map((id) => (
             <input key={id} type="hidden" name="areaIds" value={id} />
+          ))}
+          {[...selectedFunctions].map((id) => (
+            <input key={id} type="hidden" name="functionIds" value={id} />
           ))}
           <DialogBody className="flex flex-col gap-4">
             <FormField label="Nome" htmlFor={`edit-name-${user.id}`} required>
@@ -209,6 +267,10 @@ export function EditUserDialog({ user, roles, units, areas }: FormProps & { user
             <div className="flex flex-col gap-1.5">
               <Label>Áreas com acesso</Label>
               <AreaChecklist areas={areas} selected={selectedAreas} onToggle={toggleArea} />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label>Funções lideradas (produtividade do time)</Label>
+              <FunctionChecklist functions={functions} selected={selectedFunctions} onToggle={toggleFunction} />
             </div>
             {!state.ok && <p className="text-sm text-danger">{state.error}</p>}
           </DialogBody>

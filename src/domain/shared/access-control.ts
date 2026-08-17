@@ -17,6 +17,7 @@ export type CurrentUser = {
   unitId: string | null;
   permissions: Set<string>;
   areaIds: Set<string>;
+  functionIds: Set<string>;
 };
 
 export class UnauthorizedError extends Error {

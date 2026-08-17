@@ -16,6 +16,12 @@ export function listAreas() {
   });
 }
 
+/** Referência simples pra formulários (ex: atribuir função a um líder em /usuarios) —
+ * sem gate de permissão, igual `listAreas`/`listUnits`; quem chama já está numa tela protegida. */
+export function listActiveJobFunctions() {
+  return db.jobFunction.findMany({ where: { active: true }, orderBy: { name: "asc" } });
+}
+
 export function listEquipmentTypes() {
   return db.equipmentType.findMany({ orderBy: { name: "asc" } });
 }

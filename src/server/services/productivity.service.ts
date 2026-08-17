@@ -4,8 +4,8 @@ import { db } from "@/server/db";
 import { recordAudit } from "@/server/services/audit";
 import { getCollaboratorDayStatus } from "@/domain/schedule/schedule-calendar";
 import type { CurrentUser } from "@/server/auth/current-user";
-import { requirePermission, ForbiddenError } from "@/server/auth/current-user";
-import { PERMISSIONS } from "@/domain/shared/permissions";
+import { hasPermission, ForbiddenError } from "@/server/auth/current-user";
+import { PERMISSIONS, type PermissionKey } from "@/domain/shared/permissions";
 
 export type ProductivityEntryInput = {
   collaboratorId: string;
@@ -25,19 +25,40 @@ export function getMyCollaboratorProfile(user: CurrentUser) {
 }
 
 /** Libera acesso a dados de produtividade de `collaboratorId` pra quem gerencia produtividade
- * de qualquer colaborador (`PRODUCTIVITY_MANAGE`) OU pro próprio colaborador logado lançando a
- * própria produção (`PRODUCTIVITY_SELF_LOG`, só quando o registro é o dele mesmo). */
-async function assertProductivityAccess(user: CurrentUser, collaboratorId: string) {
+ * de qualquer colaborador (`PRODUCTIVITY_MANAGE`), pra um líder gerenciando só as funções que
+ * lidera (`PRODUCTIVITY_MANAGE_TEAM`, via `UserFunction`), ou pro próprio colaborador — quais
+ * permissões contam como "acesso próprio" variam por caso de uso: ver (`PRODUCTIVITY_SELF_VIEW`
+ * ou `PRODUCTIVITY_SELF_LOG`) é mais permissivo que lançar/apagar (só `PRODUCTIVITY_SELF_LOG`). */
+async function assertProductivityAccess(
+  user: CurrentUser,
+  collaboratorId: string,
+  selfPermissions: PermissionKey[],
+) {
   if (user.permissions.has(PERMISSIONS.PRODUCTIVITY_MANAGE)) return;
-  if (user.permissions.has(PERMISSIONS.PRODUCTIVITY_SELF_LOG)) {
+  if (user.permissions.has(PERMISSIONS.PRODUCTIVITY_MANAGE_TEAM)) {
+    const target = await db.collaborator.findUnique({ where: { id: collaboratorId }, select: { functionId: true } });
+    if (target?.functionId && user.functionIds.has(target.functionId)) return;
+  }
+  if (selfPermissions.some((p) => user.permissions.has(p))) {
     const own = await getMyCollaboratorProfile(user);
     if (own?.id === collaboratorId) return;
   }
   throw new ForbiddenError();
 }
 
+const VIEW_SELF_PERMISSIONS = [PERMISSIONS.PRODUCTIVITY_SELF_LOG, PERMISSIONS.PRODUCTIVITY_SELF_VIEW];
+const LOG_SELF_PERMISSIONS = [PERMISSIONS.PRODUCTIVITY_SELF_LOG];
+
+/** Mesmo critério de `areaScope` em `indicators.service.ts`/`time-clock.service.ts`, mas por
+ * função: quem tem `PRODUCTIVITY_MANAGE` vê todo mundo (sem filtro); quem só tem
+ * `PRODUCTIVITY_MANAGE_TEAM` fica restrito às funções que lidera. */
+function productivityFunctionFilter(user: CurrentUser): { in: string[] } | undefined {
+  if (user.permissions.has(PERMISSIONS.PRODUCTIVITY_MANAGE)) return undefined;
+  return { in: Array.from(user.functionIds) };
+}
+
 export async function createProductivityEntry(user: CurrentUser, data: ProductivityEntryInput) {
-  await assertProductivityAccess(user, data.collaboratorId);
+  await assertProductivityAccess(user, data.collaboratorId, LOG_SELF_PERMISSIONS);
 
   const entry = await db.$transaction(async (tx) => {
     const created = await tx.productivityEntry.create({ data: { ...data, createdById: user.id } });
@@ -53,7 +74,7 @@ export async function createProductivityEntry(user: CurrentUser, data: Productiv
 
 export async function deleteProductivityEntry(user: CurrentUser, id: string) {
   const entry = await db.productivityEntry.findUniqueOrThrow({ where: { id }, select: { collaboratorId: true } });
-  await assertProductivityAccess(user, entry.collaboratorId);
+  await assertProductivityAccess(user, entry.collaboratorId, LOG_SELF_PERMISSIONS);
   await db.productivityEntry.delete({ where: { id } });
 }
 
@@ -113,7 +134,7 @@ export async function getProductivityRange(
   user: CurrentUser,
   params: { collaboratorId: string; from: Date; to: Date },
 ) {
-  await assertProductivityAccess(user, params.collaboratorId);
+  await assertProductivityAccess(user, params.collaboratorId, VIEW_SELF_PERMISSIONS);
   const { collaborator, days } = await buildCollaboratorDays(params.collaboratorId, params.from, params.to);
 
   const workDays = days.filter((d) => d.status === "TRABALHO");
@@ -140,18 +161,26 @@ type PeriodStats = {
   missingCollaborators: { id: string; name: string }[];
 };
 
-async function computePeriodStats(from: Date, toInclusive: Date): Promise<PeriodStats> {
+async function computePeriodStats(
+  from: Date,
+  toInclusive: Date,
+  functionFilter?: { in: string[] },
+): Promise<PeriodStats> {
   const rangeStart = startOfDay(from);
   const rangeEndExclusive = addDays(startOfDay(toInclusive), 1);
 
-  const [collaborators, notes, entries] = await Promise.all([
-    db.collaborator.findMany({
-      where: { active: true },
-      include: { turno: { include: { scheduleType: true } } },
+  const collaborators = await db.collaborator.findMany({
+    where: { active: true, functionId: functionFilter },
+    include: { turno: { include: { scheduleType: true } } },
+  });
+  const collaboratorIds = collaborators.map((c) => c.id);
+
+  const [notes, entries] = await Promise.all([
+    db.scheduleDayNote.findMany({
+      where: { collaboratorId: { in: collaboratorIds }, date: { gte: rangeStart, lt: rangeEndExclusive } },
     }),
-    db.scheduleDayNote.findMany({ where: { date: { gte: rangeStart, lt: rangeEndExclusive } } }),
     db.productivityEntry.findMany({
-      where: { date: { gte: rangeStart, lt: rangeEndExclusive } },
+      where: { collaboratorId: { in: collaboratorIds }, date: { gte: rangeStart, lt: rangeEndExclusive } },
       include: { activity: true },
     }),
   ]);
@@ -203,15 +232,18 @@ async function computePeriodStats(from: Date, toInclusive: Date): Promise<Period
  * quantos estavam escalados pra trabalhar, quantos lançaram alguma produção, e o total por
  * atividade. Base dos cartões e da tabela no topo da tela de Produtividade. */
 export async function getProductivityDashboard(user: CurrentUser, params: { date?: Date } = {}) {
-  requirePermission(user, PERMISSIONS.PRODUCTIVITY_MANAGE);
+  if (!hasPermission(user, PERMISSIONS.PRODUCTIVITY_MANAGE) && !hasPermission(user, PERMISSIONS.PRODUCTIVITY_MANAGE_TEAM)) {
+    throw new ForbiddenError();
+  }
+  const functionFilter = productivityFunctionFilter(user);
   const date = params.date ?? new Date();
   const dayStart = startOfDay(date);
   const monthStart = startOfMonth(date);
   const monthEndInclusive = addDays(startOfMonth(addMonths(date, 1)), -1);
 
   const [today, month] = await Promise.all([
-    computePeriodStats(dayStart, dayStart),
-    computePeriodStats(monthStart, monthEndInclusive),
+    computePeriodStats(dayStart, dayStart, functionFilter),
+    computePeriodStats(monthStart, monthEndInclusive, functionFilter),
   ]);
 
   return { date: dayStart, today, month };
@@ -231,7 +263,7 @@ export type ProductivityGoalInput = {
 
 /** Cria ou atualiza a meta do colaborador pra aquela atividade naquele mês (uma por combinação). */
 export async function upsertProductivityGoal(user: CurrentUser, data: ProductivityGoalInput) {
-  requirePermission(user, PERMISSIONS.PRODUCTIVITY_MANAGE);
+  await assertProductivityAccess(user, data.collaboratorId, []);
 
   const goal = await db.$transaction(async (tx) => {
     const upserted = await tx.productivityGoal.upsert({
@@ -257,7 +289,8 @@ export async function upsertProductivityGoal(user: CurrentUser, data: Productivi
 }
 
 export async function deleteProductivityGoal(user: CurrentUser, id: string) {
-  requirePermission(user, PERMISSIONS.PRODUCTIVITY_MANAGE);
+  const goal = await db.productivityGoal.findUniqueOrThrow({ where: { id }, select: { collaboratorId: true } });
+  await assertProductivityAccess(user, goal.collaboratorId, []);
   await db.productivityGoal.delete({ where: { id } });
 }
 
@@ -280,7 +313,7 @@ export async function getProductivityGoalsProgress(
   user: CurrentUser,
   params: { collaboratorId: string; month: number; year: number },
 ) {
-  await assertProductivityAccess(user, params.collaboratorId);
+  await assertProductivityAccess(user, params.collaboratorId, VIEW_SELF_PERMISSIONS);
 
   const [goals, achievedByKey] = await Promise.all([
     db.productivityGoal.findMany({
@@ -304,11 +337,18 @@ export async function getProductivityGoalsProgress(
 /** Metas do mês de todos os colaboradores, com progresso — base da tabela "Metas do mês" no
  * topo da tela de Produtividade (visão consolidada, sem precisar escolher um colaborador). */
 export async function getAllProductivityGoalsProgress(user: CurrentUser, params: { month: number; year: number }) {
-  requirePermission(user, PERMISSIONS.PRODUCTIVITY_MANAGE);
+  if (!hasPermission(user, PERMISSIONS.PRODUCTIVITY_MANAGE) && !hasPermission(user, PERMISSIONS.PRODUCTIVITY_MANAGE_TEAM)) {
+    throw new ForbiddenError();
+  }
+  const functionFilter = productivityFunctionFilter(user);
 
   const [goals, achievedByKey] = await Promise.all([
     db.productivityGoal.findMany({
-      where: { month: params.month, year: params.year },
+      where: {
+        month: params.month,
+        year: params.year,
+        collaborator: functionFilter ? { functionId: functionFilter } : undefined,
+      },
       include: { activity: true, collaborator: true },
       orderBy: [{ collaborator: { name: "asc" } }, { activity: { name: "asc" } }],
     }),

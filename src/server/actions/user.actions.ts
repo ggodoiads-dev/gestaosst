@@ -28,6 +28,10 @@ function parseAreaIds(formData: FormData) {
   return formData.getAll("areaIds").map(String).filter(Boolean);
 }
 
+function parseFunctionIds(formData: FormData) {
+  return formData.getAll("functionIds").map(String).filter(Boolean);
+}
+
 const createUserSchema = z.object({
   name: z.string().trim().min(2, "Informe o nome do usuário."),
   email: z.string().trim().email("Informe um e-mail válido."),
@@ -46,7 +50,7 @@ export async function createUserAction(_prev: ActionResult, formData: FormData) 
       roleId: formData.get("roleId"),
       unitId: formData.get("unitId") || null,
     });
-    await userService.createUser(admin, { ...data, areaIds: parseAreaIds(formData) });
+    await userService.createUser(admin, { ...data, areaIds: parseAreaIds(formData), functionIds: parseFunctionIds(formData) });
     revalidatePath("/usuarios");
   });
 }
@@ -71,6 +75,7 @@ export async function updateUserAction(_prev: ActionResult, formData: FormData) 
     await userService.updateUser(admin, id, {
       ...data,
       areaIds: parseAreaIds(formData),
+      functionIds: parseFunctionIds(formData),
     });
     revalidatePath("/usuarios");
   });

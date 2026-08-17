@@ -8,7 +8,12 @@ import { PERMISSIONS } from "@/domain/shared/permissions";
 
 export function listUsers() {
   return db.user.findMany({
-    include: { role: true, unit: true, userAreas: { include: { area: true } } },
+    include: {
+      role: true,
+      unit: true,
+      userAreas: { include: { area: true } },
+      userFunctions: { include: { function: true } },
+    },
     orderBy: { name: "asc" },
   });
 }
@@ -32,6 +37,7 @@ export type CreateUserInput = {
   roleId: string;
   unitId?: string | null;
   areaIds: string[];
+  functionIds?: string[];
 };
 
 /**
@@ -56,6 +62,11 @@ export async function createUserRecord(actorId: string, data: CreateUserInput) {
     if (data.areaIds.length > 0) {
       await tx.userArea.createMany({
         data: data.areaIds.map((areaId) => ({ userId: created.id, areaId })),
+      });
+    }
+    if (data.functionIds && data.functionIds.length > 0) {
+      await tx.userFunction.createMany({
+        data: data.functionIds.map((functionId) => ({ userId: created.id, functionId })),
       });
     }
     return created;
@@ -83,6 +94,7 @@ export type UpdateUserInput = {
   roleId: string;
   unitId?: string | null;
   areaIds: string[];
+  functionIds?: string[];
 };
 
 export async function setUserActive(admin: CurrentUser, id: string, active: boolean) {
@@ -120,6 +132,10 @@ export async function updateUser(admin: CurrentUser, id: string, data: UpdateUse
     await tx.userArea.deleteMany({ where: { userId: id } });
     if (data.areaIds.length > 0) {
       await tx.userArea.createMany({ data: data.areaIds.map((areaId) => ({ userId: id, areaId })) });
+    }
+    await tx.userFunction.deleteMany({ where: { userId: id } });
+    if (data.functionIds && data.functionIds.length > 0) {
+      await tx.userFunction.createMany({ data: data.functionIds.map((functionId) => ({ userId: id, functionId })) });
     }
     return updated;
   });

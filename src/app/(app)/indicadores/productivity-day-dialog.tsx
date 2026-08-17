@@ -42,6 +42,7 @@ export function ProductivityDayDialog({
   date,
   entries,
   activities,
+  canEdit = true,
   onClose,
 }: {
   collaboratorId: string;
@@ -49,6 +50,7 @@ export function ProductivityDayDialog({
   date: string;
   entries: EntryData[];
   activities: Activity[];
+  canEdit?: boolean;
   onClose: () => void;
 }) {
   const [state, formAction, pending] = useActionState(createProductivityEntryAction, initialState);
@@ -90,21 +92,27 @@ export function ProductivityDayDialog({
                     </p>
                     {entry.notes && <p className="text-xs text-foreground-subtle truncate">{entry.notes}</p>}
                   </div>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={() => handleDelete(entry.id)}
-                    loading={isDeleting && deletingId === entry.id}
-                    aria-label="Remover lançamento"
-                  >
-                    <Trash2 className="size-4 text-danger" />
-                  </Button>
+                  {canEdit && (
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => handleDelete(entry.id)}
+                      loading={isDeleting && deletingId === entry.id}
+                      aria-label="Remover lançamento"
+                    >
+                      <Trash2 className="size-4 text-danger" />
+                    </Button>
+                  )}
                 </div>
               ))}
             </div>
           )}
 
-          {activities.length === 0 ? (
+          {!canEdit ? (
+            entries.length === 0 && (
+              <p className="text-sm text-foreground-subtle">Nenhum lançamento neste dia.</p>
+            )
+          ) : activities.length === 0 ? (
             <p className="text-sm text-foreground-subtle">
               Nenhuma atividade cadastrada ainda. Cadastre em Atividades e Documentos.
             </p>

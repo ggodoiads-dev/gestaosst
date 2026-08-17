@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { addDays, addMonths, addWeeks, endOfMonth, endOfWeek, startOfMonth, startOfWeek } from "date-fns";
-import { requireUser } from "@/server/auth/current-user";
+import { requireUser, hasPermission } from "@/server/auth/current-user";
+import { PERMISSIONS } from "@/domain/shared/permissions";
 import {
   getMyCollaboratorProfile,
   getProductivityRange,
@@ -90,8 +91,10 @@ export default async function MinhaProdutividadePage({
     );
   }
 
+  const canLog = hasPermission(user, PERMISSIONS.PRODUCTIVITY_SELF_LOG);
+
   const [activities, rangeReport, goals] = await Promise.all([
-    listActiveActivitiesForSelfLog(user),
+    canLog ? listActiveActivitiesForSelfLog(user) : Promise.resolve([]),
     getProductivityRange(user, { collaboratorId: collaborator.id, from: rangeFrom, to: rangeTo }),
     getProductivityGoalsProgress(user, { collaboratorId: collaborator.id, month: refDate.getMonth() + 1, year: refDate.getFullYear() }),
   ]);
@@ -171,6 +174,7 @@ export default async function MinhaProdutividadePage({
           collaboratorId={collaborator.id}
           collaboratorName={collaborator.name}
           activities={activities}
+          canEdit={canLog}
           layout={period === "mes" ? "grid" : "list"}
           days={rangeReport.days.map((d) => ({
             date: localDateKey(d.date),

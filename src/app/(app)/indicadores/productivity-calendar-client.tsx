@@ -28,12 +28,14 @@ export function ProductivityCalendarClient({
   days,
   activities,
   layout = "grid",
+  canEdit = true,
 }: {
   collaboratorId: string;
   collaboratorName: string;
   days: DayData[];
   activities: Activity[];
   layout?: "grid" | "list";
+  canEdit?: boolean;
 }) {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const selectedDay = days.find((d) => d.date === selectedDate) ?? null;
@@ -124,6 +126,7 @@ export function ProductivityCalendarClient({
           date={selectedDay.date}
           entries={selectedDay.entries}
           activities={activities}
+          canEdit={canEdit}
           onClose={() => setSelectedDate(null)}
         />
       )}
