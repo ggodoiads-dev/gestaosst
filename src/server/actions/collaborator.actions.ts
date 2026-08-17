@@ -3,7 +3,9 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { requireUser, ForbiddenError } from "@/server/auth/current-user";
+import type { CurrentUser } from "@/server/auth/current-user";
 import * as collaboratorService from "@/server/services/collaborator.service";
+import { savePhotoUpload } from "@/server/services/storage";
 import { parseDateOnly } from "@/lib/dates";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
@@ -65,11 +67,25 @@ function parseCollaboratorForm(formData: FormData) {
   };
 }
 
+/** Foto é opcional: se o envio falhar, o cadastro/edição do colaborador não é desfeito por causa disso. */
+async function maybeAttachPhoto(user: CurrentUser, collaboratorId: string, formData: FormData) {
+  const photo = formData.get("photo");
+  if (!(photo instanceof File) || photo.size === 0) return;
+
+  try {
+    const saved = await savePhotoUpload(photo);
+    await collaboratorService.attachCollaboratorPhoto(user, collaboratorId, saved);
+  } catch (error) {
+    console.error("Falha ao anexar foto do colaborador:", error);
+  }
+}
+
 export async function createCollaboratorAction(_prev: ActionResult, formData: FormData) {
   return toResult(async () => {
     const user = await requireUser();
     const data = parseCollaboratorForm(formData);
-    await collaboratorService.createCollaborator(user, data);
+    const created = await collaboratorService.createCollaborator(user, data);
+    await maybeAttachPhoto(user, created.id, formData);
     revalidatePath("/colaboradores");
   });
 }
@@ -80,6 +96,7 @@ export async function updateCollaboratorAction(_prev: ActionResult, formData: Fo
     const id = String(formData.get("id"));
     const data = parseCollaboratorForm(formData);
     await collaboratorService.updateCollaborator(user, id, data);
+    await maybeAttachPhoto(user, id, formData);
     revalidatePath("/colaboradores");
     revalidatePath(`/colaboradores/${id}`);
   });

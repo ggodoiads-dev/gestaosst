@@ -203,6 +203,35 @@ export async function getCollaboratorProntuario(user: CurrentUser, id: string) {
   return { collaborator, involvements, qualifications, history };
 }
 
+export function getCollaboratorPhoto(collaboratorId: string) {
+  return db.attachment.findFirst({
+    where: { collaboratorId, context: "COLABORADOR" },
+    orderBy: { uploadedAt: "desc" },
+  });
+}
+
+/** Anexa/substitui a foto de perfil do colaborador (mesmo padrão da foto de equipamento). */
+export async function attachCollaboratorPhoto(
+  user: CurrentUser,
+  collaboratorId: string,
+  file: { filename: string; path: string; mimeType: string; size: number },
+) {
+  requirePermission(user, PERMISSIONS.COLLABORATOR_MANAGE);
+  await db.collaborator.findUniqueOrThrow({ where: { id: collaboratorId } });
+
+  return db.attachment.create({
+    data: {
+      filename: file.filename,
+      path: file.path,
+      mimeType: file.mimeType,
+      size: file.size,
+      context: "COLABORADOR",
+      collaboratorId,
+      uploadedById: user.id,
+    },
+  });
+}
+
 export async function createCollaborator(user: CurrentUser, data: CollaboratorInput) {
   requirePermission(user, PERMISSIONS.COLLABORATOR_MANAGE);
 

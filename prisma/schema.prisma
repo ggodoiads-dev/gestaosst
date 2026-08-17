@@ -497,6 +497,7 @@ enum AttachmentContext {
   QUALIFICACAO
   ACIDENTE
   ESCALA
+  COLABORADOR
 }
 
 enum AttachmentDocType {
@@ -521,6 +522,7 @@ model Attachment {
   qualificationRecordId String?
   accidentId            String?
   scheduleDayNoteId     String?
+  collaboratorId        String?
   uploadedById          String
   uploadedAt            DateTime           @default(now())
 
@@ -532,6 +534,7 @@ model Attachment {
   qualificationRecord QualificationRecord? @relation(fields: [qualificationRecordId], references: [id])
   accident            Accident?            @relation(fields: [accidentId], references: [id])
   scheduleDayNote     ScheduleDayNote?     @relation(fields: [scheduleDayNoteId], references: [id])
+  collaborator        Collaborator?        @relation(fields: [collaboratorId], references: [id])
   uploadedBy          User                 @relation(fields: [uploadedById], references: [id])
 
   aiFinding AiInspectionFinding?
@@ -542,6 +545,7 @@ model Attachment {
   @@index([qualificationRecordId])
   @@index([scheduleDayNoteId])
   @@index([accidentId])
+  @@index([collaboratorId])
 }
 
 /// Achado de visão computacional sobre uma foto de resposta crítica de checklist —
@@ -793,6 +797,7 @@ model Collaborator {
   checklistJustifications ChecklistJustification[]
   activityAptitudes       CollaboratorActivity[]
   warnings                Warning[]
+  attachments             Attachment[]
 
   @@index([areaId])
   @@index([functionId])

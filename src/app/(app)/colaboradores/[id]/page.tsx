@@ -3,7 +3,8 @@ import { headers } from "next/headers";
 import { AlertTriangle, AlertOctagon, GraduationCap, HardHat, Printer, ClipboardList, QrCode } from "lucide-react";
 import { requireUser, hasPermission } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
-import { getCollaboratorProntuario } from "@/server/services/collaborator.service";
+import { getCollaboratorProntuario, getCollaboratorPhoto } from "@/server/services/collaborator.service";
+import { attachmentUrl } from "@/lib/attachment-url";
 import { listAreas } from "@/server/services/masterdata.service";
 import { listTurnos } from "@/server/services/schedule.service";
 import { getShiftCheckInStatusFor } from "@/server/services/shift-checkin.service";
@@ -19,10 +20,11 @@ import { listWarningsForCollaborator } from "@/server/services/warning.service";
 import { PageHeader, PageBody } from "@/components/domain/page-header";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, TableEmpty } from "@/components/ui/table";
-import { Badge, type BadgeTone } from "@/components/ui/badge";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/dates";
 import { formatCurrency } from "@/lib/format";
+import { qualificationStatus } from "@/lib/qualification-status";
 import { EditCollaboratorDialog } from "../collaborator-form-dialog";
 import { DeleteCollaboratorButton } from "../collaborator-delete-button";
 import { CollaboratorAccessPanel } from "../collaborator-access-panel";
@@ -34,14 +36,6 @@ import { MarkEpiReturnedButton } from "./mark-epi-returned-button";
 import { ActivityAptitudeDialog } from "./activity-aptitude-dialog";
 import { CreateQualificationRecordDialog } from "@/app/(app)/qualificacoes/qualification-record-dialog";
 import { CreateWarningDialog, DeleteWarningButton } from "./warning-dialog";
-
-function qualificationStatus(expiresAt: Date | null): { label: string; tone: BadgeTone } {
-  if (!expiresAt) return { label: "Sem vencimento", tone: "success" };
-  const daysLeft = Math.ceil((expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-  if (daysLeft < 0) return { label: `Vencida em ${formatDate(expiresAt)}`, tone: "danger" };
-  if (daysLeft <= 30) return { label: `Vence em ${formatDate(expiresAt)}`, tone: "warning" };
-  return { label: `Válida até ${formatDate(expiresAt)}`, tone: "success" };
-}
 
 const EPI_REASON_LABELS: Record<string, string> = {
   PRIMEIRA_ENTREGA: "1 — Primeira entrega",
@@ -73,6 +67,7 @@ export default async function ColaboradorDetailPage({
     activityAptitudes,
     qualificationTypes,
     warnings,
+    photo,
   ] = await Promise.all([
     getCollaboratorProntuario(user, id),
     listAreas(),
@@ -84,7 +79,9 @@ export default async function ColaboradorDetailPage({
     canManage ? listActivityAptitudesForCollaborator(user, id) : Promise.resolve([]),
     canManageQualifications ? listQualificationTypes(user, { onlyActive: true }) : Promise.resolve([]),
     canSeeHr ? listWarningsForCollaborator(user, id) : Promise.resolve([]),
+    getCollaboratorPhoto(id),
   ]);
+  const photoUrl = photo ? attachmentUrl(photo.path) : null;
 
   const headerList = await headers();
   const host = headerList.get("x-forwarded-host") ?? headerList.get("host") ?? "localhost:3000";
@@ -119,7 +116,13 @@ export default async function ColaboradorDetailPage({
           <div className="flex items-center gap-2">
             {collaborator.active ? <Badge tone="success">Ativo</Badge> : <Badge tone="neutral">Excluído</Badge>}
             {canManage && (
-              <EditCollaboratorDialog collaborator={collaborator} areas={areas} turnos={turnos} jobFunctions={jobFunctions} />
+              <EditCollaboratorDialog
+                collaborator={collaborator}
+                areas={areas}
+                turnos={turnos}
+                jobFunctions={jobFunctions}
+                photoUrl={photoUrl}
+              />
             )}
             {canManage && collaborator.active && (
               <DeleteCollaboratorButton id={collaborator.id} name={collaborator.name} />
@@ -134,6 +137,16 @@ export default async function ColaboradorDetailPage({
               <CardTitle>Dados</CardTitle>
             </CardHeader>
             <CardContent className="grid grid-cols-1 gap-4 text-sm">
+              {photoUrl && (
+                <a href={photoUrl} target="_blank" rel="noopener noreferrer" className="block w-fit">
+                  {/* eslint-disable-next-line @next/next/no-img-element -- servido pela rota autenticada /api/uploads */}
+                  <img
+                    src={photoUrl}
+                    alt={`Foto de ${collaborator.name}`}
+                    className="size-20 rounded-full border border-border object-cover hover:opacity-90 transition-opacity"
+                  />
+                </a>
+              )}
               <div>
                 <p className="text-xs text-foreground-subtle">Matrícula</p>
                 <p>{collaborator.matricula ?? "—"}</p>

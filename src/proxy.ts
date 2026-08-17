@@ -5,9 +5,16 @@ import { db } from "@/server/db";
 const SESSION_COOKIE = "app_session";
 const PUBLIC_PATHS = ["/login"];
 
+/**
+ * `/q/[token]` é o resolvedor de QR Code impresso em equipamentos e na ficha do colaborador —
+ * precisa ser lido por qualquer pessoa que escaneie (visitante, prestador, fiscal), sem exigir
+ * login. A própria página decide o que mostrar: quem já está autenticado é redirecionado pro
+ * prontuário completo; quem não está vê uma ficha pública com informações limitadas.
+ */
 function isPublicPath(pathname: string) {
   return (
     PUBLIC_PATHS.includes(pathname) ||
+    pathname.startsWith("/q/") ||
     pathname.startsWith("/_next") ||
     pathname === "/favicon.ico"
   );

@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { Plus, Pencil } from "lucide-react";
+import { Plus, Pencil, Camera } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FormField, Label } from "@/components/ui/label";
@@ -44,7 +44,37 @@ type CollaboratorDefaults = {
   turnoId?: string | null;
   phone?: string | null;
   checklistEnabled?: boolean;
+  photoUrl?: string | null;
 };
+
+function PhotoField({ idPrefix, currentPhotoUrl }: { idPrefix: string; currentPhotoUrl?: string | null }) {
+  const [preview, setPreview] = useState<string | null>(currentPhotoUrl ?? null);
+
+  return (
+    <FormField label="Foto do colaborador" htmlFor={`${idPrefix}-photo`} hint="Opcional — JPEG, PNG ou WEBP, até 8MB">
+      <div className="flex items-center gap-3">
+        <div className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-full border border-dashed border-border-strong bg-surface-muted">
+          {preview ? (
+            // eslint-disable-next-line @next/next/no-img-element -- pré-visualização local (blob:) ou foto já salva
+            <img src={preview} alt="Prévia da foto" className="size-full object-cover" />
+          ) : (
+            <Camera className="size-5 text-foreground-subtle" />
+          )}
+        </div>
+        <Input
+          id={`${idPrefix}-photo`}
+          name="photo"
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/heic"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) setPreview(URL.createObjectURL(file));
+          }}
+        />
+      </div>
+    </FormField>
+  );
+}
 
 function toDateInputValue(date?: Date | null) {
   if (!date) return "";
@@ -73,6 +103,8 @@ function CollaboratorFields({
       <input type="hidden" name="turnoId" value={turnoId === "none" ? "" : turnoId} />
       <input type="hidden" name="functionId" value={functionId === "none" ? "" : functionId} />
       <input type="hidden" name="checklistEnabled" value={checklistEnabled ? "on" : ""} />
+
+      <PhotoField idPrefix={idPrefix} currentPhotoUrl={defaults?.photoUrl} />
 
       <FormField label="Nome" htmlFor={`${idPrefix}-name`} required>
         <Input id={`${idPrefix}-name`} name="name" required placeholder="Nome completo" defaultValue={defaults?.name ?? ""} />
@@ -197,8 +229,9 @@ export function CreateCollaboratorDialog(props: FormProps) {
 
 export function EditCollaboratorDialog({
   collaborator,
+  photoUrl,
   ...props
-}: FormProps & { collaborator: Collaborator }) {
+}: FormProps & { collaborator: Collaborator; photoUrl?: string | null }) {
   const [open, setOpen] = useState(false);
   const [state, formAction, pending] = useActionState(updateCollaboratorAction, initialState);
   useCloseOnSuccess(pending, state, () => setOpen(false));
@@ -230,6 +263,7 @@ export function EditCollaboratorDialog({
                 turnoId: collaborator.turnoId,
                 phone: collaborator.phone,
                 checklistEnabled: collaborator.checklistEnabled,
+                photoUrl,
               }}
             />
             {!state.ok && <p className="text-sm text-danger">{state.error}</p>}
