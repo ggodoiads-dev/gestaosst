@@ -20,9 +20,7 @@ export default function LoginPage() {
 
       <div className="relative w-full max-w-sm">
         <div className="mb-7 flex flex-col items-center gap-2.5 text-center">
-          <div className="rounded-md bg-white px-4 py-2.5">
-            <Image src="/sigo-logo.png" alt="SIGO" width={196} height={64} priority />
-          </div>
+          <Image src="/sigo-logo.png" alt="SIGO" width={196} height={64} priority />
           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/55">
             Sistema Interno de Gestão Organizacional
           </p>

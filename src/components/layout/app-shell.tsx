@@ -156,7 +156,7 @@ export function AppShell({
         )}
       >
         <div className="flex items-center justify-between h-16 px-4 border-b border-white/10">
-          <Link href="/inicio" className="flex items-center rounded-md bg-white px-2.5 py-1.5">
+          <Link href="/inicio" className="flex items-center px-2.5 py-1.5">
             <Image src="/sigo-logo.png" alt="SIGO" width={112} height={36} priority />
           </Link>
           <button

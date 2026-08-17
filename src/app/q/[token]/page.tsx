@@ -78,9 +78,7 @@ function PublicPageShell({ children }: { children: React.ReactNode }) {
       />
       <div className="relative w-full max-w-sm">
         <div className="mb-6 flex justify-center">
-          <div className="rounded-md bg-white px-4 py-2.5">
-            <Image src="/sigo-logo.png" alt="SIGO" width={140} height={46} priority />
-          </div>
+          <Image src="/sigo-logo.png" alt="SIGO" width={140} height={46} priority />
         </div>
         <div className="rounded-lg border border-border bg-surface p-6 shadow-xl">{children}</div>
         <p className="mt-6 text-center text-xs text-white/45">Consulta pública — informações limitadas.</p>
