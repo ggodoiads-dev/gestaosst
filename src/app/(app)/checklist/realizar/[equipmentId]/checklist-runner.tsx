@@ -15,6 +15,7 @@ import {
   finalizeExecutionAction,
 } from "@/server/actions/checklist-execution.actions";
 import { NOT_APPLICABLE_VALUE } from "@/domain/checklist/answer-values";
+import { compressImage } from "@/lib/compress-image";
 import { useRico } from "@/components/rico/rico-context";
 import type { QuestionType, Criticality } from "@/generated/prisma/enums";
 
@@ -124,8 +125,9 @@ export function ChecklistRunner({
 
   async function handlePhotoSelected(file: File) {
     setSavingPhoto(true);
+    const compressed = await compressImage(file);
     const formData = new FormData();
-    formData.append("file", file);
+    formData.append("file", compressed);
     const result = await uploadAnswerPhotoAction(executionId, question.id, question.title, formData);
     setSavingPhoto(false);
     if (!result.ok) {
