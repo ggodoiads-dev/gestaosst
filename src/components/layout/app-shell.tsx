@@ -37,6 +37,7 @@ import {
   Wallet,
   Upload,
   Clock,
+  ShoppingBasket,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -84,6 +85,7 @@ const ICONS: Record<NavIconKey, LucideIcon> = {
   hr: Wallet,
   hrImport: Upload,
   timeClock: Clock,
+  benefits: ShoppingBasket,
 };
 
 /**

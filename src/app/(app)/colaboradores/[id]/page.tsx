@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { headers } from "next/headers";
-import { AlertTriangle, GraduationCap, HardHat, Printer, ClipboardList, QrCode } from "lucide-react";
+import { AlertTriangle, AlertOctagon, GraduationCap, HardHat, Printer, ClipboardList, QrCode } from "lucide-react";
 import { requireUser, hasPermission } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
 import { getCollaboratorProntuario } from "@/server/services/collaborator.service";
@@ -15,6 +15,7 @@ import {
 import { generateEpiDeliveryQrCode, generateCollaboratorQrCode } from "@/server/services/qrcode.service";
 import { listActivityAptitudesForCollaborator } from "@/server/services/activity.service";
 import { listQualificationTypes } from "@/server/services/qualification.service";
+import { listWarningsForCollaborator } from "@/server/services/warning.service";
 import { PageHeader, PageBody } from "@/components/domain/page-header";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, TableEmpty } from "@/components/ui/table";
@@ -32,6 +33,7 @@ import { RegisterEpiDeliveryDialog } from "./register-epi-delivery-dialog";
 import { MarkEpiReturnedButton } from "./mark-epi-returned-button";
 import { ActivityAptitudeDialog } from "./activity-aptitude-dialog";
 import { CreateQualificationRecordDialog } from "@/app/(app)/qualificacoes/qualification-record-dialog";
+import { CreateWarningDialog, DeleteWarningButton } from "./warning-dialog";
 
 function qualificationStatus(expiresAt: Date | null): { label: string; tone: BadgeTone } {
   if (!expiresAt) return { label: "Sem vencimento", tone: "success" };
@@ -70,6 +72,7 @@ export default async function ColaboradorDetailPage({
     shiftCheckIn,
     activityAptitudes,
     qualificationTypes,
+    warnings,
   ] = await Promise.all([
     getCollaboratorProntuario(user, id),
     listAreas(),
@@ -80,6 +83,7 @@ export default async function ColaboradorDetailPage({
     canManageCheckIn ? getShiftCheckInStatusFor(user, id) : Promise.resolve(null),
     canManage ? listActivityAptitudesForCollaborator(user, id) : Promise.resolve([]),
     canManageQualifications ? listQualificationTypes(user, { onlyActive: true }) : Promise.resolve([]),
+    canSeeHr ? listWarningsForCollaborator(user, id) : Promise.resolve([]),
   ]);
 
   const headerList = await headers();
@@ -196,6 +200,31 @@ export default async function ColaboradorDetailPage({
                   />
                   <span>Precisa de checklist (cobrado no relatório de ponto)</span>
                 </label>
+              </CardContent>
+            </Card>
+          )}
+
+          {canSeeHr && (
+            <Card>
+              <CardHeader>
+                <CardTitle>
+                  <span className="flex items-center gap-2"><AlertOctagon className="size-4" /> Advertências ({warnings.length})</span>
+                </CardTitle>
+                <CreateWarningDialog collaboratorId={collaborator.id} />
+              </CardHeader>
+              <CardContent className="flex flex-col gap-2.5">
+                {warnings.length === 0 && (
+                  <p className="text-sm text-foreground-subtle">Nenhuma advertência registrada.</p>
+                )}
+                {warnings.map((warning) => (
+                  <div key={warning.id} className="flex items-start justify-between gap-2.5 rounded-md border border-border px-3 py-2.5 text-sm">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium">{formatDate(warning.date)}</p>
+                      <p className="text-xs text-foreground-subtle">{warning.reason}</p>
+                    </div>
+                    <DeleteWarningButton id={warning.id} collaboratorId={collaborator.id} />
+                  </div>
+                ))}
               </CardContent>
             </Card>
           )}

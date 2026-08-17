@@ -5,7 +5,6 @@ import { requireUser, hasPermission, type CurrentUser } from "@/server/auth/curr
 import { PERMISSIONS } from "@/domain/shared/permissions";
 import { PageBody } from "@/components/domain/page-header";
 import { StatCard } from "@/components/domain/stat-card";
-import { ChecklistRing } from "@/components/domain/checklist-ring";
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { getColaboradorSummary, getGestaoSummary } from "@/server/services/indicators.service";
@@ -176,16 +175,14 @@ export default async function InicioPage() {
     rh: hrStats ?? undefined,
   };
 
-  const ringValue = colaboradorSummary.previstos > 0 ? (colaboradorSummary.realizados / colaboradorSummary.previstos) * 100 : 100;
-
   return (
     <PageBody>
       <div className="relative overflow-hidden rounded-xl bg-brand animate-fade-up">
         <div className="pointer-events-none absolute -right-20 -top-24 size-72 rounded-full bg-brand-accent/20 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-32 left-1/3 size-72 rounded-full bg-accent/25 blur-3xl" />
 
-        <div className="relative flex flex-col gap-6 p-6 sm:p-8 lg:flex-row lg:items-center lg:justify-between">
-          <div className="min-w-0 flex-1">
+        <div className="relative flex flex-col gap-6 p-6 sm:p-8">
+          <div className="min-w-0">
             <h1 className="text-2xl font-bold text-white sm:text-3xl">
               {greeting()}, {firstName}
             </h1>
@@ -195,14 +192,6 @@ export default async function InicioPage() {
                 <HeroBriefingCard user={user} context={briefingContext} />
               </Suspense>
             </div>
-          </div>
-
-          <div className="flex shrink-0 items-center justify-center gap-8">
-            <ChecklistRing
-              value={ringValue}
-              label="Checklists hoje"
-              sublabel={`${colaboradorSummary.realizados}/${colaboradorSummary.previstos}`}
-            />
           </div>
         </div>
 

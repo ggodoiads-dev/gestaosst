@@ -26,6 +26,7 @@ import {
   Wallet,
   Upload,
   Clock,
+  ShoppingBasket,
   type LucideIcon,
 } from "lucide-react";
 import { PERMISSIONS } from "@/domain/shared/permissions";
@@ -64,7 +65,8 @@ export type NavIconKey =
   | "rico"
   | "hr"
   | "hrImport"
-  | "timeClock";
+  | "timeClock"
+  | "benefits";
 
 export type NavItem = {
   href: string;
@@ -108,6 +110,7 @@ export const NAV_ICONS: Record<NavIconKey, LucideIcon> = {
   hr: Wallet,
   hrImport: Upload,
   timeClock: Clock,
+  benefits: ShoppingBasket,
 };
 
 /**
@@ -171,6 +174,9 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
   }
   if (p.has(PERMISSIONS.SCHEDULE_MANAGE)) {
     rh.push({ href: "/escalas", label: "Escalas de Trabalho", icon: "schedules" });
+  }
+  if (p.has(PERMISSIONS.HR_MANAGE)) {
+    rh.push({ href: "/beneficios", label: "Benefícios", icon: "benefits" });
   }
   if (rh.length > 0) groups.push({ key: "rh", title: "RH", items: rh });
 

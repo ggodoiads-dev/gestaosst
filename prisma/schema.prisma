@@ -95,6 +95,7 @@ model User {
   timeClockRecordsImported      TimeClockRecord[]        @relation("TimeClockImportedBy")
   checklistJustificationsMade   ChecklistJustification[] @relation("ChecklistJustificationCreatedBy")
   collaboratorActivitiesGranted CollaboratorActivity[]   @relation("CollaboratorActivityGrantedBy")
+  warningsCreated               Warning[]                @relation("WarningCreatedBy")
   collaboratorProfile           Collaborator?
 
   @@index([roleId])
@@ -791,6 +792,7 @@ model Collaborator {
   timeClockRecords        TimeClockRecord[]
   checklistJustifications ChecklistJustification[]
   activityAptitudes       CollaboratorActivity[]
+  warnings                Warning[]
 
   @@index([areaId])
   @@index([functionId])
@@ -1011,6 +1013,22 @@ model QualificationRecord {
   @@index([collaboratorId])
   @@index([qualificationTypeId])
   @@index([expiresAt])
+}
+
+/// Advertência (aviso disciplinar) — alimenta o cálculo de benefícios: uma advertência dentro do
+/// período de apuração faz o colaborador perder a cesta básica do mês de referência.
+model Warning {
+  id             String   @id @default(uuid())
+  collaboratorId String
+  date           DateTime
+  reason         String
+  createdById    String
+  createdAt      DateTime @default(now())
+
+  collaborator Collaborator @relation(fields: [collaboratorId], references: [id])
+  createdBy    User         @relation("WarningCreatedBy", fields: [createdById], references: [id])
+
+  @@index([collaboratorId, date])
 }
 
 // =========================================================================
