@@ -3,9 +3,9 @@ import { notFound, redirect } from "next/navigation";
 import { getCurrentUser } from "@/server/auth/current-user";
 import { db } from "@/server/db";
 import { getEquipmentPhoto } from "@/server/services/equipment.service";
-import { getCollaboratorPhoto } from "@/server/services/collaborator.service";
 import { attachmentUrl } from "@/lib/attachment-url";
 import { qualificationStatus } from "@/lib/qualification-status";
+import { formatDate } from "@/lib/dates";
 import { EquipmentStatusBadge, CriticalityBadge } from "@/components/domain/status-badges";
 import { Badge } from "@/components/ui/badge";
 import type { Equipment, EquipmentType, Area, Collaborator } from "@/generated/prisma/client";
@@ -42,18 +42,14 @@ export default async function QrResolverPage({
     redirect(`/colaboradores/${epiDelivery.collaboratorId}#epi-${epiDelivery.id}`);
   }
 
-  const collaborator = await db.collaborator.findUnique({ where: { qrToken: token }, include: { area: true } });
+  const collaborator = await db.collaborator.findUnique({ where: { qrToken: token } });
   if (collaborator) {
     if (user) redirect(`/colaboradores/${collaborator.id}`);
-    const [photo, qualifications, aptitudes] = await Promise.all([
-      getCollaboratorPhoto(collaborator.id),
-      db.qualificationRecord.findMany({
-        where: { collaboratorId: collaborator.id },
-        include: { qualificationType: true },
-        orderBy: { completedDate: "desc" },
-      }),
-      db.collaboratorActivity.findMany({ where: { collaboratorId: collaborator.id }, include: { activity: true } }),
-    ]);
+    const qualifications = await db.qualificationRecord.findMany({
+      where: { collaboratorId: collaborator.id },
+      include: { qualificationType: true },
+      orderBy: { completedDate: "desc" },
+    });
     const seenTypeIds = new Set<string>();
     const currentQualifications = qualifications.filter((q) => {
       if (seenTypeIds.has(q.qualificationTypeId)) return false;
@@ -62,12 +58,7 @@ export default async function QrResolverPage({
     });
     return (
       <PublicPageShell>
-        <PublicCollaboratorView
-          collaborator={collaborator}
-          photoUrl={photo ? attachmentUrl(photo.path) : null}
-          qualifications={currentQualifications}
-          aptitudes={aptitudes}
-        />
+        <PublicCollaboratorView collaborator={collaborator} qualifications={currentQualifications} />
       </PublicPageShell>
     );
   }
@@ -130,35 +121,33 @@ function PublicEquipmentView({
 
 function PublicCollaboratorView({
   collaborator,
-  photoUrl,
   qualifications,
-  aptitudes,
 }: {
-  collaborator: Collaborator & { area: Area | null };
-  photoUrl: string | null;
+  collaborator: Collaborator;
   qualifications: { id: string; expiresAt: Date | null; qualificationType: { name: string } }[];
-  aptitudes: { id: string; activity: { name: string } }[];
 }) {
   return (
     <div className="flex flex-col items-center gap-3 text-center">
-      {photoUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element -- servido pela rota autenticada /api/uploads
-        <img src={photoUrl} alt={collaborator.name} className="size-24 rounded-full border border-border object-cover" />
-      ) : (
-        <div className="size-24 rounded-full border border-dashed border-border-strong bg-surface-muted" />
-      )}
-      <div>
-        <h1 className="text-lg font-semibold text-foreground">{collaborator.name}</h1>
-        <p className="text-sm text-foreground-subtle">
-          {collaborator.cargo ?? "Cargo não informado"}
-          {collaborator.area ? ` · ${collaborator.area.name}` : ""}
-        </p>
+      <h1 className="text-lg font-semibold text-foreground">{collaborator.name}</h1>
+
+      <div className="grid w-full grid-cols-2 gap-3 text-left text-sm">
+        <div>
+          <p className="text-xs text-foreground-subtle">Matrícula</p>
+          <p>{collaborator.matricula ?? "—"}</p>
+        </div>
+        <div>
+          <p className="text-xs text-foreground-subtle">CPF</p>
+          <p>{collaborator.cpf ?? "—"}</p>
+        </div>
+        <div className="col-span-2">
+          <p className="text-xs text-foreground-subtle">Data de admissão</p>
+          <p>{formatDate(collaborator.admissionDate)}</p>
+        </div>
       </div>
-      {collaborator.active ? <Badge tone="success">Ativo</Badge> : <Badge tone="neutral">Inativo</Badge>}
 
       {qualifications.length > 0 && (
         <div className="w-full border-t border-border pt-3">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Qualificações</p>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Qualificações (NR)</p>
           <div className="flex flex-wrap justify-center gap-1.5">
             {qualifications.map((q) => {
               const status = qualificationStatus(q.expiresAt);
@@ -168,17 +157,6 @@ function PublicCollaboratorView({
                 </Badge>
               );
             })}
-          </div>
-        </div>
-      )}
-
-      {aptitudes.length > 0 && (
-        <div className="w-full border-t border-border pt-3">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Apto a</p>
-          <div className="flex flex-wrap justify-center gap-1.5">
-            {aptitudes.map((a) => (
-              <Badge key={a.id} tone="info">{a.activity.name}</Badge>
-            ))}
           </div>
         </div>
       )}
