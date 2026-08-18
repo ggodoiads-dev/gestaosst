@@ -11,7 +11,7 @@ export default async function ImportarQualificacoesPage() {
     <>
       <PageHeader
         title="Importar ASOs e NRs"
-        description="Lance em lote treinamentos, ASOs e integrações a partir de uma planilha — o vencimento é calculado automaticamente pela validade do tipo já cadastrado."
+        description="Lance em lote treinamentos, ASOs e integrações a partir de uma planilha. Treinamentos novos são cadastrados automaticamente e o vencimento é calculado pela validade informada."
       />
       <PageBody>
         <ImportWizard />

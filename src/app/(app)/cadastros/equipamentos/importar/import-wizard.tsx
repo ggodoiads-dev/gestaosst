@@ -114,8 +114,8 @@ export function ImportWizard() {
           <CardHeader>
             <CardTitle>2. Mapear colunas</CardTitle>
             <CardDescription>
-              Diga qual coluna da planilha corresponde a cada campo do sistema. Código e Nome são obrigatórios;
-              Tipo e Área só são obrigatórios pra cadastrar um equipamento novo.
+              Diga qual coluna da planilha corresponde a cada campo do sistema. Código e Nome são obrigatórios.
+              Tipo é criado automaticamente se o nome não existir ainda; Área precisa já estar cadastrada.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
@@ -220,7 +220,20 @@ export function ImportWizard() {
                     <TableCell className="text-foreground-subtle">{row.rowIndex + 2}</TableCell>
                     <TableCell>{row.code || "—"}</TableCell>
                     <TableCell>{row.name || "—"}</TableCell>
-                    <TableCell className="text-foreground-subtle">{row.equipmentType ?? "—"}</TableCell>
+                    <TableCell className="text-foreground-subtle">
+                      {row.equipmentType ? (
+                        <span className="inline-flex items-center gap-1.5">
+                          {row.equipmentType}
+                          {!row.typeId && row.action !== "error" && (
+                            <Badge tone="info" title="Esse tipo ainda não existe — será cadastrado automaticamente.">
+                              Novo
+                            </Badge>
+                          )}
+                        </span>
+                      ) : (
+                        "—"
+                      )}
+                    </TableCell>
                     <TableCell className="text-foreground-subtle">{row.area ?? "—"}</TableCell>
                     <TableCell className="text-foreground-subtle">
                       {CRITICALITY_LABELS[row.criticality] ?? row.criticality}

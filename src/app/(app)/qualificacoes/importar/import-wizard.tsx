@@ -108,8 +108,9 @@ export function ImportWizard() {
           <CardHeader>
             <CardTitle>2. Mapear colunas</CardTitle>
             <CardDescription>
-              Diga qual coluna da planilha corresponde a cada campo do sistema. Tipo e data de conclusão são
-              obrigatórios, e informe matrícula ou CPF pra identificar o colaborador.
+              Diga qual coluna da planilha corresponde a cada campo do sistema. Colaborador, Treinamento e Data de
+              realização são obrigatórios. Se o treinamento ainda não existir no sistema, ele é cadastrado
+              automaticamente usando a Categoria e a Validade em meses dessa linha.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
@@ -179,7 +180,9 @@ export function ImportWizard() {
             <Button
               onClick={handleBuildPreview}
               loading={pending}
-              disabled={mapping.qualificationType === undefined || mapping.completedDate === undefined}
+              disabled={
+                mapping.name === undefined || mapping.qualificationType === undefined || mapping.completedDate === undefined
+              }
             >
               Revisar importação <ArrowRight className="size-4" />
             </Button>
@@ -214,7 +217,20 @@ export function ImportWizard() {
                     <TableCell className="text-foreground-subtle">{row.rowIndex + 2}</TableCell>
                     <TableCell>{row.name || "—"}</TableCell>
                     <TableCell className="text-foreground-subtle">{row.matricula ?? row.cpf ?? "—"}</TableCell>
-                    <TableCell className="text-foreground-subtle">{row.qualificationType ?? "—"}</TableCell>
+                    <TableCell className="text-foreground-subtle">
+                      {row.qualificationType ? (
+                        <span className="inline-flex items-center gap-1.5">
+                          {row.qualificationType}
+                          {!row.qualificationTypeId && row.action !== "error" && (
+                            <Badge tone="info" title="Esse treinamento ainda não existe — será cadastrado automaticamente.">
+                              Novo
+                            </Badge>
+                          )}
+                        </span>
+                      ) : (
+                        "—"
+                      )}
+                    </TableCell>
                     <TableCell className="text-foreground-subtle">
                       {row.completedDate ? formatDate(`${row.completedDate}T12:00:00`) : "—"}
                     </TableCell>

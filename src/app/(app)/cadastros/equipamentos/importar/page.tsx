@@ -11,7 +11,7 @@ export default async function ImportarEquipamentosPage() {
     <>
       <PageHeader
         title="Importar Equipamentos"
-        description="Cadastre ou atualize equipamentos em lote a partir de uma planilha. Tipo e Área precisam já existir nos cadastros."
+        description="Cadastre ou atualize equipamentos em lote a partir de uma planilha. O Tipo é criado automaticamente se ainda não existir; a Área precisa já estar cadastrada."
       />
       <PageBody>
         <ImportWizard />

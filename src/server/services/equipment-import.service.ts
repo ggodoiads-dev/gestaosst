@@ -42,6 +42,19 @@ function resolveCriticality(raw: string | null, fallback: Criticality): Critical
   return CRITICALITY_ALIASES[normalize(raw)] ?? fallback;
 }
 
+/** Gera um código único curto pro Tipo de Equipamento criado automaticamente na importação
+ * (o campo é obrigatório no cadastro, mas a planilha só traz o nome). */
+function generateTypeCode(name: string, usedCodes: Set<string>): string {
+  const base = normalize(name).toUpperCase().slice(0, 30) || "TIPO";
+  let code = base;
+  let suffix = 2;
+  while (usedCodes.has(code)) {
+    code = `${base}-${suffix}`;
+    suffix++;
+  }
+  return code;
+}
+
 export function suggestMapping(headers: string[]): EquipmentImportMapping {
   return suggestMappingGeneric(
     headers,
@@ -71,11 +84,12 @@ export type EquipmentImportRowResult = {
   error?: string;
 };
 
-/** Monta o preview linha a linha: casa por código (igual/maiúsculo), e Tipo/Área contra os já
- * cadastrados em Cadastros (não cria tipo/área novos — ambos exigem outras informações que a
- * planilha não traz, ex: código do tipo, unidade da área). Se a linha já existe (update) e a
- * planilha não traz Tipo/Área/Criticidade pra ela, mantém o que já está cadastrado em vez de
- * apagar. Não escreve nada. */
+/** Monta o preview linha a linha: casa por código (igual/maiúsculo). Tipo é criado automaticamente
+ * na confirmação se o nome não bater com nenhum já cadastrado (não tem configuração arriscada por
+ * trás, só nome + um código gerado). Área continua exigindo cadastro prévio — teria que adivinhar
+ * a Unidade certa, e isso também afeta permissão por área, então prefiro deixar a linha pendente a
+ * arriscar um vínculo errado. Se a linha já existe (update) e a planilha não traz Tipo/Área/
+ * Criticidade pra ela, mantém o que já está cadastrado em vez de apagar. Não escreve nada. */
 export async function buildEquipmentImportPreview(
   user: CurrentUser,
   rows: string[][],
@@ -137,16 +151,6 @@ export async function buildEquipmentImportPreview(
     const existing = await db.equipment.findUnique({ where: { code } });
 
     const matchedType = findType(equipmentTypeRaw);
-    if (equipmentTypeRaw && !matchedType) {
-      results.push({
-        ...base,
-        code,
-        criticality: existing?.criticality ?? "MEDIA",
-        action: "error",
-        error: `Tipo "${equipmentTypeRaw}" não cadastrado. Cadastre em Cadastros > Tipos de Equipamento antes de reimportar.`,
-      });
-      continue;
-    }
     if (!equipmentTypeRaw && !existing) {
       results.push({ ...base, code, criticality: "MEDIA", action: "error", error: "Informe o tipo do equipamento." });
       continue;
@@ -193,21 +197,41 @@ export async function commitEquipmentImport(
 ): Promise<{ created: number; updated: number; errors: number }> {
   requirePermission(user, PERMISSIONS.EQUIPMENT_MANAGE);
 
+  const existingTypes = await db.equipmentType.findMany();
+  const typeIdByName = new Map(existingTypes.map((t) => [t.name.trim().toLowerCase(), t.id]));
+  const usedCodes = new Set(existingTypes.map((t) => t.code));
+
+  async function resolveOrCreateTypeId(name: string): Promise<string> {
+    const key = name.trim().toLowerCase();
+    const cached = typeIdByName.get(key);
+    if (cached) return cached;
+    const code = generateTypeCode(name, usedCodes);
+    usedCodes.add(code);
+    const created = await db.equipmentType.create({ data: { name: name.trim(), code } });
+    typeIdByName.set(key, created.id);
+    return created.id;
+  }
+
   let created = 0;
   let updated = 0;
   let errors = 0;
 
   for (const row of rows) {
-    if (row.action === "error" || !row.typeId || !row.areaId || !row.unitId) {
+    if (row.action === "error" || !row.areaId || !row.unitId) {
       errors++;
       continue;
     }
     try {
+      const typeId = row.typeId ?? (row.equipmentType ? await resolveOrCreateTypeId(row.equipmentType) : undefined);
+      if (!typeId) {
+        errors++;
+        continue;
+      }
       const data = {
         code: row.code,
         name: row.name,
         assetTag: row.assetTag,
-        typeId: row.typeId,
+        typeId,
         manufacturer: row.manufacturer,
         model: row.model,
         serialNumber: row.serialNumber,

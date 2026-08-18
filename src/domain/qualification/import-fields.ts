@@ -1,11 +1,29 @@
-export type QualificationImportField = "matricula" | "cpf" | "name" | "qualificationType" | "completedDate" | "notes";
+export type QualificationImportField =
+  | "matricula"
+  | "cpf"
+  | "name"
+  | "category"
+  | "qualificationType"
+  | "completedDate"
+  | "validityMonths"
+  | "nrNumber"
+  | "workload"
+  | "location"
+  | "instructor"
+  | "notes";
 
 export const QUALIFICATION_IMPORT_FIELDS: { key: QualificationImportField; label: string; required: boolean }[] = [
-  { key: "matricula", label: "Matrícula", required: false },
-  { key: "cpf", label: "CPF", required: false },
-  { key: "name", label: "Nome (conferência)", required: false },
-  { key: "qualificationType", label: "Tipo (NR/ASO/Integração)", required: true },
-  { key: "completedDate", label: "Data de conclusão", required: true },
+  { key: "name", label: "Colaborador (nome)", required: true },
+  { key: "matricula", label: "Matrícula (opcional, mais preciso que nome)", required: false },
+  { key: "cpf", label: "CPF (opcional, mais preciso que nome)", required: false },
+  { key: "category", label: "Categoria (NR/ASO/Integração/Outro)", required: false },
+  { key: "qualificationType", label: "Treinamento", required: true },
+  { key: "completedDate", label: "Data de realização", required: true },
+  { key: "validityMonths", label: "Validade em meses", required: false },
+  { key: "nrNumber", label: "NR", required: false },
+  { key: "workload", label: "Carga horária", required: false },
+  { key: "location", label: "Local", required: false },
+  { key: "instructor", label: "Instrutor / palestrante", required: false },
   { key: "notes", label: "Observações", required: false },
 ];
 
