@@ -66,7 +66,9 @@ export type NavIconKey =
   | "hr"
   | "hrImport"
   | "timeClock"
-  | "benefits";
+  | "benefits"
+  | "qualificationImport"
+  | "equipmentImport";
 
 export type NavItem = {
   href: string;
@@ -111,6 +113,8 @@ export const NAV_ICONS: Record<NavIconKey, LucideIcon> = {
   hrImport: Upload,
   timeClock: Clock,
   benefits: ShoppingBasket,
+  qualificationImport: Upload,
+  equipmentImport: Upload,
 };
 
 /**
@@ -161,6 +165,7 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
   }
   if (p.has(PERMISSIONS.QUALIFICATION_MANAGE)) {
     sst.push({ href: "/qualificacoes", label: "Qualificações", icon: "qualifications" });
+    sst.push({ href: "/qualificacoes/importar", label: "Importar ASOs/NRs", icon: "qualificationImport" });
   }
   if (sst.length > 0) groups.push({ key: "sst", title: "Segurança", items: sst });
 
@@ -199,6 +204,7 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
   if (p.has(PERMISSIONS.MASTERDATA_MANAGE)) {
     admin.push({ href: "/cadastros/areas", label: "Áreas e Unidades", icon: "building" });
     admin.push({ href: "/cadastros/equipamentos", label: "Tipos de Equipamento", icon: "equipment" });
+    admin.push({ href: "/cadastros/equipamentos/importar", label: "Importar Equipamentos", icon: "equipmentImport" });
     admin.push({ href: "/cadastros/modelos-checklist", label: "Modelos de Checklist", icon: "checklistTemplate" });
   }
   if (p.has(PERMISSIONS.QUALIFICATION_MANAGE)) {

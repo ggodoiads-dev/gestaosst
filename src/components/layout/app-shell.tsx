@@ -86,6 +86,8 @@ const ICONS: Record<NavIconKey, LucideIcon> = {
   hrImport: Upload,
   timeClock: Clock,
   benefits: ShoppingBasket,
+  qualificationImport: Upload,
+  equipmentImport: Upload,
 };
 
 /**
