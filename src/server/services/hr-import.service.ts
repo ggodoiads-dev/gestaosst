@@ -17,6 +17,7 @@ const FIELD_ALIASES: Record<ImportField, string[]> = {
   salary: ["salario", "remuneracao", "sal"],
   cargo: ["cargo", "posicao", "cbo"],
   jobFunction: ["funcao", "função"],
+  turno: ["equipe", "turno", "turma"],
   phone: ["telefone", "celular", "fone", "contato"],
   admissionDate: ["admissao", "dataadmissao", "contratacao", "admissional"],
 };
@@ -126,6 +127,8 @@ export type ImportRowResult = {
   pis: string | null;
   cargo: string | null;
   jobFunction: string | null;
+  turno: string | null;
+  turnoId?: string;
   phone: string | null;
   salary: number | null;
   admissionDate: string | null;
@@ -142,6 +145,9 @@ export async function buildImportPreview(
   requirePermission(user, PERMISSIONS.HR_MANAGE);
 
   const results: ImportRowResult[] = [];
+  const turnos = mapping.turno !== undefined ? await db.turno.findMany({ where: { active: true } }) : [];
+  const findTurnoId = (name: string | null) =>
+    name ? turnos.find((t) => t.name.trim().toLowerCase() === name.trim().toLowerCase())?.id : undefined;
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
@@ -153,6 +159,7 @@ export async function buildImportPreview(
     const pis = getCell(row, mapping, "pis");
     const cargo = getCell(row, mapping, "cargo");
     const jobFunction = getCell(row, mapping, "jobFunction");
+    const turno = getCell(row, mapping, "turno");
     const phone = getCell(row, mapping, "phone");
     const salary = parseSalaryCell(getCell(row, mapping, "salary"));
     const admissionDate = parseDateCell(getCell(row, mapping, "admissionDate"));
@@ -165,6 +172,8 @@ export async function buildImportPreview(
       pis,
       cargo,
       jobFunction,
+      turno,
+      turnoId: findTurnoId(turno),
       phone,
       salary,
       admissionDate: admissionDate ? admissionDate.toISOString().slice(0, 10) : null,
@@ -208,13 +217,14 @@ async function resolveJobFunctionId(name: string, cache: Map<string, string>): P
 export async function commitImport(
   user: CurrentUser,
   rows: ImportRowResult[],
-): Promise<{ created: number; updated: number; errors: number }> {
+): Promise<{ created: number; updated: number; errors: number; turnoNotFound: string[] }> {
   requirePermission(user, PERMISSIONS.HR_MANAGE);
 
   let created = 0;
   let updated = 0;
   let errors = 0;
   const jobFunctionCache = new Map<string, string>();
+  const turnoNotFound = new Set<string>();
 
   for (const row of rows) {
     if (row.action === "error") {
@@ -223,6 +233,7 @@ export async function commitImport(
     }
     try {
       const functionId = row.jobFunction ? await resolveJobFunctionId(row.jobFunction, jobFunctionCache) : undefined;
+      if (row.turno && !row.turnoId) turnoNotFound.add(row.turno);
       const data = {
         name: row.name,
         matricula: row.matricula,
@@ -230,6 +241,7 @@ export async function commitImport(
         pis: row.pis,
         cargo: row.cargo,
         functionId,
+        turnoId: row.turnoId,
         phone: row.phone,
         admissionDate: row.admissionDate ? new Date(`${row.admissionDate}T12:00:00`) : null,
         salary: row.salary,
@@ -255,5 +267,5 @@ export async function commitImport(
     newValue: { created, updated, errors, total: rows.length },
   });
 
-  return { created, updated, errors };
+  return { created, updated, errors, turnoNotFound: [...turnoNotFound] };
 }

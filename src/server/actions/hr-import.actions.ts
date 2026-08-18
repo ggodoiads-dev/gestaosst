@@ -50,7 +50,7 @@ export async function previewImportAction(rows: string[][], mapping: ImportMappi
 }
 
 export type CommitResult =
-  | { ok: true; created: number; updated: number; errors: number }
+  | { ok: true; created: number; updated: number; errors: number; turnoNotFound: string[] }
   | { ok: false; error: string };
 
 export async function commitImportAction(rows: ImportRowResult[]): Promise<CommitResult> {

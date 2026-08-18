@@ -29,7 +29,9 @@ export function ImportWizard() {
   const [rows, setRows] = useState<string[][]>([]);
   const [mapping, setMapping] = useState<ImportMapping>({});
   const [previewRows, setPreviewRows] = useState<ImportRowResult[]>([]);
-  const [result, setResult] = useState<{ created: number; updated: number; errors: number } | null>(null);
+  const [result, setResult] = useState<
+    { created: number; updated: number; errors: number; turnoNotFound: string[] } | null
+  >(null);
 
   function handleUpload() {
     const file = fileInputRef.current?.files?.[0];
@@ -74,7 +76,7 @@ export function ImportWizard() {
         setError(res.error);
         return;
       }
-      setResult({ created: res.created, updated: res.updated, errors: res.errors });
+      setResult({ created: res.created, updated: res.updated, errors: res.errors, turnoNotFound: res.turnoNotFound });
       setStep("done");
     });
   }
@@ -198,6 +200,7 @@ export function ImportWizard() {
                   <TableHead>Nome</TableHead>
                   <TableHead>Matrícula</TableHead>
                   <TableHead>Função</TableHead>
+                  <TableHead>Equipe</TableHead>
                   <TableHead>Salário</TableHead>
                   <TableHead>Ação</TableHead>
                 </TableRow>
@@ -209,6 +212,19 @@ export function ImportWizard() {
                     <TableCell>{row.name || "—"}</TableCell>
                     <TableCell className="text-foreground-subtle">{row.matricula ?? "—"}</TableCell>
                     <TableCell className="text-foreground-subtle">{row.jobFunction ?? "—"}</TableCell>
+                    <TableCell className="text-foreground-subtle">
+                      {row.turno ? (
+                        row.turnoId ? (
+                          row.turno
+                        ) : (
+                          <Badge tone="warning" title="Nenhum turno cadastrado com esse nome — crie em /escalas.">
+                            {row.turno} (não encontrado)
+                          </Badge>
+                        )
+                      ) : (
+                        "—"
+                      )}
+                    </TableCell>
                     <TableCell className="text-foreground-subtle">{formatCurrency(row.salary)}</TableCell>
                     <TableCell>
                       {row.action === "create" && <Badge tone="success">Criar</Badge>}
@@ -249,6 +265,13 @@ export function ImportWizard() {
             {result.errors > 0 && (
               <p className="flex items-center gap-1.5 text-warning">
                 <AlertTriangle className="size-4" /> {result.errors} linha(s) não importada(s).
+              </p>
+            )}
+            {result.turnoNotFound.length > 0 && (
+              <p className="flex items-start gap-1.5 text-warning">
+                <AlertTriangle className="size-4 shrink-0 translate-y-0.5" />
+                Equipe(s) sem turno cadastrado, colaborador(es) importado(s) sem essa vinculação: {result.turnoNotFound.join(", ")}.
+                Crie o turno em /escalas e reimporte, ou edite o colaborador direto.
               </p>
             )}
           </CardContent>

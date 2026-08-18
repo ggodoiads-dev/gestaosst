@@ -6,6 +6,7 @@ export type ImportField =
   | "salary"
   | "cargo"
   | "jobFunction"
+  | "turno"
   | "phone"
   | "admissionDate";
 
@@ -17,6 +18,7 @@ export const IMPORT_FIELDS: { key: ImportField; label: string; required: boolean
   { key: "salary", label: "Salário", required: false },
   { key: "cargo", label: "Cargo", required: false },
   { key: "jobFunction", label: "Função", required: false },
+  { key: "turno", label: "Equipe (Turno)", required: false },
   { key: "phone", label: "Telefone", required: false },
   { key: "admissionDate", label: "Data de admissão", required: false },
 ];
