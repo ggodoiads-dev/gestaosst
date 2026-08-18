@@ -4,12 +4,26 @@ import { getCurrentUser } from "@/server/auth/current-user";
 import { db } from "@/server/db";
 import { getEquipmentPhoto } from "@/server/services/equipment.service";
 import { getCollaboratorPhoto } from "@/server/services/collaborator.service";
-import { attachmentUrl } from "@/lib/attachment-url";
+import { readFileBuffer } from "@/server/services/storage";
 import { qualificationStatus } from "@/lib/qualification-status";
 import { formatDate } from "@/lib/dates";
 import { EquipmentStatusBadge, CriticalityBadge } from "@/components/domain/status-badges";
 import { Badge } from "@/components/ui/badge";
+import { PublicPhoto } from "./public-photo";
 import type { Equipment, EquipmentType, Area, Collaborator } from "@/generated/prisma/client";
+
+/** `/api/uploads` exige login (fotos nunca têm URL pública direta), mas as fichas de `/q/[token]`
+ * são acessadas sem sessão — por isso a foto é lida no servidor e embutida como data URI direto
+ * no HTML, em vez de referenciar a rota autenticada (que daria 401 pra um visitante anônimo). */
+async function photoDataUrl(photo: { path: string; mimeType: string } | null): Promise<string | null> {
+  if (!photo) return null;
+  try {
+    const buffer = await readFileBuffer(photo.path);
+    return `data:${photo.mimeType};base64,${buffer.toString("base64")}`;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * QR Code do equipamento, do colaborador e da área levam direto pro prontuário completo quando
@@ -32,7 +46,7 @@ export default async function QrResolverPage({
     const photo = await getEquipmentPhoto(equipment.id);
     return (
       <PublicPageShell>
-        <PublicEquipmentView equipment={equipment} photoUrl={photo ? attachmentUrl(photo.path) : null} />
+        <PublicEquipmentView equipment={equipment} photoUrl={await photoDataUrl(photo)} />
       </PublicPageShell>
     );
   }
@@ -66,7 +80,7 @@ export default async function QrResolverPage({
       <PublicPageShell>
         <PublicCollaboratorView
           collaborator={collaborator}
-          photoUrl={photo ? attachmentUrl(photo.path) : null}
+          photoUrl={await photoDataUrl(photo)}
           summary={summary}
           equipmentAptitudes={equipmentAptitudes.map((a) => a.equipment)}
           lastExecution={lastExecution}
@@ -84,7 +98,7 @@ export default async function QrResolverPage({
     const summaries = await Promise.all(
       collaborators.map(async (c) => {
         const [summary, photo] = await Promise.all([getQualificationSummary(c.id), getCollaboratorPhoto(c.id)]);
-        return { collaborator: c, summary, photoUrl: photo ? attachmentUrl(photo.path) : null };
+        return { collaborator: c, summary, photoUrl: await photoDataUrl(photo) };
       }),
     );
     return (
@@ -165,8 +179,7 @@ function PublicEquipmentView({
   return (
     <div className="flex flex-col items-center gap-3 text-center">
       {photoUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element -- servido pela rota autenticada /api/uploads
-        <img src={photoUrl} alt={equipment.name} className="size-24 rounded-lg border border-border object-cover" />
+        <PublicPhoto src={photoUrl} alt={equipment.name} className="size-24" rounded="lg" />
       ) : (
         <div className="size-24 rounded-lg border border-dashed border-border-strong bg-surface-muted" />
       )}
@@ -233,10 +246,9 @@ function PublicCollaboratorView({
   return (
     <div className="flex flex-col items-center gap-3 text-center">
       {photoUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element -- servido pela rota autenticada /api/uploads
-        <img src={photoUrl} alt={collaborator.name} className="size-24 rounded-full border border-border object-cover" />
+        <PublicPhoto src={photoUrl} alt={collaborator.name} className="size-28" rounded="full" />
       ) : (
-        <div className="size-24 rounded-full border border-dashed border-border-strong bg-surface-muted" />
+        <div className="size-28 rounded-full border border-dashed border-border-strong bg-surface-muted" />
       )}
       <h1 className="text-lg font-semibold text-foreground">{collaborator.name}</h1>
 
@@ -312,16 +324,11 @@ function PublicAreaView({
         {entries.map(({ collaborator, summary, photoUrl }) => (
           <div key={collaborator.id} className="rounded-md border border-border p-3">
             <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2.5">
+              <div className="flex items-center gap-3">
                 {photoUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element -- servido pela rota autenticada /api/uploads
-                  <img
-                    src={photoUrl}
-                    alt={collaborator.name}
-                    className="size-10 shrink-0 rounded-full border border-border object-cover"
-                  />
+                  <PublicPhoto src={photoUrl} alt={collaborator.name} className="size-16" rounded="full" />
                 ) : (
-                  <div className="size-10 shrink-0 rounded-full border border-dashed border-border-strong bg-surface-muted" />
+                  <div className="size-16 shrink-0 rounded-full border border-dashed border-border-strong bg-surface-muted" />
                 )}
                 <div>
                   <p className="font-medium text-foreground">{collaborator.name}</p>
