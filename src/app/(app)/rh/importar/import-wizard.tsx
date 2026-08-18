@@ -197,6 +197,7 @@ export function ImportWizard() {
                   <TableHead>Linha</TableHead>
                   <TableHead>Nome</TableHead>
                   <TableHead>Matrícula</TableHead>
+                  <TableHead>Função</TableHead>
                   <TableHead>Salário</TableHead>
                   <TableHead>Ação</TableHead>
                 </TableRow>
@@ -207,6 +208,7 @@ export function ImportWizard() {
                     <TableCell className="text-foreground-subtle">{row.rowIndex + 2}</TableCell>
                     <TableCell>{row.name || "—"}</TableCell>
                     <TableCell className="text-foreground-subtle">{row.matricula ?? "—"}</TableCell>
+                    <TableCell className="text-foreground-subtle">{row.jobFunction ?? "—"}</TableCell>
                     <TableCell className="text-foreground-subtle">{formatCurrency(row.salary)}</TableCell>
                     <TableCell>
                       {row.action === "create" && <Badge tone="success">Criar</Badge>}

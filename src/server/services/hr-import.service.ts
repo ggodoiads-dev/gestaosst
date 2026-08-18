@@ -15,7 +15,8 @@ const FIELD_ALIASES: Record<ImportField, string[]> = {
   cpf: ["cpf"],
   pis: ["pis", "nit", "pisnit", "pispasep"],
   salary: ["salario", "remuneracao", "sal"],
-  cargo: ["cargo", "funcao", "posicao", "cbo"],
+  cargo: ["cargo", "posicao", "cbo"],
+  jobFunction: ["funcao", "função"],
   phone: ["telefone", "celular", "fone", "contato"],
   admissionDate: ["admissao", "dataadmissao", "contratacao", "admissional"],
 };
@@ -124,6 +125,7 @@ export type ImportRowResult = {
   cpf: string | null;
   pis: string | null;
   cargo: string | null;
+  jobFunction: string | null;
   phone: string | null;
   salary: number | null;
   admissionDate: string | null;
@@ -150,6 +152,7 @@ export async function buildImportPreview(
     const cpf = getCell(row, mapping, "cpf");
     const pis = getCell(row, mapping, "pis");
     const cargo = getCell(row, mapping, "cargo");
+    const jobFunction = getCell(row, mapping, "jobFunction");
     const phone = getCell(row, mapping, "phone");
     const salary = parseSalaryCell(getCell(row, mapping, "salary"));
     const admissionDate = parseDateCell(getCell(row, mapping, "admissionDate"));
@@ -161,6 +164,7 @@ export async function buildImportPreview(
       cpf,
       pis,
       cargo,
+      jobFunction,
       phone,
       salary,
       admissionDate: admissionDate ? admissionDate.toISOString().slice(0, 10) : null,
@@ -180,6 +184,22 @@ export async function buildImportPreview(
   return results;
 }
 
+/** Acha ou cria a `JobFunction` pelo nome exato vindo da planilha, com cache local pra não
+ * repetir a mesma consulta/criação a cada linha com a mesma função (ex: "AMARRADOR" 12 vezes).
+ * Não usa `applyJobFunctionKit` de propósito — importação em massa não deve gerar entrega de
+ * EPI automática pra todo mundo, só ligar o cadastro já existente à função correta. */
+async function resolveJobFunctionId(name: string, cache: Map<string, string>): Promise<string> {
+  const cached = cache.get(name);
+  if (cached) return cached;
+  const jobFunction = await db.jobFunction.upsert({
+    where: { name },
+    update: {},
+    create: { name },
+  });
+  cache.set(name, jobFunction.id);
+  return jobFunction.id;
+}
+
 /**
  * Aplica de fato as linhas já revisadas (vindas do preview, possivelmente após o usuário
  * remover algumas). Segue linha a linha em vez de uma transação única — um erro isolado não
@@ -194,6 +214,7 @@ export async function commitImport(
   let created = 0;
   let updated = 0;
   let errors = 0;
+  const jobFunctionCache = new Map<string, string>();
 
   for (const row of rows) {
     if (row.action === "error") {
@@ -201,12 +222,14 @@ export async function commitImport(
       continue;
     }
     try {
+      const functionId = row.jobFunction ? await resolveJobFunctionId(row.jobFunction, jobFunctionCache) : undefined;
       const data = {
         name: row.name,
         matricula: row.matricula,
         cpf: row.cpf,
         pis: row.pis,
         cargo: row.cargo,
+        functionId,
         phone: row.phone,
         admissionDate: row.admissionDate ? new Date(`${row.admissionDate}T12:00:00`) : null,
         salary: row.salary,

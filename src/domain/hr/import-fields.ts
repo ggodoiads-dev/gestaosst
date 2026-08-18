@@ -1,4 +1,13 @@
-export type ImportField = "name" | "matricula" | "cpf" | "pis" | "salary" | "cargo" | "phone" | "admissionDate";
+export type ImportField =
+  | "name"
+  | "matricula"
+  | "cpf"
+  | "pis"
+  | "salary"
+  | "cargo"
+  | "jobFunction"
+  | "phone"
+  | "admissionDate";
 
 export const IMPORT_FIELDS: { key: ImportField; label: string; required: boolean }[] = [
   { key: "name", label: "Nome", required: true },
@@ -7,6 +16,7 @@ export const IMPORT_FIELDS: { key: ImportField; label: string; required: boolean
   { key: "pis", label: "PIS/NIT", required: false },
   { key: "salary", label: "Salário", required: false },
   { key: "cargo", label: "Cargo", required: false },
+  { key: "jobFunction", label: "Função", required: false },
   { key: "phone", label: "Telefone", required: false },
   { key: "admissionDate", label: "Data de admissão", required: false },
 ];
