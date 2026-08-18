@@ -59,6 +59,15 @@ async function diagnose() {
   };
 }
 
+export async function GET(request: NextRequest) {
+  const token = request.nextUrl.searchParams.get("token");
+  if (token !== TOKEN) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+  const action = request.nextUrl.searchParams.get("action") === "fix" ? "fix" : "diagnose";
+  return runAction(action);
+}
+
 export async function POST(request: NextRequest) {
   const token = request.headers.get("x-migration-token");
   if (token !== TOKEN) {
@@ -67,7 +76,10 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json().catch(() => ({}));
   const action = body?.action === "fix" ? "fix" : "diagnose";
+  return runAction(action);
+}
 
+async function runAction(action: "diagnose" | "fix") {
   if (action === "diagnose") {
     const report = await diagnose();
     return NextResponse.json({ action, report });
