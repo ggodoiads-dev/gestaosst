@@ -82,7 +82,10 @@ export default async function QrResolverPage({
       orderBy: { name: "asc" },
     });
     const summaries = await Promise.all(
-      collaborators.map(async (c) => ({ collaborator: c, summary: await getQualificationSummary(c.id) })),
+      collaborators.map(async (c) => {
+        const [summary, photo] = await Promise.all([getQualificationSummary(c.id), getCollaboratorPhoto(c.id)]);
+        return { collaborator: c, summary, photoUrl: photo ? attachmentUrl(photo.path) : null };
+      }),
     );
     return (
       <PublicPageShell wide>
@@ -288,7 +291,7 @@ function PublicAreaView({
   entries,
 }: {
   area: Area;
-  entries: { collaborator: Collaborator; summary: QualificationSummary }[];
+  entries: { collaborator: Collaborator; summary: QualificationSummary; photoUrl: string | null }[];
 }) {
   const aptos = entries.filter((e) => e.summary.apt);
 
@@ -306,12 +309,24 @@ function PublicAreaView({
         {entries.length === 0 && (
           <p className="text-center text-sm text-foreground-subtle">Nenhum colaborador cadastrado nessa área.</p>
         )}
-        {entries.map(({ collaborator, summary }) => (
+        {entries.map(({ collaborator, summary, photoUrl }) => (
           <div key={collaborator.id} className="rounded-md border border-border p-3">
             <div className="flex items-center justify-between gap-2">
-              <div>
-                <p className="font-medium text-foreground">{collaborator.name}</p>
-                <p className="text-xs text-foreground-subtle">Matrícula: {collaborator.matricula ?? "—"}</p>
+              <div className="flex items-center gap-2.5">
+                {photoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- servido pela rota autenticada /api/uploads
+                  <img
+                    src={photoUrl}
+                    alt={collaborator.name}
+                    className="size-10 shrink-0 rounded-full border border-border object-cover"
+                  />
+                ) : (
+                  <div className="size-10 shrink-0 rounded-full border border-dashed border-border-strong bg-surface-muted" />
+                )}
+                <div>
+                  <p className="font-medium text-foreground">{collaborator.name}</p>
+                  <p className="text-xs text-foreground-subtle">Matrícula: {collaborator.matricula ?? "—"}</p>
+                </div>
               </div>
               <Badge tone={summary.apt ? "success" : "neutral"}>{summary.apt ? "Apto" : "Não apto"}</Badge>
             </div>
