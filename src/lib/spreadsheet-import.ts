@@ -42,8 +42,14 @@ export async function parseSpreadsheet(buffer: Buffer, filename: string): Promis
 
   const allRows: string[][] = [];
   sheet.eachRow((row) => {
-    const values = (row.values as ExcelJS.CellValue[]).slice(1);
-    allRows.push(values.map(cellToString));
+    const values: string[] = [];
+    row.eachCell({ includeEmpty: true }, (cell) => {
+      // Célula mesclada (comum em planilhas de RH pra agrupar categoria/tipo em várias linhas):
+      // só a célula do topo/esquerda da mesclagem carrega o valor real, as outras ficam vazias.
+      const source = cell.isMerged && cell.master ? cell.master : cell;
+      values.push(cellToString(source.value));
+    });
+    allRows.push(values);
   });
 
   const [headers, ...dataRows] = allRows;
