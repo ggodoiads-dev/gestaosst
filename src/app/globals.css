@@ -71,6 +71,8 @@
   --font-sans: var(--font-sans);
 
   --animate-fade-up: fade-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-rico-breathe: rico-breathe 3.6s ease-in-out infinite;
+  --animate-rico-bob: rico-bob 2.6s ease-in-out infinite;
 }
 
 @keyframes fade-up {
@@ -81,6 +83,26 @@
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes rico-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.045);
+  }
+}
+
+@keyframes rico-bob {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-3px) rotate(-2deg);
   }
 }
 

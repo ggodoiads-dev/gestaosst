@@ -1,17 +1,22 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Sparkles, Send, Check, X, Loader2 } from "lucide-react";
+import { Sparkles, Send, Check, X, Loader2, Mic } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { useRico } from "@/components/rico/rico-context";
 import { RicoMarkdown } from "@/components/rico/rico-markdown";
+import { useSpeechRecognition } from "@/components/rico/use-speech-recognition";
 
 export function RicoChat() {
   const { messages, sending, sendMessage, confirmingIndex, confirmAction, cancelAction } = useRico();
   const [input, setInput] = useState("");
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const baseInputRef = useRef("");
+  const { supported: micSupported, listening, start: startListening, stop: stopListening } = useSpeechRecognition(
+    (text) => setInput(baseInputRef.current ? `${baseInputRef.current} ${text}` : text),
+  );
 
   function scrollToBottom() {
     requestAnimationFrame(() => {
@@ -27,8 +32,18 @@ export function RicoChat() {
   function handleSend() {
     const text = input.trim();
     if (!text || sending) return;
+    if (listening) stopListening();
     setInput("");
     sendMessage(text);
+  }
+
+  function toggleMic() {
+    if (listening) {
+      stopListening();
+    } else {
+      baseInputRef.current = input.trim();
+      startListening();
+    }
   }
 
   return (
@@ -87,10 +102,22 @@ export function RicoChat() {
               handleSend();
             }
           }}
-          placeholder="Pergunte alguma coisa ou peça uma ação..."
+          placeholder={listening ? "Ouvindo..." : "Pergunte alguma coisa ou peça uma ação..."}
           rows={1}
           className="min-h-9 resize-none"
         />
+        {micSupported && (
+          <Button
+            type="button"
+            size="icon"
+            variant={listening ? "danger" : "secondary"}
+            onClick={toggleMic}
+            aria-label={listening ? "Parar gravação de voz" : "Falar com o Rico por voz"}
+            className={cn(listening && "animate-pulse")}
+          >
+            <Mic className="size-4" />
+          </Button>
+        )}
         <Button size="icon" onClick={handleSend} loading={sending} disabled={!input.trim()}>
           <Send className="size-4" />
         </Button>

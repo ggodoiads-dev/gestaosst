@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Send, Check, X, Loader2, ChevronDown } from "lucide-react";
+import { Send, Check, X, Loader2, ChevronDown, Mic } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { useRico } from "@/components/rico/rico-context";
 import { RicoAvatar } from "@/components/rico/rico-avatar";
 import { RicoMarkdown } from "@/components/rico/rico-markdown";
+import { useSpeechRecognition } from "@/components/rico/use-speech-recognition";
 
 export function RicoFloatingWidget() {
   const {
@@ -23,6 +24,10 @@ export function RicoFloatingWidget() {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const baseInputRef = useRef("");
+  const { supported: micSupported, listening, start: startListening, stop: stopListening } = useSpeechRecognition(
+    (text) => setInput(baseInputRef.current ? `${baseInputRef.current} ${text}` : text),
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -40,11 +45,22 @@ export function RicoFloatingWidget() {
   function handleSend() {
     const text = input.trim();
     if (!text || sending) return;
+    if (listening) stopListening();
     setInput("");
     sendMessage(text);
   }
 
+  function toggleMic() {
+    if (listening) {
+      stopListening();
+    } else {
+      baseInputRef.current = input.trim();
+      startListening();
+    }
+  }
+
   const talking = !open && proactiveTip !== null;
+  const avatarState = listening ? "listening" : sending ? "talking" : "idle";
 
   return (
     <div className="fixed bottom-5 right-5 z-[60] flex flex-col items-end gap-3">
@@ -53,7 +69,7 @@ export function RicoFloatingWidget() {
           <div className="flex items-center justify-between border-b border-border px-3.5 py-2.5">
             <div className="flex items-center gap-2">
               <div className="size-6">
-                <RicoAvatar state={sending ? "talking" : "idle"} />
+                <RicoAvatar state={avatarState} />
               </div>
               <span className="text-sm font-semibold text-foreground">Rico</span>
             </div>
@@ -115,10 +131,22 @@ export function RicoFloatingWidget() {
                   handleSend();
                 }
               }}
-              placeholder="Fala com o Rico..."
+              placeholder={listening ? "Ouvindo..." : "Fala com o Rico..."}
               rows={1}
               className="min-h-9 resize-none text-sm"
             />
+            {micSupported && (
+              <Button
+                type="button"
+                size="icon"
+                variant={listening ? "danger" : "secondary"}
+                onClick={toggleMic}
+                aria-label={listening ? "Parar gravação de voz" : "Falar com o Rico por voz"}
+                className={cn(listening && "animate-pulse")}
+              >
+                <Mic className="size-4" />
+              </Button>
+            )}
             <Button size="icon" onClick={handleSend} loading={sending} disabled={!input.trim()}>
               <Send className="size-4" />
             </Button>
@@ -149,7 +177,7 @@ export function RicoFloatingWidget() {
         onClick={handleOpen}
         className={cn(
           "flex size-14 items-center justify-center rounded-full shadow-lg transition-transform hover:scale-105",
-          talking && "animate-bounce",
+          talking ? "animate-bounce" : !open && "animate-rico-bob",
         )}
       >
         <RicoAvatar state={talking ? "talking" : "idle"} />
