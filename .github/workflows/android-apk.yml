@@ -2,6 +2,12 @@ name: Build Android APK (debug)
 
 on:
   workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - "android/**"
+      - "capacitor.config.ts"
+      - ".github/workflows/android-apk.yml"
 
 jobs:
   build:
