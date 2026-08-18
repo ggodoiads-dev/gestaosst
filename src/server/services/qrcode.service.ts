@@ -18,3 +18,9 @@ export async function generateCollaboratorQrCode(qrToken: string, baseUrl: strin
   const url = `${baseUrl}/q/${qrToken}`;
   return QRCode.toDataURL(url, { margin: 1, width: 240, color: { dark: "#1a1d23", light: "#ffffff" } });
 }
+
+/** Gera o QR Code (data URL) apontando pra ficha pública da área, mesma rota `/q/[token]`. */
+export async function generateAreaQrCode(qrToken: string, baseUrl: string): Promise<string> {
+  const url = `${baseUrl}/q/${qrToken}`;
+  return QRCode.toDataURL(url, { margin: 1, width: 240, color: { dark: "#1a1d23", light: "#ffffff" } });
+}

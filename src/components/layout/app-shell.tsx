@@ -38,6 +38,8 @@ import {
   Upload,
   Clock,
   ShoppingBasket,
+  UserCheck,
+  ShieldAlert,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -88,6 +90,8 @@ const ICONS: Record<NavIconKey, LucideIcon> = {
   benefits: ShoppingBasket,
   qualificationImport: Upload,
   equipmentImport: Upload,
+  rollCall: UserCheck,
+  warningPending: ShieldAlert,
 };
 
 /**

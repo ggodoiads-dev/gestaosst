@@ -173,3 +173,19 @@ export async function deleteScheduleDayNoteAction(id: string) {
   await scheduleService.deleteScheduleDayNote(user, id);
   revalidatePath("/escalas");
 }
+
+export async function markWarningAppliedAction(noteId: string, value: boolean): Promise<ActionResult> {
+  return toResult(async () => {
+    const user = await requireUser();
+    await scheduleService.markWarningApplied(user, noteId, value);
+    revalidatePath("/pendencias-advertencia");
+  });
+}
+
+export async function markAbsenceInterviewDoneAction(noteId: string, value: boolean): Promise<ActionResult> {
+  return toResult(async () => {
+    const user = await requireUser();
+    await scheduleService.markAbsenceInterviewDone(user, noteId, value);
+    revalidatePath("/pendencias-advertencia");
+  });
+}

@@ -15,6 +15,7 @@ import {
 } from "@/server/services/epi.service";
 import { generateEpiDeliveryQrCode, generateCollaboratorQrCode } from "@/server/services/qrcode.service";
 import { listActivityAptitudesForCollaborator } from "@/server/services/activity.service";
+import { listEquipmentAptitudesForCollaborator } from "@/server/services/equipment.service";
 import { listQualificationTypes } from "@/server/services/qualification.service";
 import { listWarningsForCollaborator } from "@/server/services/warning.service";
 import { PageHeader, PageBody } from "@/components/domain/page-header";
@@ -34,6 +35,7 @@ import { RequiresChecklistToggle } from "../requires-checklist-toggle";
 import { RegisterEpiDeliveryDialog } from "./register-epi-delivery-dialog";
 import { MarkEpiReturnedButton } from "./mark-epi-returned-button";
 import { ActivityAptitudeDialog } from "./activity-aptitude-dialog";
+import { EquipmentAptitudeDialog } from "./equipment-aptitude-dialog";
 import { CreateQualificationRecordDialog } from "@/app/(app)/qualificacoes/qualification-record-dialog";
 import { CreateWarningDialog, DeleteWarningButton } from "./warning-dialog";
 
@@ -65,6 +67,7 @@ export default async function ColaboradorDetailPage({
     epiTypes,
     shiftCheckIn,
     activityAptitudes,
+    equipmentAptitudes,
     qualificationTypes,
     warnings,
     photo,
@@ -77,6 +80,7 @@ export default async function ColaboradorDetailPage({
     listEpiTypes(user, { onlyActive: true }),
     canManageCheckIn ? getShiftCheckInStatusFor(user, id) : Promise.resolve(null),
     canManage ? listActivityAptitudesForCollaborator(user, id) : Promise.resolve([]),
+    canManage ? listEquipmentAptitudesForCollaborator(user, id) : Promise.resolve([]),
     canManageQualifications ? listQualificationTypes(user, { onlyActive: true }) : Promise.resolve([]),
     canSeeHr ? listWarningsForCollaborator(user, id) : Promise.resolve([]),
     getCollaboratorPhoto(id),
@@ -290,6 +294,31 @@ export default async function ColaboradorDetailPage({
                   .filter((a) => a.apt)
                   .map((a) => (
                     <Badge key={a.activity.id} tone="info">{a.activity.name}</Badge>
+                  ))}
+              </CardContent>
+            </Card>
+          )}
+
+          {canManage && (
+            <Card>
+              <CardHeader>
+                <CardTitle>
+                  <span className="flex items-center gap-2"><HardHat className="size-4" /> Equipamentos</span>
+                </CardTitle>
+                <EquipmentAptitudeDialog
+                  collaboratorId={collaborator.id}
+                  equipments={equipmentAptitudes.map((a) => a.equipment)}
+                  aptEquipmentIds={equipmentAptitudes.filter((a) => a.apt).map((a) => a.equipment.id)}
+                />
+              </CardHeader>
+              <CardContent className="flex flex-wrap gap-2">
+                {equipmentAptitudes.filter((a) => a.apt).length === 0 && (
+                  <p className="text-sm text-foreground-subtle">Nenhum equipamento marcado como apto ainda.</p>
+                )}
+                {equipmentAptitudes
+                  .filter((a) => a.apt)
+                  .map((a) => (
+                    <Badge key={a.equipment.id} tone="info">{a.equipment.code} — {a.equipment.name}</Badge>
                   ))}
               </CardContent>
             </Card>

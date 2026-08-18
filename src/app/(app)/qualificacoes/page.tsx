@@ -11,7 +11,10 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, TableEmpty } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { formatDate } from "@/lib/dates";
+import { qualificationStatus } from "@/lib/qualification-status";
 import { CreateQualificationRecordDialog } from "./qualification-record-dialog";
+import { QualificationFiltersBar } from "./qualification-filters-bar";
+import type { QualificationCategory } from "@/generated/prisma/enums";
 
 const CATEGORY_LABELS: Record<string, string> = {
   NR: "NR",
@@ -25,14 +28,25 @@ function daysUntil(date: Date) {
   return Math.ceil(diff / (1000 * 60 * 60 * 24));
 }
 
-export default async function QualificacoesPage() {
+export default async function QualificacoesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ categoria?: string; tipo?: string; status?: string }>;
+}) {
   const user = await requireUser();
-  const [dashboard, collaborators, types, records] = await Promise.all([
+  const { categoria, tipo, status } = await searchParams;
+  const [dashboard, collaborators, types, allTypes, records] = await Promise.all([
     getQualificationDashboard(user),
     listCollaboratorsForUser(user, { onlyActive: true }),
     listQualificationTypes(user, { onlyActive: true }),
-    listQualificationRecords(user),
+    listQualificationTypes(user),
+    listQualificationRecords(user, {
+      category: categoria as QualificationCategory | undefined,
+      qualificationTypeId: tipo,
+      status: status as "valido" | "vencendo" | "vencido" | undefined,
+    }),
   ]);
+  const categories = Array.from(new Set(allTypes.map((t) => t.category)));
 
   return (
     <>
@@ -135,8 +149,13 @@ export default async function QualificacoesPage() {
         </div>
 
         <Card>
-          <CardHeader>
+          <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <CardTitle>Registros ({records.length})</CardTitle>
+            <QualificationFiltersBar
+              categories={categories}
+              types={allTypes.map((t) => ({ id: t.id, name: t.name, category: t.category }))}
+              current={{ category: categoria, qualificationTypeId: tipo, status }}
+            />
           </CardHeader>
           <CardContent className="p-0">
             <Table>
@@ -159,8 +178,11 @@ export default async function QualificacoesPage() {
                     </TableCell>
                     <TableCell className="text-foreground-subtle">{record.qualificationType.name}</TableCell>
                     <TableCell className="text-foreground-subtle">{formatDate(record.completedDate)}</TableCell>
-                    <TableCell className="text-foreground-subtle">
-                      {record.expiresAt ? formatDate(record.expiresAt) : "Não expira"}
+                    <TableCell>
+                      {(() => {
+                        const s = qualificationStatus(record.expiresAt);
+                        return <Badge tone={s.tone}>{s.label}</Badge>;
+                      })()}
                     </TableCell>
                   </TableRow>
                 ))}

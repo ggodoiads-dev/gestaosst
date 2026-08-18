@@ -40,6 +40,7 @@ const STATUS_OPTIONS = [
   { value: "ATESTADO", label: "Atestado" },
   { value: "FERIAS", label: "Férias" },
   { value: "TROCA", label: "Troca de turno" },
+  { value: "BH_MAIS", label: "BH+" },
   { value: "OUTRO", label: "Outro" },
 ];
 

@@ -152,10 +152,31 @@ export async function getQualificationDashboard(user: CurrentUser) {
   };
 }
 
-export function listQualificationRecords(user: CurrentUser) {
+export type QualificationRecordFilters = {
+  category?: QualificationCategory;
+  qualificationTypeId?: string;
+  status?: "valido" | "vencendo" | "vencido";
+};
+
+export async function listQualificationRecords(user: CurrentUser, filters: QualificationRecordFilters = {}) {
   requirePermission(user, PERMISSIONS.QUALIFICATION_MANAGE);
-  return db.qualificationRecord.findMany({
+  const records = await db.qualificationRecord.findMany({
+    where: {
+      qualificationTypeId: filters.qualificationTypeId || undefined,
+      qualificationType: filters.category ? { category: filters.category } : undefined,
+    },
     include: { qualificationType: true, collaborator: true },
     orderBy: { completedDate: "desc" },
+  });
+
+  if (!filters.status) return records;
+
+  const now = Date.now();
+  return records.filter((record) => {
+    if (!record.expiresAt) return filters.status === "valido";
+    const daysLeft = Math.ceil((record.expiresAt.getTime() - now) / (1000 * 60 * 60 * 24));
+    if (filters.status === "vencido") return daysLeft < 0;
+    if (filters.status === "vencendo") return daysLeft >= 0 && daysLeft <= 30;
+    return daysLeft > 30;
   });
 }

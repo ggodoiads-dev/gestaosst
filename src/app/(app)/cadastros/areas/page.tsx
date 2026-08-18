@@ -1,9 +1,12 @@
+import Link from "next/link";
+import { Printer } from "lucide-react";
 import { requireUser, requirePermission } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
 import { listUnits, listAreas } from "@/server/services/masterdata.service";
 import { PageHeader, PageBody } from "@/components/domain/page-header";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, TableEmpty } from "@/components/ui/table";
 import { SoftDeleteButton, ReactivateButton } from "@/components/domain/soft-delete-button";
 import { setUnitActiveAction, setAreaActiveAction } from "@/server/actions/masterdata.actions";
@@ -106,6 +109,11 @@ export default async function AreasPage() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
+                        <Button asChild variant="ghost" size="sm">
+                          <Link href={`/areas/${area.id}/qrcode/imprimir`} target="_blank">
+                            <Printer className="size-3.5" /> QR
+                          </Link>
+                        </Button>
                         <EditAreaDialog area={area} units={units} />
                         {area.active ? (
                           <SoftDeleteButton

@@ -274,3 +274,52 @@ export async function setEquipmentActive(user: CurrentUser, id: string, active: 
   });
   return equipment;
 }
+
+/** Equipamentos ativos + quais deles este colaborador está apto a operar — base do card
+ * "Equipamentos" e do diálogo de edição na ficha do colaborador. */
+export async function listEquipmentAptitudesForCollaborator(user: CurrentUser, collaboratorId: string) {
+  requirePermission(user, PERMISSIONS.COLLABORATOR_MANAGE);
+
+  const [equipments, aptitudes] = await Promise.all([
+    db.equipment.findMany({ where: { active: true }, orderBy: { code: "asc" } }),
+    db.collaboratorEquipment.findMany({ where: { collaboratorId }, select: { equipmentId: true } }),
+  ]);
+
+  const aptEquipmentIds = new Set(aptitudes.map((a) => a.equipmentId));
+  return equipments.map((equipment) => ({ equipment, apt: aptEquipmentIds.has(equipment.id) }));
+}
+
+/** Substitui o conjunto inteiro de equipamentos que o colaborador está apto a operar (marca os
+ * novos, desmarca os que saíram) — mesmo padrão de `setCollaboratorActivityAptitudes`. */
+export async function setCollaboratorEquipmentAptitudes(user: CurrentUser, collaboratorId: string, equipmentIds: string[]) {
+  requirePermission(user, PERMISSIONS.COLLABORATOR_MANAGE);
+
+  const before = await db.collaboratorEquipment.findMany({ where: { collaboratorId }, select: { equipmentId: true } });
+  const beforeIds = new Set(before.map((a) => a.equipmentId));
+  const afterIds = new Set(equipmentIds);
+
+  await db.$transaction(async (tx) => {
+    const toRemove = [...beforeIds].filter((id) => !afterIds.has(id));
+    const toAdd = [...afterIds].filter((id) => !beforeIds.has(id));
+
+    if (toRemove.length > 0) {
+      await tx.collaboratorEquipment.deleteMany({ where: { collaboratorId, equipmentId: { in: toRemove } } });
+    }
+    if (toAdd.length > 0) {
+      await tx.collaboratorEquipment.createMany({
+        data: toAdd.map((equipmentId) => ({ collaboratorId, equipmentId, createdById: user.id })),
+      });
+    }
+    await recordAudit(
+      {
+        userId: user.id,
+        action: "UPDATE",
+        entityType: "Collaborator",
+        entityId: collaboratorId,
+        previousValue: { equipmentIds: [...beforeIds] },
+        newValue: { equipmentIds: [...afterIds] },
+      },
+      tx,
+    );
+  });
+}

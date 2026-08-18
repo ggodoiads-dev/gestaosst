@@ -27,6 +27,8 @@ import {
   Upload,
   Clock,
   ShoppingBasket,
+  UserCheck,
+  ShieldAlert,
   type LucideIcon,
 } from "lucide-react";
 import { PERMISSIONS } from "@/domain/shared/permissions";
@@ -68,7 +70,9 @@ export type NavIconKey =
   | "timeClock"
   | "benefits"
   | "qualificationImport"
-  | "equipmentImport";
+  | "equipmentImport"
+  | "rollCall"
+  | "warningPending";
 
 export type NavItem = {
   href: string;
@@ -115,6 +119,8 @@ export const NAV_ICONS: Record<NavIconKey, LucideIcon> = {
   benefits: ShoppingBasket,
   qualificationImport: Upload,
   equipmentImport: Upload,
+  rollCall: UserCheck,
+  warningPending: ShieldAlert,
 };
 
 /**
@@ -170,6 +176,9 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
   if (sst.length > 0) groups.push({ key: "sst", title: "Segurança", items: sst });
 
   const rh: NavItem[] = [];
+  if (p.has(PERMISSIONS.SCHEDULE_MANAGE) || p.has(PERMISSIONS.SCHEDULE_MANAGE_TEAM)) {
+    rh.push({ href: "/chamada", label: "Fazer Chamada", icon: "rollCall" });
+  }
   if (p.has(PERMISSIONS.PRODUCTIVITY_SELF_LOG) || p.has(PERMISSIONS.PRODUCTIVITY_SELF_VIEW)) {
     rh.push({ href: "/minha-produtividade", label: "Minha Produtividade", icon: "productivity" });
   }
@@ -182,6 +191,7 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
   if (p.has(PERMISSIONS.HR_MANAGE)) {
     rh.push({ href: "/rh/importar", label: "Importar Planilha", icon: "hrImport" });
     rh.push({ href: "/rh/ponto", label: "Importar Ponto (AFDT)", icon: "timeClock" });
+    rh.push({ href: "/pendencias-advertencia", label: "Pendências de Advertência", icon: "warningPending" });
   }
   if (p.has(PERMISSIONS.SCHEDULE_MANAGE)) {
     rh.push({ href: "/escalas", label: "Escalas de Trabalho", icon: "schedules" });

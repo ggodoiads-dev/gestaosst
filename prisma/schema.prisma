@@ -96,6 +96,7 @@ model User {
   timeClockRecordsImported      TimeClockRecord[]        @relation("TimeClockImportedBy")
   checklistJustificationsMade   ChecklistJustification[] @relation("ChecklistJustificationCreatedBy")
   collaboratorActivitiesGranted CollaboratorActivity[]   @relation("CollaboratorActivityGrantedBy")
+  collaboratorEquipmentsGranted CollaboratorEquipment[]  @relation("CollaboratorEquipmentCreatedBy")
   warningsCreated               Warning[]                @relation("WarningCreatedBy")
   collaboratorProfile           Collaborator?
 
@@ -141,12 +142,13 @@ model Unit {
 }
 
 model Area {
-  id     String  @id @default(uuid())
-  unitId String
-  name   String
-  code   String  @unique
-  sector String?
-  active Boolean @default(true)
+  id      String  @id @default(uuid())
+  unitId  String
+  name    String
+  code    String  @unique
+  sector  String?
+  active  Boolean @default(true)
+  qrToken String? @unique @default(uuid()) // usado pelo QR Code impresso da área
 
   unit Unit @relation(fields: [unitId], references: [id])
 
@@ -229,6 +231,7 @@ model Equipment {
   nonconformities Nonconformity[]
   events          EquipmentEvent[]
   attachments     Attachment[]
+  collaboratorAptitudes CollaboratorEquipment[]
 
   @@index([typeId])
   @@index([areaId])
@@ -809,6 +812,7 @@ model Collaborator {
   timeClockRecords        TimeClockRecord[]
   checklistJustifications ChecklistJustification[]
   activityAptitudes       CollaboratorActivity[]
+  equipmentAptitudes      CollaboratorEquipment[]
   warnings                Warning[]
   attachments             Attachment[]
 
@@ -1088,6 +1092,22 @@ model CollaboratorActivity {
   @@unique([collaboratorId, activityId])
 }
 
+/// Aptidão explícita pra operar um equipamento específico — cadastro manual de RH/Gestão,
+/// exibido tanto na ficha do colaborador quanto na ficha pública (QR Code).
+model CollaboratorEquipment {
+  id             String   @id @default(uuid())
+  collaboratorId String
+  equipmentId    String
+  createdById    String
+  createdAt      DateTime @default(now())
+
+  collaborator Collaborator @relation(fields: [collaboratorId], references: [id])
+  equipment    Equipment    @relation(fields: [equipmentId], references: [id])
+  createdBy    User         @relation("CollaboratorEquipmentCreatedBy", fields: [createdById], references: [id])
+
+  @@unique([collaboratorId, equipmentId])
+}
+
 // =========================================================================
 // Produtividade
 // =========================================================================
@@ -1172,20 +1192,23 @@ enum ScheduleDayNoteStatus {
   ATESTADO
   FERIAS
   TROCA
+  BH_MAIS // banco de horas positivo — label exibido na UI como "BH+"
   OUTRO
 }
 
 /// Exceção pontual a um dia específico de um colaborador — sobrepõe o cálculo do ciclo só
 /// naquele dia (ex: faltou, folgou por atestado, cobriu o turno de outra pessoa).
 model ScheduleDayNote {
-  id             String                    @id @default(uuid())
-  collaboratorId String
-  date           DateTime
-  overrideStatus ScheduleDayComputedStatus
-  status         ScheduleDayNoteStatus?
-  notes          String
-  createdById    String
-  createdAt      DateTime                  @default(now())
+  id                   String                    @id @default(uuid())
+  collaboratorId       String
+  date                 DateTime
+  overrideStatus       ScheduleDayComputedStatus
+  status               ScheduleDayNoteStatus?
+  notes                String
+  createdById          String
+  createdAt            DateTime                  @default(now())
+  warningApplied       Boolean                   @default(false) // pendência de advertência (FALTA/ATESTADO) marcada como resolvida
+  absenceInterviewDone Boolean                   @default(false) // entrevista de ABS marcada como feita
 
   collaborator Collaborator @relation(fields: [collaboratorId], references: [id])
   createdBy    User         @relation("ScheduleDayNoteCreatedBy", fields: [createdById], references: [id])

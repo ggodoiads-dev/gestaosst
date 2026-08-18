@@ -104,3 +104,19 @@ export async function setEquipmentActiveAction(id: string, active: boolean) {
   revalidatePath("/inicio");
   revalidatePath("/equipamentos/painel");
 }
+
+export async function setCollaboratorEquipmentAptitudesAction(
+  collaboratorId: string,
+  equipmentIds: string[],
+): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    await equipmentService.setCollaboratorEquipmentAptitudes(user, collaboratorId, equipmentIds);
+    revalidatePath(`/colaboradores/${collaboratorId}`);
+    return { ok: true };
+  } catch (error) {
+    if (error instanceof ForbiddenError) return { ok: false, error: error.message };
+    console.error(error);
+    return { ok: false, error: "Não foi possível salvar as aptidões." };
+  }
+}

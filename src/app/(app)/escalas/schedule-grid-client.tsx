@@ -34,6 +34,7 @@ const STATUS_LABEL: Record<string, string> = {
   ATESTADO: "Atest.",
   FERIAS: "Férias",
   TROCA: "Troca",
+  BH_MAIS: "BH+",
   OUTRO: "Obs.",
 };
 
@@ -169,7 +170,7 @@ export function ScheduleGridClient({
                             ? "bg-warning-soft text-warning"
                             : d.computed === "TRABALHO"
                               ? "bg-success-soft text-success"
-                              : "bg-neutral-soft text-foreground-muted",
+                              : "bg-brand text-brand-foreground",
                         )}
                       >
                         {label}

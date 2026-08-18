@@ -100,7 +100,10 @@ export default async function MinhaEscalaPage({
                 </span>
                 <div className="flex items-center gap-2">
                   {day.note?.notes && <span className="text-xs text-foreground-subtle">{day.note.notes}</span>}
-                  <Badge tone={day.computed === "TRABALHO" ? "accent" : "neutral"}>
+                  <Badge
+                    tone={day.computed === "TRABALHO" ? "accent" : "neutral"}
+                    className={day.computed === "FOLGA" ? "bg-brand text-brand-foreground" : undefined}
+                  >
                     {day.computed === "TRABALHO" ? "Trabalho" : "Folga"}
                   </Badge>
                 </div>
