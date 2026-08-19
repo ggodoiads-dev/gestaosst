@@ -40,7 +40,6 @@ export const PERMISSIONS = {
   EPI_MANAGE: "epi.manage",
   ACTIVITY_MANAGE: "activity.manage",
   SCHEDULE_MANAGE: "schedule.manage",
-  SCHEDULE_MANAGE_TEAM: "schedule.manage_team",
   SCHEDULE_SELF_VIEW: "schedule.self_view",
   PRODUCTIVITY_MANAGE: "productivity.manage",
   PRODUCTIVITY_MANAGE_TEAM: "productivity.manage_team",
@@ -91,7 +90,6 @@ export const PERMISSION_DESCRIPTIONS: Record<PermissionKey, string> = {
   [PERMISSIONS.EPI_MANAGE]: "Gerenciar funções, tipos de EPI e fichas de entrega dos colaboradores",
   [PERMISSIONS.ACTIVITY_MANAGE]: "Gerenciar atividades e documentos (POP/AR-VR)",
   [PERMISSIONS.SCHEDULE_MANAGE]: "Gerenciar escalas de trabalho dos colaboradores",
-  [PERMISSIONS.SCHEDULE_MANAGE_TEAM]: "Fazer a chamada diária dos colaboradores das funções que lidera",
   [PERMISSIONS.SCHEDULE_SELF_VIEW]: "Ver a própria escala de trabalho",
   [PERMISSIONS.PRODUCTIVITY_MANAGE]: "Lançar e consultar produtividade de todos os colaboradores",
   [PERMISSIONS.PRODUCTIVITY_MANAGE_TEAM]: "Lançar e consultar produtividade dos colaboradores das funções que lidera",
@@ -142,7 +140,6 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<RoleKeyValue, PermissionKey[]> = {
     PERMISSIONS.ACTIONITEM_VALIDATE,
     PERMISSIONS.INDICATORS_VIEW_AREA,
     PERMISSIONS.PRODUCTIVITY_MANAGE_TEAM,
-    PERMISSIONS.SCHEDULE_MANAGE_TEAM,
   ],
   GESTOR: [
     PERMISSIONS.EQUIPMENT_VIEW,

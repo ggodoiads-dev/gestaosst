@@ -176,7 +176,7 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
   if (sst.length > 0) groups.push({ key: "sst", title: "Segurança", items: sst });
 
   const rh: NavItem[] = [];
-  if (p.has(PERMISSIONS.SCHEDULE_MANAGE) || p.has(PERMISSIONS.SCHEDULE_MANAGE_TEAM)) {
+  if (p.has(PERMISSIONS.SCHEDULE_MANAGE) || user.canRollCall) {
     rh.push({ href: "/chamada", label: "Fazer Chamada", icon: "rollCall" });
   }
   if (p.has(PERMISSIONS.PRODUCTIVITY_SELF_LOG) || p.has(PERMISSIONS.PRODUCTIVITY_SELF_VIEW)) {

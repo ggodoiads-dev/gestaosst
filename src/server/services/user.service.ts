@@ -13,6 +13,8 @@ export function listUsers() {
       unit: true,
       userAreas: { include: { area: true } },
       userFunctions: { include: { function: true } },
+      userRollCallAreas: { include: { area: true } },
+      userRollCallTurnos: { include: { turno: true } },
     },
     orderBy: { name: "asc" },
   });
@@ -38,6 +40,9 @@ export type CreateUserInput = {
   unitId?: string | null;
   areaIds: string[];
   functionIds?: string[];
+  canRollCall?: boolean;
+  rollCallAreaIds?: string[];
+  rollCallTurnoIds?: string[];
 };
 
 /**
@@ -57,6 +62,7 @@ export async function createUserRecord(actorId: string, data: CreateUserInput) {
         passwordHash,
         roleId: data.roleId,
         unitId: data.unitId || null,
+        canRollCall: data.canRollCall ?? false,
       },
     });
     if (data.areaIds.length > 0) {
@@ -67,6 +73,16 @@ export async function createUserRecord(actorId: string, data: CreateUserInput) {
     if (data.functionIds && data.functionIds.length > 0) {
       await tx.userFunction.createMany({
         data: data.functionIds.map((functionId) => ({ userId: created.id, functionId })),
+      });
+    }
+    if (data.rollCallAreaIds && data.rollCallAreaIds.length > 0) {
+      await tx.userRollCallArea.createMany({
+        data: data.rollCallAreaIds.map((areaId) => ({ userId: created.id, areaId })),
+      });
+    }
+    if (data.rollCallTurnoIds && data.rollCallTurnoIds.length > 0) {
+      await tx.userRollCallTurno.createMany({
+        data: data.rollCallTurnoIds.map((turnoId) => ({ userId: created.id, turnoId })),
       });
     }
     return created;
@@ -95,6 +111,9 @@ export type UpdateUserInput = {
   unitId?: string | null;
   areaIds: string[];
   functionIds?: string[];
+  canRollCall?: boolean;
+  rollCallAreaIds?: string[];
+  rollCallTurnoIds?: string[];
 };
 
 export async function setUserActive(admin: CurrentUser, id: string, active: boolean) {
@@ -127,6 +146,7 @@ export async function updateUser(admin: CurrentUser, id: string, data: UpdateUse
         email: data.email.trim().toLowerCase(),
         roleId: data.roleId,
         unitId: data.unitId || null,
+        canRollCall: data.canRollCall ?? false,
       },
     });
     await tx.userArea.deleteMany({ where: { userId: id } });
@@ -136,6 +156,14 @@ export async function updateUser(admin: CurrentUser, id: string, data: UpdateUse
     await tx.userFunction.deleteMany({ where: { userId: id } });
     if (data.functionIds && data.functionIds.length > 0) {
       await tx.userFunction.createMany({ data: data.functionIds.map((functionId) => ({ userId: id, functionId })) });
+    }
+    await tx.userRollCallArea.deleteMany({ where: { userId: id } });
+    if (data.rollCallAreaIds && data.rollCallAreaIds.length > 0) {
+      await tx.userRollCallArea.createMany({ data: data.rollCallAreaIds.map((areaId) => ({ userId: id, areaId })) });
+    }
+    await tx.userRollCallTurno.deleteMany({ where: { userId: id } });
+    if (data.rollCallTurnoIds && data.rollCallTurnoIds.length > 0) {
+      await tx.userRollCallTurno.createMany({ data: data.rollCallTurnoIds.map((turnoId) => ({ userId: id, turnoId })) });
     }
     return updated;
   });

@@ -81,6 +81,11 @@ export function listTurnos(user: CurrentUser) {
   return db.turno.findMany({ where: { active: true }, include: { scheduleType: true }, orderBy: { name: "asc" } });
 }
 
+/** Turnos ativos sem checagem de permissão — só id/name, pra popular selects (ex: tela de Acessos). */
+export function listTurnosForSelect() {
+  return db.turno.findMany({ where: { active: true }, select: { id: true, name: true }, orderBy: { name: "asc" } });
+}
+
 export async function createTurno(user: CurrentUser, data: TurnoInput) {
   requirePermission(user, PERMISSIONS.SCHEDULE_MANAGE);
 

@@ -60,12 +60,15 @@ model User {
   active       Boolean   @default(true)
   createdAt    DateTime  @default(now())
   lastLoginAt  DateTime?
+  canRollCall  Boolean   @default(false) // "Faz chamada?" — independe do Role/perfil; escopado por área/turno abaixo
 
   role Role  @relation(fields: [roleId], references: [id])
   unit Unit? @relation(fields: [unitId], references: [id])
 
-  userAreas     UserArea[]
-  userFunctions UserFunction[]
+  userAreas         UserArea[]
+  userFunctions     UserFunction[]
+  userRollCallAreas UserRollCallArea[]
+  userRollCallTurnos UserRollCallTurno[]
 
   responsibleEquipments  Equipment[]            @relation("EquipmentResponsible")
   registeredEquipments   Equipment[]            @relation("EquipmentRegisteredBy")
@@ -125,6 +128,30 @@ model UserFunction {
   @@id([userId, functionId])
 }
 
+/// Áreas em que o usuário faz a chamada diária (`User.canRollCall`) — independente de `UserArea`
+/// (acesso geral), pra permitir escopo diferente entre "o que ele vê" e "de quem ele faz chamada".
+model UserRollCallArea {
+  userId String
+  areaId String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  area Area @relation(fields: [areaId], references: [id], onDelete: Cascade)
+
+  @@id([userId, areaId])
+}
+
+/// Turnos em que o usuário faz a chamada diária — se vazio, a chamada considera todos os turnos
+/// dentro das áreas escolhidas.
+model UserRollCallTurno {
+  userId  String
+  turnoId String
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  turno Turno @relation(fields: [turnoId], references: [id], onDelete: Cascade)
+
+  @@id([userId, turnoId])
+}
+
 // =========================================================================
 // Estrutura organizacional
 // =========================================================================
@@ -153,6 +180,7 @@ model Area {
   unit Unit @relation(fields: [unitId], references: [id])
 
   userAreas       UserArea[]
+  userRollCallAreas UserRollCallArea[]
   equipments      Equipment[]
   areaHistoryFrom EquipmentAreaHistory[] @relation("AreaFrom")
   areaHistoryTo   EquipmentAreaHistory[] @relation("AreaTo")
@@ -1185,6 +1213,7 @@ model Turno {
   scheduleType  ScheduleType   @relation(fields: [scheduleTypeId], references: [id])
   createdBy     User           @relation("TurnoCreatedBy", fields: [createdById], references: [id])
   collaborators Collaborator[]
+  rollCallUsers UserRollCallTurno[]
 }
 
 enum ScheduleDayNoteStatus {

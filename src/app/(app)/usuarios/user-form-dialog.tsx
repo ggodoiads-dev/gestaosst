@@ -28,7 +28,9 @@ import type { Area, JobFunction, Role, Unit, User } from "@/generated/prisma/cli
 
 const initialState: ActionResult = { ok: true };
 
-type FormProps = { roles: Role[]; units: Unit[]; areas: Area[]; functions: JobFunction[] };
+type TurnoOption = { id: string; name: string };
+
+type FormProps = { roles: Role[]; units: Unit[]; areas: Area[]; functions: JobFunction[]; turnos: TurnoOption[] };
 
 function AreaChecklist({
   areas,
@@ -80,7 +82,85 @@ function FunctionChecklist({
   );
 }
 
-export function CreateUserDialog({ roles, units, areas, functions }: FormProps) {
+/** Turnos em que o usuário faz chamada — mesmo padrão de `FunctionChecklist`, por `Turno`. */
+function TurnoChecklist({
+  turnos,
+  selected,
+  onToggle,
+}: {
+  turnos: TurnoOption[];
+  selected: Set<string>;
+  onToggle: (id: string) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5 max-h-40 overflow-y-auto rounded-md border border-border p-2.5">
+      {turnos.length === 0 && <p className="text-sm text-foreground-subtle">Nenhum turno cadastrado.</p>}
+      {turnos.map((turno) => (
+        <label key={turno.id} className="flex items-center gap-2 text-sm text-foreground-muted">
+          <Checkbox
+            checked={selected.has(turno.id)}
+            onCheckedChange={() => onToggle(turno.id)}
+          />
+          {turno.name}
+        </label>
+      ))}
+    </div>
+  );
+}
+
+/** Bloco "Faz chamada?" reaproveitado no criar e no editar — só aparece o checklist de área/turno
+ * quando marcado, mas os hidden inputs de área/turno só vão junto do form se `canRollCall` for
+ * true (senão a seleção anterior fica "fantasma" e volta a valer se o usuário marcar de novo). */
+function RollCallFields({
+  areas,
+  turnos,
+  canRollCall,
+  onCanRollCallChange,
+  selectedAreas,
+  onToggleArea,
+  selectedTurnos,
+  onToggleTurno,
+}: {
+  areas: Area[];
+  turnos: TurnoOption[];
+  canRollCall: boolean;
+  onCanRollCallChange: (value: boolean) => void;
+  selectedAreas: Set<string>;
+  onToggleArea: (id: string) => void;
+  selectedTurnos: Set<string>;
+  onToggleTurno: (id: string) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-3 rounded-md border border-border p-3">
+      <input type="hidden" name="canRollCall" value={canRollCall ? "1" : "0"} />
+      <label className="flex items-center gap-2 text-sm font-medium text-foreground">
+        <Checkbox checked={canRollCall} onCheckedChange={(v) => onCanRollCallChange(v === true)} />
+        Faz chamada?
+      </label>
+      {canRollCall && (
+        <>
+          {[...selectedAreas].map((id) => (
+            <input key={id} type="hidden" name="rollCallAreaIds" value={id} />
+          ))}
+          {[...selectedTurnos].map((id) => (
+            <input key={id} type="hidden" name="rollCallTurnoIds" value={id} />
+          ))}
+          <div className="flex flex-col gap-1.5">
+            <Label>Áreas da chamada</Label>
+            <AreaChecklist areas={areas} selected={selectedAreas} onToggle={onToggleArea} />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label>Turnos da chamada</Label>
+            <p className="text-xs text-foreground-subtle">Nenhum marcado = todos os turnos das áreas acima.</p>
+            <TurnoChecklist turnos={turnos} selected={selectedTurnos} onToggle={onToggleTurno} />
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+export function CreateUserDialog({ roles, units, areas, functions, turnos }: FormProps) {
   const [open, setOpen] = useState(false);
   const [state, formAction, pending] = useActionState(createUserAction, initialState);
   useCloseOnSuccess(pending, state, () => setOpen(false));
@@ -88,6 +168,9 @@ export function CreateUserDialog({ roles, units, areas, functions }: FormProps) 
   const [unitId, setUnitId] = useState(units[0]?.id ?? "");
   const [selectedAreas, setSelectedAreas] = useState<Set<string>>(new Set());
   const [selectedFunctions, setSelectedFunctions] = useState<Set<string>>(new Set());
+  const [canRollCall, setCanRollCall] = useState(false);
+  const [selectedRollCallAreas, setSelectedRollCallAreas] = useState<Set<string>>(new Set());
+  const [selectedRollCallTurnos, setSelectedRollCallTurnos] = useState<Set<string>>(new Set());
 
   function toggleArea(id: string) {
     setSelectedAreas((prev) => {
@@ -100,6 +183,24 @@ export function CreateUserDialog({ roles, units, areas, functions }: FormProps) 
 
   function toggleFunction(id: string) {
     setSelectedFunctions((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleRollCallArea(id: string) {
+    setSelectedRollCallAreas((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleRollCallTurno(id: string) {
+    setSelectedRollCallTurnos((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -167,6 +268,16 @@ export function CreateUserDialog({ roles, units, areas, functions }: FormProps) 
               <Label>Funções lideradas (produtividade do time)</Label>
               <FunctionChecklist functions={functions} selected={selectedFunctions} onToggle={toggleFunction} />
             </div>
+            <RollCallFields
+              areas={areas}
+              turnos={turnos}
+              canRollCall={canRollCall}
+              onCanRollCallChange={setCanRollCall}
+              selectedAreas={selectedRollCallAreas}
+              onToggleArea={toggleRollCallArea}
+              selectedTurnos={selectedRollCallTurnos}
+              onToggleTurno={toggleRollCallTurno}
+            />
             {!state.ok && <p className="text-sm text-danger">{state.error}</p>}
           </DialogBody>
           <DialogFooter>
@@ -181,9 +292,12 @@ export function CreateUserDialog({ roles, units, areas, functions }: FormProps) 
   );
 }
 
-type UserWithAreas = User & { userAreas: { areaId: string }[] } & { userFunctions: { functionId: string }[] };
+type UserWithAreas = User & { userAreas: { areaId: string }[] } & { userFunctions: { functionId: string }[] } & {
+  userRollCallAreas: { areaId: string }[];
+  userRollCallTurnos: { turnoId: string }[];
+};
 
-export function EditUserDialog({ user, roles, units, areas, functions }: FormProps & { user: UserWithAreas }) {
+export function EditUserDialog({ user, roles, units, areas, functions, turnos }: FormProps & { user: UserWithAreas }) {
   const [open, setOpen] = useState(false);
   const [state, formAction, pending] = useActionState(updateUserAction, initialState);
   useCloseOnSuccess(pending, state, () => setOpen(false));
@@ -194,6 +308,13 @@ export function EditUserDialog({ user, roles, units, areas, functions }: FormPro
   );
   const [selectedFunctions, setSelectedFunctions] = useState<Set<string>>(
     new Set(user.userFunctions.map((uf) => uf.functionId)),
+  );
+  const [canRollCall, setCanRollCall] = useState(user.canRollCall);
+  const [selectedRollCallAreas, setSelectedRollCallAreas] = useState<Set<string>>(
+    new Set(user.userRollCallAreas.map((a) => a.areaId)),
+  );
+  const [selectedRollCallTurnos, setSelectedRollCallTurnos] = useState<Set<string>>(
+    new Set(user.userRollCallTurnos.map((t) => t.turnoId)),
   );
 
   function toggleArea(id: string) {
@@ -207,6 +328,24 @@ export function EditUserDialog({ user, roles, units, areas, functions }: FormPro
 
   function toggleFunction(id: string) {
     setSelectedFunctions((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleRollCallArea(id: string) {
+    setSelectedRollCallAreas((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleRollCallTurno(id: string) {
+    setSelectedRollCallTurnos((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -272,6 +411,16 @@ export function EditUserDialog({ user, roles, units, areas, functions }: FormPro
               <Label>Funções lideradas (produtividade do time)</Label>
               <FunctionChecklist functions={functions} selected={selectedFunctions} onToggle={toggleFunction} />
             </div>
+            <RollCallFields
+              areas={areas}
+              turnos={turnos}
+              canRollCall={canRollCall}
+              onCanRollCallChange={setCanRollCall}
+              selectedAreas={selectedRollCallAreas}
+              onToggleArea={toggleRollCallArea}
+              selectedTurnos={selectedRollCallTurnos}
+              onToggleTurno={toggleRollCallTurno}
+            />
             {!state.ok && <p className="text-sm text-danger">{state.error}</p>}
           </DialogBody>
           <DialogFooter>

@@ -3,16 +3,26 @@ import { startOfDay } from "date-fns";
 import { db } from "@/server/db";
 import { getCollaboratorDayStatus } from "@/domain/schedule/schedule-calendar";
 import type { CurrentUser } from "@/server/auth/current-user";
-import { hasPermission, requirePermission, ForbiddenError } from "@/server/auth/current-user";
+import { hasPermission, ForbiddenError } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
 import type { ScheduleDayNoteStatus } from "@/generated/prisma/enums";
 
-/** Todo colaborador ativo se o usuário tem SCHEDULE_MANAGE; senão só os das funções que lidera
- * (SCHEDULE_MANAGE_TEAM, mesmo escopo usado pra produtividade de equipe). */
+/** Todo colaborador ativo se o usuário tem SCHEDULE_MANAGE; senão só os das áreas (e, se
+ * definido, dos turnos) marcados como "Faz chamada?" pra esse usuário em Acessos — funciona
+ * independente do Role/perfil (um Colaborador comum pode ter `canRollCall`). */
 function scopeWhere(user: CurrentUser) {
   if (hasPermission(user, PERMISSIONS.SCHEDULE_MANAGE)) return {};
-  requirePermission(user, PERMISSIONS.SCHEDULE_MANAGE_TEAM);
-  return { functionId: { in: Array.from(user.functionIds) } };
+  if (!user.canRollCall) throw new ForbiddenError();
+
+  const areaIds = Array.from(user.rollCallAreaIds);
+  if (areaIds.length === 0) {
+    throw new ForbiddenError("Nenhuma área configurada pra sua chamada — peça pro administrador configurar em Acessos.");
+  }
+  const turnoIds = Array.from(user.rollCallTurnoIds);
+  return {
+    areaId: { in: areaIds },
+    ...(turnoIds.length > 0 ? { turnoId: { in: turnoIds } } : {}),
+  };
 }
 
 export type RollCallEntry = {

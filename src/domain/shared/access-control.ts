@@ -18,6 +18,9 @@ export type CurrentUser = {
   permissions: Set<string>;
   areaIds: Set<string>;
   functionIds: Set<string>;
+  canRollCall: boolean;
+  rollCallAreaIds: Set<string>;
+  rollCallTurnoIds: Set<string>;
 };
 
 export class UnauthorizedError extends Error {

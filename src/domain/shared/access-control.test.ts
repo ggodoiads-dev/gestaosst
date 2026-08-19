@@ -15,6 +15,9 @@ function makeUser(overrides: Partial<CurrentUser> = {}): CurrentUser {
     permissions: new Set(),
     areaIds: new Set(),
     functionIds: new Set(),
+    canRollCall: false,
+    rollCallAreaIds: new Set(),
+    rollCallTurnoIds: new Set(),
     ...overrides,
   };
 }
