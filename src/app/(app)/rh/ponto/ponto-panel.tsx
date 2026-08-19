@@ -142,15 +142,14 @@ export function PontoPanel({
     <>
       <Card>
         <CardHeader>
-          <CardTitle>Importar arquivo AFDT</CardTitle>
+          <CardTitle>Importar arquivo do relógio de ponto</CardTitle>
           <CardDescription>
-            Envie o arquivo .txt do relógio de ponto (padrão Portaria 671/2021). As batidas são identificadas
-            pelo PIS de cada colaborador (código de 11 dígitos, diferente da matrícula) — garanta que o PIS
-            esteja cadastrado em RH antes de importar.
+            Aceita o arquivo AFD (.txt, identifica pelo PIS) ou o AEJ (.zip, identifica direto pela
+            matrícula — mais fácil, use esse quando tiver os dois disponíveis). Padrão Portaria 671/2021.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
-          <input ref={fileInputRef} type="file" accept=".txt" className="text-sm" />
+          <input ref={fileInputRef} type="file" accept=".txt,.zip" className="text-sm" />
           {uploadError && <p className="text-sm text-danger">{uploadError}</p>}
           {summary && (
             <div className="flex flex-col gap-1.5 rounded-lg border border-border bg-surface-muted px-4 py-3 text-sm">

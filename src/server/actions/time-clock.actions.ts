@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireUser, ForbiddenError } from "@/server/auth/current-user";
 import * as timeClockService from "@/server/services/time-clock.service";
+import { InvalidTimeClockFileError } from "@/server/services/time-clock.service";
 import type {
   TimeClockAnomaly,
   TimeClockImportSummary,
@@ -20,11 +21,11 @@ export async function uploadAfdtAction(formData: FormData): Promise<UploadAfdtRe
 
     const file = formData.get("file");
     if (!(file instanceof File) || file.size === 0) {
-      return { ok: false, error: "Selecione um arquivo AFDT válido (.txt)." };
+      return { ok: false, error: "Selecione um arquivo válido (.txt do AFD ou .zip do AEJ)." };
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
-    const summary = await timeClockService.importTimeClockFile(user, buffer);
+    const summary = await timeClockService.importTimeClockFile(user, buffer, file.name);
     if (summary.totalRecords === 0) {
       return { ok: false, error: "Não encontrei nenhuma marcação de ponto nesse arquivo." };
     }
@@ -33,7 +34,8 @@ export async function uploadAfdtAction(formData: FormData): Promise<UploadAfdtRe
     return { ok: true, summary };
   } catch (error) {
     if (error instanceof ForbiddenError) return { ok: false, error: error.message };
-    console.error("[time-clock] falha ao importar AFDT:", error);
+    if (error instanceof InvalidTimeClockFileError) return { ok: false, error: error.message };
+    console.error("[time-clock] falha ao importar arquivo de ponto:", error);
     return { ok: false, error: "Não foi possível ler esse arquivo. Verifique o formato." };
   }
 }

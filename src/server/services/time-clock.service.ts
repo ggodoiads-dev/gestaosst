@@ -3,6 +3,8 @@ import { fromZonedTime, toZonedTime, formatInTimeZone } from "date-fns-tz";
 import { db } from "@/server/db";
 import { recordAudit } from "@/server/services/audit";
 import { parseAfdt } from "@/domain/time-clock/afdt-parser";
+import { parseAej } from "@/domain/time-clock/aej-parser";
+import { extractFirstTextFile } from "@/lib/zip-extract";
 import { getCollaboratorDayStatus } from "@/domain/schedule/schedule-calendar";
 import { APP_TIMEZONE, formatTime } from "@/lib/dates";
 import { CHECKLIST_JUSTIFICATION_REASONS, type ChecklistJustificationReason } from "@/domain/time-clock/checklist-justification-reasons";
@@ -37,22 +39,36 @@ export type TimeClockImportSummary = {
   ignoredLines: number;
 };
 
+export class InvalidTimeClockFileError extends Error {}
+
 /**
- * Importa um arquivo AFDT: casa cada marcação pelo PIS do colaborador e grava de forma
- * idempotente (`createMany` + `skipDuplicates`, chave `[pis, timestamp, markNumber]`) — reenviar
- * o mesmo arquivo não duplica nada. Quando o PIS de uma marcação já gravada antes (sem
- * colaborador correspondente na época) passa a ter dono, o `updateMany` final corrige o vínculo
- * sem precisar reimportar tudo de novo.
- *
- * A matrícula desta empresa é um número curto próprio (ex: "230043"), diferente do código de 11
- * dígitos do relógio de ponto (formato PIS/NIT do governo) — por isso o casamento é por
- * `Collaborator.pis`, com `matricula` só como fallback pro caso raro de outra base usar a
- * matrícula interna nesse campo do relógio.
+ * Importa um arquivo do relógio de ponto — aceita tanto o AFD (.txt, identifica cada marcação
+ * pelo PIS) quanto o AEJ (.zip com um .txt assinado dentro, identifica cada marcação direto pela
+ * matrícula — formato mais rico e mais fácil de casar, já que a matrícula é o mesmo número curto
+ * já cadastrado nos colaboradores). Casa cada marcação e grava de forma idempotente (`createMany`
+ * + `skipDuplicates`, chave `[pis, timestamp, markNumber]`) — reenviar o mesmo arquivo não
+ * duplica nada. Quando uma marcação já gravada antes (sem colaborador correspondente na época)
+ * passa a ter dono, o `updateMany` final corrige o vínculo sem precisar reimportar tudo de novo.
  */
-export async function importTimeClockFile(user: CurrentUser, buffer: Buffer): Promise<TimeClockImportSummary> {
+export async function importTimeClockFile(
+  user: CurrentUser,
+  buffer: Buffer,
+  filename: string,
+): Promise<TimeClockImportSummary> {
   requirePermission(user, PERMISSIONS.HR_MANAGE);
 
-  const { marks, ignoredLines } = parseAfdt(buffer.toString("utf-8"));
+  const isZip = /\.zip$/i.test(filename) || (buffer.length > 1 && buffer[0] === 0x50 && buffer[1] === 0x4b);
+
+  const { marks, ignoredLines } = await (async () => {
+    if (isZip) {
+      const extracted = await extractFirstTextFile(buffer);
+      if (!extracted) {
+        throw new InvalidTimeClockFileError("Não encontrei nenhum arquivo .txt dentro do .zip.");
+      }
+      return parseAej(extracted.content);
+    }
+    return parseAfdt(buffer.toString("utf-8"));
+  })();
 
   const distinctPis = [...new Set(marks.map((m) => m.pis))];
   const collaborators =
