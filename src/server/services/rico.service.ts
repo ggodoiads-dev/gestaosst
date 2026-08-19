@@ -411,11 +411,13 @@ async function runReadTool(user: CurrentUser, name: string, args: Record<string,
         achadoIA: e.latestAiFinding?.summary ?? null,
       }));
     case "checklist_do_dia":
-      return (await listChecklistBoardForUser(user)).map((b) => ({
-        codigo: b.equipment.code,
-        nome: b.equipment.name,
-        situacao: b.situation,
-      }));
+      return (await listChecklistBoardForUser(user))
+        .filter((b) => b.type === "equipamento")
+        .map((b) => ({
+          codigo: b.equipment.code,
+          nome: b.equipment.name,
+          situacao: b.situation,
+        }));
     case "nao_conformidades_abertas":
       return (await listNonconformitiesForUser(user, { overdue: false }))
         .filter((nc) => !["CONCLUIDA", "ENCERRADA", "CANCELADA"].includes(nc.status))

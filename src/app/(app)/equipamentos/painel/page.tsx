@@ -2,7 +2,11 @@ import Link from "next/link";
 import { ClipboardCheck, CheckCircle2, Clock, AlertTriangle, ChevronRight } from "lucide-react";
 import { requireUser, hasPermission } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
-import { listChecklistBoardForUser } from "@/server/services/checklist-execution.service";
+import { listChecklistBoardForUser, type ChecklistBoardEquipmentItem } from "@/server/services/checklist-execution.service";
+
+function isEquipmentItem(item: { type: string }): item is ChecklistBoardEquipmentItem {
+  return item.type === "equipamento";
+}
 import { getColaboradorSummary, getGestaoSummary } from "@/server/services/indicators.service";
 import { PageHeader, PageBody } from "@/components/domain/page-header";
 import { StatCard } from "@/components/domain/stat-card";
@@ -26,7 +30,7 @@ async function ColaboradorHome() {
   const user = await requireUser();
   const [summary, board] = await Promise.all([
     getColaboradorSummary(user),
-    listChecklistBoardForUser(user),
+    listChecklistBoardForUser(user).then((b) => b.filter(isEquipmentItem)),
   ]);
 
   const pendentes = board.filter((b) => b.situation === "PENDENTE" || b.situation === "ATRASADO");

@@ -2,15 +2,19 @@ import "server-only";
 import { db } from "@/server/db";
 import type { CurrentUser } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
-import { listChecklistBoardForUser } from "@/server/services/checklist-execution.service";
+import { listChecklistBoardForUser, type ChecklistBoardEquipmentItem } from "@/server/services/checklist-execution.service";
 
 function areaScope(user: CurrentUser, permission: string) {
   const canSeeAll = user.permissions.has(permission);
   return canSeeAll ? undefined : { in: Array.from(user.areaIds) };
 }
 
+function isEquipmentItem(item: { type: string }): item is ChecklistBoardEquipmentItem {
+  return item.type === "equipamento";
+}
+
 export async function getColaboradorSummary(user: CurrentUser) {
-  const board = await listChecklistBoardForUser(user);
+  const board = (await listChecklistBoardForUser(user)).filter(isEquipmentItem);
   return {
     previstos: board.length,
     realizados: board.filter((b) => b.situation === "REALIZADO").length,
@@ -35,7 +39,7 @@ export async function getGestaoSummary(user: CurrentUser) {
     ncVencidas,
     acoesVencidas,
   ] = await Promise.all([
-    listChecklistBoardForUser(user),
+    listChecklistBoardForUser(user).then((b) => b.filter(isEquipmentItem)),
     db.equipment.groupBy({
       by: ["status"],
       where: { active: true, areaId: equipmentAreaFilter },

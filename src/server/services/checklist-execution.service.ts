@@ -10,12 +10,41 @@ import { evaluateChecklist, type AnswerInput, type QuestionInput } from "@/domai
 import { getScheduledTimeForDate, computeDelayMinutes, isLate } from "@/domain/checklist/scheduling";
 import type { Prisma } from "@/generated/prisma/client";
 
+export type ChecklistBoardEquipmentItem = {
+  type: "equipamento";
+  equipment: Prisma.EquipmentGetPayload<{ include: { area: true; type: true } }>;
+  templateId: string;
+  templateName: string;
+  versionId: string;
+  scheduledFor: Date | null;
+  situation: "REALIZADO" | "EM_ANDAMENTO" | "ATRASADO" | "PENDENTE";
+  completedAt: Date | null;
+  inProgressExecutionId: string | null;
+};
+
+export type ChecklistBoardAreaItem = {
+  type: "area";
+  areaId: string;
+  areaName: string;
+  templateId: string;
+  templateName: string;
+  totalCount: number;
+  completedTodayCount: number;
+};
+
+export type ChecklistBoardItem = ChecklistBoardEquipmentItem | ChecklistBoardAreaItem;
+
 /**
  * Equipamentos com checklist aplicável, visíveis ao usuário, com a situação
  * do dia calculada (previsto/pendente/em andamento/realizado/atrasado) —
- * seções 25-28 do documento.
+ * seções 25-28 do documento. Templates de escopo Área não aparecem um a um:
+ * viram uma única linha agregada por (área, template), que leva pra tela de
+ * checklist da área (todo equipamento respondido de uma vez).
  */
-export async function listChecklistBoardForUser(user: CurrentUser, filters: { areaId?: string } = {}) {
+export async function listChecklistBoardForUser(
+  user: CurrentUser,
+  filters: { areaId?: string } = {},
+): Promise<ChecklistBoardItem[]> {
   requirePermission(user, PERMISSIONS.CHECKLIST_EXECUTE);
   if (filters.areaId) {
     requireAreaAccess(user, filters.areaId, PERMISSIONS.EQUIPMENT_VIEW_ALL_AREAS);
@@ -49,7 +78,9 @@ export async function listChecklistBoardForUser(user: CurrentUser, filters: { ar
   const startOfDay = new Date(now);
   startOfDay.setHours(0, 0, 0, 0);
 
-  const board = [];
+  const equipmentItems: ChecklistBoardEquipmentItem[] = [];
+  const areaGroups = new Map<string, ChecklistBoardAreaItem>();
+
   for (const equipment of equipments) {
     const assignment = equipment.assignments[0];
     const version = assignment?.template.versions[0];
@@ -73,12 +104,30 @@ export async function listChecklistBoardForUser(user: CurrentUser, filters: { ar
       }),
     ]);
 
+    if (assignment.template.scope === "AREA") {
+      const key = `${equipment.areaId}:${assignment.templateId}`;
+      const group = areaGroups.get(key) ?? {
+        type: "area" as const,
+        areaId: equipment.areaId,
+        areaName: equipment.area.name,
+        templateId: assignment.templateId,
+        templateName: assignment.template.name,
+        totalCount: 0,
+        completedTodayCount: 0,
+      };
+      group.totalCount++;
+      if (completedToday) group.completedTodayCount++;
+      areaGroups.set(key, group);
+      continue;
+    }
+
     let situation: "REALIZADO" | "EM_ANDAMENTO" | "ATRASADO" | "PENDENTE" = "PENDENTE";
     if (completedToday) situation = "REALIZADO";
     else if (inProgress) situation = "EM_ANDAMENTO";
     else if (isLate(scheduledFor, now)) situation = "ATRASADO";
 
-    board.push({
+    equipmentItems.push({
+      type: "equipamento",
       equipment,
       templateId: assignment.templateId,
       templateName: assignment.template.name,
@@ -90,7 +139,59 @@ export async function listChecklistBoardForUser(user: CurrentUser, filters: { ar
     });
   }
 
-  return board;
+  return [...equipmentItems, ...areaGroups.values()];
+}
+
+/**
+ * Contexto pra tela de "checklist por área" — todo equipamento vinculado ao template de
+ * escopo Área daquela área, cada um já com sua execução de hoje criada/retomada
+ * (reaproveita `getExecutionContext` por equipamento, mesma execução individual de sempre,
+ * só que orquestradas juntas numa tela só). O template de área tem sempre uma única
+ * pergunta — é ela que vira a linha "Conforme/Não conforme/N-A" de cada equipamento.
+ */
+export async function getAreaChecklistContext(user: CurrentUser, areaId: string) {
+  requirePermission(user, PERMISSIONS.CHECKLIST_EXECUTE);
+  requireAreaAccess(user, areaId, PERMISSIONS.EQUIPMENT_VIEW_ALL_AREAS);
+
+  const area = await db.area.findUniqueOrThrow({ where: { id: areaId } });
+  const template = await db.checklistTemplate.findFirst({
+    where: { areaId, scope: "AREA", status: "PUBLICADO" },
+    include: {
+      versions: {
+        where: { status: "ATIVA" },
+        take: 1,
+        include: { questions: { orderBy: { order: "asc" }, include: { options: true, rules: true }, take: 1 } },
+      },
+    },
+  });
+
+  const version = template?.versions[0];
+  const question = version?.questions[0];
+  if (!template || !version || !question) {
+    return { area, template: null, question: null, items: [] };
+  }
+
+  const equipments = await db.equipment.findMany({
+    where: { areaId, active: true, assignments: { some: { active: true, templateId: template.id } } },
+    orderBy: { code: "asc" },
+  });
+
+  const items = await Promise.all(
+    equipments.map(async (equipment) => {
+      const { execution } = await getExecutionContext(user, equipment.id);
+      const existingAnswer = execution.answers.find((a) => a.questionId === question.id) ?? null;
+      return {
+        equipment,
+        executionId: execution.id,
+        status: execution.status,
+        existingAnswer: existingAnswer
+          ? { value: existingAnswer.value, comment: existingAnswer.comment, hasPhoto: existingAnswer.attachments.length > 0 }
+          : null,
+      };
+    }),
+  );
+
+  return { area, template, question, items };
 }
 
 export async function getExecutionContext(user: CurrentUser, equipmentId: string) {

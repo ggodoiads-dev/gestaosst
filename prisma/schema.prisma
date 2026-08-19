@@ -187,6 +187,7 @@ model Area {
   nonconformities Nonconformity[]
   collaborators   Collaborator[]
   accidents       Accident[]
+  checklistTemplates ChecklistTemplate[]
 
   createdAt DateTime @default(now())
 
@@ -294,16 +295,24 @@ enum TemplateStatus {
   ARQUIVADO
 }
 
+enum ChecklistTemplateScope {
+  EQUIPAMENTO // fluxo de sempre: uma execução por equipamento
+  AREA // um checklist único por área — cada equipamento vira um item respondido de uma vez
+}
+
 model ChecklistTemplate {
-  id              String         @id @default(uuid())
+  id              String                 @id @default(uuid())
   name            String
   description     String?
   equipmentTypeId String
-  status          TemplateStatus @default(RASCUNHO)
+  status          TemplateStatus         @default(RASCUNHO)
+  scope           ChecklistTemplateScope @default(EQUIPAMENTO)
+  areaId          String? // só preenchido quando scope = AREA
   createdById     String
-  createdAt       DateTime       @default(now())
+  createdAt       DateTime               @default(now())
 
   equipmentType EquipmentType @relation(fields: [equipmentTypeId], references: [id])
+  area          Area?         @relation(fields: [areaId], references: [id])
   createdBy     User          @relation("TemplateCreatedBy", fields: [createdById], references: [id])
 
   versions    ChecklistVersion[]
@@ -311,6 +320,7 @@ model ChecklistTemplate {
   schedules   ChecklistSchedule[]
 
   @@index([equipmentTypeId])
+  @@index([areaId])
 }
 
 enum Periodicity {

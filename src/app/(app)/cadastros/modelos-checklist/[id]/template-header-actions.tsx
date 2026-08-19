@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useState, useTransition } from "react";
-import { Link2, GitBranch } from "lucide-react";
+import { Link2, GitBranch, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -13,7 +13,12 @@ import {
   DialogFooter,
   DialogClose,
 } from "@/components/ui/dialog";
-import { assignTemplateAction, createNewDraftVersionAction, type ActionResult } from "@/server/actions/checklist-template.actions";
+import {
+  assignTemplateAction,
+  createNewDraftVersionAction,
+  syncAreaTemplateEquipmentAction,
+  type ActionResult,
+} from "@/server/actions/checklist-template.actions";
 import { useCloseOnSuccess } from "@/lib/use-close-on-success";
 import { toast } from "sonner";
 import type { Equipment } from "@/generated/prisma/client";
@@ -33,6 +38,24 @@ export function NewDraftVersionButton({ templateId }: { templateId: string }) {
   return (
     <Button size="sm" variant="secondary" onClick={handleClick} loading={isPending}>
       <GitBranch /> Nova versão
+    </Button>
+  );
+}
+
+export function SyncAreaEquipmentButton({ templateId }: { templateId: string }) {
+  const [isPending, startTransition] = useTransition();
+
+  function handleClick() {
+    startTransition(async () => {
+      const result = await syncAreaTemplateEquipmentAction(templateId);
+      if (result.ok) toast.success("Equipamentos da área sincronizados.");
+      else toast.error(result.error);
+    });
+  }
+
+  return (
+    <Button size="sm" variant="secondary" onClick={handleClick} loading={isPending}>
+      <RefreshCw /> Sincronizar equipamentos da área
     </Button>
   );
 }

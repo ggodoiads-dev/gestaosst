@@ -4,12 +4,13 @@ import { recordAudit } from "@/server/services/audit";
 import type { CurrentUser } from "@/server/auth/current-user";
 import { requirePermission, ForbiddenError } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
-import type { Periodicity, QuestionType, Criticality, EquipmentStatus } from "@/generated/prisma/enums";
+import type { Periodicity, QuestionType, Criticality, EquipmentStatus, ChecklistTemplateScope } from "@/generated/prisma/enums";
 
 export function listTemplates() {
   return db.checklistTemplate.findMany({
     include: {
       equipmentType: true,
+      area: true,
       versions: { orderBy: { versionNumber: "desc" }, take: 1 },
       _count: { select: { assignments: true } },
     },
@@ -22,6 +23,7 @@ export function getTemplateDetail(id: string) {
     where: { id },
     include: {
       equipmentType: true,
+      area: true,
       versions: {
         orderBy: { versionNumber: "desc" },
         include: {
@@ -38,25 +40,106 @@ export function getTemplateDetail(id: string) {
 
 export async function createTemplate(
   user: CurrentUser,
-  data: { name: string; description?: string | null; equipmentTypeId: string },
+  data: {
+    name: string;
+    description?: string | null;
+    equipmentTypeId?: string;
+    scope?: ChecklistTemplateScope;
+    areaId?: string;
+  },
 ) {
   requirePermission(user, PERMISSIONS.CHECKLIST_TEMPLATE_MANAGE);
 
+  const scope = data.scope ?? "EQUIPAMENTO";
+  let equipmentTypeId = data.equipmentTypeId;
+  let areaEquipmentIds: string[] = [];
+
+  if (scope === "AREA") {
+    if (!data.areaId) throw new ForbiddenError("Selecione a área.");
+    const equipments = await db.equipment.findMany({
+      where: { areaId: data.areaId, active: true },
+      select: { id: true, typeId: true },
+    });
+    if (equipments.length === 0) {
+      throw new ForbiddenError("Essa área não tem nenhum equipamento ativo pra vincular.");
+    }
+    const typeCounts = new Map<string, number>();
+    for (const e of equipments) typeCounts.set(e.typeId, (typeCounts.get(e.typeId) ?? 0) + 1);
+    equipmentTypeId = [...typeCounts.entries()].sort((a, b) => b[1] - a[1])[0][0];
+    areaEquipmentIds = equipments.map((e) => e.id);
+  }
+
+  if (!equipmentTypeId) throw new ForbiddenError("Selecione o tipo de equipamento.");
+
   const template = await db.$transaction(async (tx) => {
     const created = await tx.checklistTemplate.create({
-      data: { ...data, createdById: user.id, status: "RASCUNHO" },
+      data: {
+        name: data.name,
+        description: data.description,
+        equipmentTypeId,
+        scope,
+        areaId: scope === "AREA" ? data.areaId : null,
+        createdById: user.id,
+        status: "RASCUNHO",
+      },
     });
     await tx.checklistVersion.create({
       data: { templateId: created.id, versionNumber: 1, periodicity: "DIARIO", status: "RASCUNHO" },
     });
+    for (const equipmentId of areaEquipmentIds) {
+      await tx.equipmentChecklistAssignment.upsert({
+        where: { equipmentId_templateId: { equipmentId, templateId: created.id } },
+        update: { active: true },
+        create: { equipmentId, templateId: created.id },
+      });
+    }
     await recordAudit(
-      { userId: user.id, action: "CREATE", entityType: "ChecklistTemplate", entityId: created.id, newValue: data },
+      {
+        userId: user.id,
+        action: "CREATE",
+        entityType: "ChecklistTemplate",
+        entityId: created.id,
+        newValue: { name: data.name, scope, areaId: data.areaId, equipmentTypeId },
+      },
       tx,
     );
     return created;
   });
 
   return template;
+}
+
+/** Reaplica o vínculo de um template de escopo Área contra o conjunto atual de equipamentos
+ * ativos da área — inclui os que entraram depois da criação e desativa o vínculo dos que
+ * saíram (mudaram de área ou foram desativados). */
+export async function syncAreaTemplateEquipment(user: CurrentUser, templateId: string) {
+  requirePermission(user, PERMISSIONS.CHECKLIST_TEMPLATE_MANAGE);
+  const template = await db.checklistTemplate.findUniqueOrThrow({ where: { id: templateId } });
+  if (template.scope !== "AREA" || !template.areaId) {
+    throw new ForbiddenError("Esse modelo não é de escopo Área.");
+  }
+
+  const equipments = await db.equipment.findMany({
+    where: { areaId: template.areaId, active: true },
+    select: { id: true },
+  });
+  const currentIds = equipments.map((e) => e.id);
+
+  await db.$transaction(async (tx) => {
+    await tx.equipmentChecklistAssignment.updateMany({
+      where: { templateId, equipmentId: { notIn: currentIds } },
+      data: { active: false },
+    });
+    for (const equipmentId of currentIds) {
+      await tx.equipmentChecklistAssignment.upsert({
+        where: { equipmentId_templateId: { equipmentId, templateId } },
+        update: { active: true },
+        create: { equipmentId, templateId },
+      });
+    }
+  });
+
+  return { syncedCount: currentIds.length };
 }
 
 async function getDraftVersionOrThrow(versionId: string) {

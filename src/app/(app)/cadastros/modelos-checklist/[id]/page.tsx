@@ -6,7 +6,7 @@ import { listFaultCategories } from "@/server/services/masterdata.service";
 import { PageHeader, PageBody } from "@/components/domain/page-header";
 import { TemplateStatusBadge } from "@/components/domain/status-badges";
 import { VersionTabs } from "./version-tabs";
-import { NewDraftVersionButton, AssignEquipmentDialog } from "./template-header-actions";
+import { NewDraftVersionButton, AssignEquipmentDialog, SyncAreaEquipmentButton } from "./template-header-actions";
 
 export default async function ModeloChecklistDetailPage({
   params,
@@ -30,11 +30,19 @@ export default async function ModeloChecklistDetailPage({
     <>
       <PageHeader
         title={template.name}
-        description={template.description ?? `Tipo de equipamento: ${template.equipmentType.name}`}
+        description={
+          template.scope === "AREA"
+            ? `Checklist de área: ${template.area?.name ?? "—"}`
+            : template.description ?? `Tipo de equipamento: ${template.equipmentType.name}`
+        }
         actions={
           <div className="flex items-center gap-2">
             <TemplateStatusBadge status={template.status} />
-            <AssignEquipmentDialog templateId={template.id} equipments={equipments} assignedIds={assignedIds} />
+            {template.scope === "AREA" ? (
+              <SyncAreaEquipmentButton templateId={template.id} />
+            ) : (
+              <AssignEquipmentDialog templateId={template.id} equipments={equipments} assignedIds={assignedIds} />
+            )}
             {!hasDraft && <NewDraftVersionButton templateId={template.id} />}
           </div>
         }

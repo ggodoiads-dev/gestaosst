@@ -20,11 +20,22 @@ function toResult(fn: () => Promise<unknown>): Promise<ActionResult> {
     });
 }
 
-const templateSchema = z.object({
-  name: z.string().trim().min(3, "Informe o nome do modelo."),
-  description: z.string().trim().optional().nullable(),
-  equipmentTypeId: z.string().min(1, "Selecione o tipo de equipamento."),
-});
+const templateSchema = z
+  .object({
+    name: z.string().trim().min(3, "Informe o nome do modelo."),
+    description: z.string().trim().optional().nullable(),
+    scope: z.enum(["EQUIPAMENTO", "AREA"]),
+    equipmentTypeId: z.string().optional(),
+    areaId: z.string().optional(),
+  })
+  .refine((d) => d.scope === "AREA" || !!d.equipmentTypeId, {
+    message: "Selecione o tipo de equipamento.",
+    path: ["equipmentTypeId"],
+  })
+  .refine((d) => d.scope === "EQUIPAMENTO" || !!d.areaId, {
+    message: "Selecione a área.",
+    path: ["areaId"],
+  });
 
 export async function createTemplateAction(_prev: ActionResult, formData: FormData) {
   return toResult(async () => {
@@ -32,11 +43,24 @@ export async function createTemplateAction(_prev: ActionResult, formData: FormDa
     const data = templateSchema.parse({
       name: formData.get("name"),
       description: formData.get("description") || null,
-      equipmentTypeId: formData.get("equipmentTypeId"),
+      scope: formData.get("scope") || "EQUIPAMENTO",
+      equipmentTypeId: formData.get("equipmentTypeId") || undefined,
+      areaId: formData.get("areaId") || undefined,
     });
     const template = await templateService.createTemplate(user, data);
     revalidatePath("/cadastros/modelos-checklist");
     return template;
+  });
+}
+
+export async function syncAreaTemplateEquipmentAction(templateId: string): Promise<ActionResult> {
+  const user = await requireUser();
+  return toResult(() => templateService.syncAreaTemplateEquipment(user, templateId)).then((result) => {
+    if (result.ok) {
+      revalidatePath(`/cadastros/modelos-checklist/${templateId}`);
+      revalidatePath("/checklist/realizar");
+    }
+    return result;
   });
 }
 

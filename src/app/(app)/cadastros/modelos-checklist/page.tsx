@@ -1,7 +1,7 @@
 import { requireUser, requirePermission } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
 import { listTemplates } from "@/server/services/checklist-template.service";
-import { listEquipmentTypes } from "@/server/services/masterdata.service";
+import { listEquipmentTypes, listAreas } from "@/server/services/masterdata.service";
 import { PageHeader, PageBody } from "@/components/domain/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableBody, TableHead, TableCell, TableEmpty, TableRow } from "@/components/ui/table";
@@ -13,14 +13,14 @@ export default async function ModelosChecklistPage() {
   const user = await requireUser();
   requirePermission(user, PERMISSIONS.CHECKLIST_TEMPLATE_MANAGE);
 
-  const [templates, types] = await Promise.all([listTemplates(), listEquipmentTypes()]);
+  const [templates, types, areas] = await Promise.all([listTemplates(), listEquipmentTypes(), listAreas()]);
 
   return (
     <>
       <PageHeader
         title="Modelos de Checklist"
-        description="Modelos versionados de checklist, associados a tipos de equipamento."
-        actions={<CreateTemplateDialog types={types} />}
+        description="Modelos versionados de checklist, associados a tipos de equipamento ou a uma área inteira."
+        actions={<CreateTemplateDialog types={types} areas={areas} />}
       />
       <PageBody>
         <Card>
@@ -29,7 +29,7 @@ export default async function ModelosChecklistPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Nome</TableHead>
-                  <TableHead>Tipo de equipamento</TableHead>
+                  <TableHead>Escopo</TableHead>
                   <TableHead>Versão atual</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Equipamentos vinculados</TableHead>
@@ -40,7 +40,9 @@ export default async function ModelosChecklistPage() {
                 {templates.map((template) => (
                   <ClickableRow key={template.id} href={`/cadastros/modelos-checklist/${template.id}`}>
                     <TableCell className="font-medium">{template.name}</TableCell>
-                    <TableCell>{template.equipmentType.name}</TableCell>
+                    <TableCell>
+                      {template.scope === "AREA" ? `Área — ${template.area?.name ?? "—"}` : template.equipmentType.name}
+                    </TableCell>
                     <TableCell>
                       {template.versions[0] ? `V${template.versions[0].versionNumber}` : "—"}
                     </TableCell>
