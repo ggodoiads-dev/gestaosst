@@ -165,6 +165,7 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
   }
   if (p.has(PERMISSIONS.ACCIDENT_MANAGE)) {
     sst.push({ href: "/acidentes", label: "Investigação de Acidentes", icon: "accidents" });
+    sst.push({ href: "/acidentes/importar", label: "Importar Acidentes", icon: "qualificationImport" });
   }
   if (p.has(PERMISSIONS.ACTIVITY_MANAGE)) {
     sst.push({ href: "/atividades", label: "Atividades e Documentos", icon: "activities" });

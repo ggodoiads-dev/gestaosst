@@ -22,6 +22,9 @@ export type AccidentInput = {
   creditNumber?: string | null;
   involvedCollaboratorIds: string[];
   witnessCollaboratorIds: string[];
+  /** Só usado pela importação em lote de registros históricos — cadastro manual sempre abre "ABERTO". */
+  status?: AccidentStatus;
+  closedAt?: Date | null;
 };
 
 export function listAccidentsForUser(user: CurrentUser, filters: { status?: string } = {}) {
@@ -68,6 +71,9 @@ export async function createAccident(user: CurrentUser, data: AccidentInput) {
         sifClassification: data.isSif ? data.sifClassification : null,
         creditNumber: data.creditNumber,
         reportedById: user.id,
+        status: data.status ?? "ABERTO",
+        investigatedById: data.status && data.status !== "ABERTO" ? user.id : null,
+        closedAt: data.status === "CONCLUIDO" ? (data.closedAt ?? data.date) : null,
       },
     });
 
