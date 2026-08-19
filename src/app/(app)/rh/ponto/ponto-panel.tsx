@@ -1,22 +1,31 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
-import { Upload, AlertTriangle, CheckCircle2, Search } from "lucide-react";
+import { Upload, AlertTriangle, CheckCircle2, Search, Link2 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { FormField } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { uploadAfdtAction, getTimeClockReportAction, getChecklistAdherenceAction } from "@/server/actions/time-clock.actions";
+import {
+  uploadAfdtAction,
+  getTimeClockReportAction,
+  getChecklistAdherenceAction,
+  getUnmatchedTimeClockPisAction,
+  linkTimeClockPisAction,
+} from "@/server/actions/time-clock.actions";
 import type {
   TimeClockAnomaly,
   TimeClockAnomalyType,
   TimeClockImportSummary,
   ChecklistAdherenceReport,
+  UnmatchedTimeClockPis,
 } from "@/server/services/time-clock.service";
 import { JustifyChecklistDialog } from "@/components/domain/justify-checklist-dialog";
-import { formatDate, parseDateOnly } from "@/lib/dates";
+import { formatDate, formatDateTime, parseDateOnly } from "@/lib/dates";
 
 const ANOMALY_LABELS: Record<TimeClockAnomalyType, string> = {
   ATRASO: "Atraso",
@@ -37,12 +46,23 @@ type PontoPanelProps = {
   initialTo: string;
   initialAnomalies: TimeClockAnomaly[];
   initialAdherence: ChecklistAdherenceReport;
+  initialUnmatchedPis: UnmatchedTimeClockPis[];
+  collaborators: { id: string; name: string }[];
 };
 
-export function PontoPanel({ initialFrom, initialTo, initialAnomalies, initialAdherence }: PontoPanelProps) {
+export function PontoPanel({
+  initialFrom,
+  initialTo,
+  initialAnomalies,
+  initialAdherence,
+  initialUnmatchedPis,
+  collaborators,
+}: PontoPanelProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, startUpload] = useTransition();
   const [loadingReport, startReport] = useTransition();
+  const [linking, startLink] = useTransition();
+  const [linkingPis, setLinkingPis] = useState<string | null>(null);
 
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [summary, setSummary] = useState<TimeClockImportSummary | null>(null);
@@ -52,6 +72,8 @@ export function PontoPanel({ initialFrom, initialTo, initialAnomalies, initialAd
   const [reportError, setReportError] = useState<string | null>(null);
   const [anomalies, setAnomalies] = useState<TimeClockAnomaly[]>(initialAnomalies);
   const [adherence, setAdherence] = useState<ChecklistAdherenceReport>(initialAdherence);
+  const [unmatchedPis, setUnmatchedPis] = useState<UnmatchedTimeClockPis[]>(initialUnmatchedPis);
+  const [selectedCollaborator, setSelectedCollaborator] = useState<Record<string, string>>({});
 
   const justificationByKey = new Map(
     adherence.pendingDays.map((d) => [`${d.collaboratorId}-${d.date}`, d.justification]),
@@ -91,6 +113,28 @@ export function PontoPanel({ initialFrom, initialTo, initialAnomalies, initialAd
       setSummary(res.summary);
       if (fileInputRef.current) fileInputRef.current.value = "";
       fetchReport();
+      const unmatchedRes = await getUnmatchedTimeClockPisAction();
+      if (unmatchedRes.ok) setUnmatchedPis(unmatchedRes.items);
+    });
+  }
+
+  function handleLink(pis: string) {
+    const collaboratorId = selectedCollaborator[pis];
+    if (!collaboratorId) {
+      toast.error("Selecione um colaborador.");
+      return;
+    }
+    setLinkingPis(pis);
+    startLink(async () => {
+      const res = await linkTimeClockPisAction(pis, collaboratorId);
+      setLinkingPis(null);
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success(`${res.linkedRecords} marcação(ões) vinculada(s).`);
+      setUnmatchedPis((prev) => prev.filter((u) => u.pis !== pis));
+      fetchReport();
     });
   }
 
@@ -119,8 +163,8 @@ export function PontoPanel({ initialFrom, initialTo, initialAnomalies, initialAd
                   <AlertTriangle className="size-4 shrink-0 translate-y-0.5" />
                   <span>
                     {summary.unmatched} marcação(ões) de {summary.unmatchedPis.length} colaborador(es) não
-                    identificado(s) — PIS: {summary.unmatchedPis.join(", ")}. Cadastre o PIS certo do
-                    colaborador em RH e reimporte o mesmo arquivo.
+                    identificado(s). Vincule manualmente cada código no quadro &ldquo;Batidas não
+                    identificadas&rdquo; abaixo, ou cadastre o PIS certo em RH e reimporte o arquivo.
                   </span>
                 </p>
               )}
@@ -138,6 +182,68 @@ export function PontoPanel({ initialFrom, initialTo, initialAnomalies, initialAd
           </Button>
         </CardFooter>
       </Card>
+
+      {unmatchedPis.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Batidas não identificadas ({unmatchedPis.length})</CardTitle>
+            <CardDescription>
+              O arquivo do relógio não traz nome, só esse código — escolha o colaborador certo pra cada um.
+              Depois de vincular, o código vira o PIS dele e todo o histórico já importado se ajusta sozinho.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Código do relógio</TableHead>
+                  <TableHead>Marcações</TableHead>
+                  <TableHead>Período</TableHead>
+                  <TableHead>Colaborador</TableHead>
+                  <TableHead className="w-24" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {unmatchedPis.map((u) => (
+                  <TableRow key={u.pis}>
+                    <TableCell className="font-mono text-xs">{u.pis}</TableCell>
+                    <TableCell className="text-foreground-subtle">{u.recordCount}</TableCell>
+                    <TableCell className="text-foreground-subtle whitespace-nowrap">
+                      {formatDateTime(u.firstTimestamp)} — {formatDateTime(u.lastTimestamp)}
+                    </TableCell>
+                    <TableCell>
+                      <Select
+                        value={selectedCollaborator[u.pis] ?? ""}
+                        onValueChange={(v) => setSelectedCollaborator((prev) => ({ ...prev, [u.pis]: v }))}
+                      >
+                        <SelectTrigger className="w-56">
+                          <SelectValue placeholder="Selecione..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {collaborators.map((c) => (
+                            <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        loading={linking && linkingPis === u.pis}
+                        disabled={!selectedCollaborator[u.pis]}
+                        onClick={() => handleLink(u.pis)}
+                      >
+                        <Link2 className="size-4" /> Vincular
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

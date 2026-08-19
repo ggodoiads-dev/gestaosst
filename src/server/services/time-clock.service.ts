@@ -119,6 +119,67 @@ export async function importTimeClockFile(user: CurrentUser, buffer: Buffer): Pr
   };
 }
 
+export type UnmatchedTimeClockPis = {
+  pis: string;
+  recordCount: number;
+  firstTimestamp: Date;
+  lastTimestamp: Date;
+};
+
+/** Códigos do relógio de ponto sem colaborador vinculado — base pra reconciliação manual, já
+ * que o arquivo AFDT não traz nome nenhum, só esse código e os horários. */
+export async function listUnmatchedTimeClockPis(user: CurrentUser): Promise<UnmatchedTimeClockPis[]> {
+  requirePermission(user, PERMISSIONS.HR_MANAGE);
+
+  const groups = await db.timeClockRecord.groupBy({
+    by: ["pis"],
+    where: { collaboratorId: null },
+    _count: { _all: true },
+    _min: { timestamp: true },
+    _max: { timestamp: true },
+  });
+
+  return groups
+    .map((g) => ({
+      pis: g.pis,
+      recordCount: g._count._all,
+      firstTimestamp: g._min.timestamp!,
+      lastTimestamp: g._max.timestamp!,
+    }))
+    .sort((a, b) => b.recordCount - a.recordCount);
+}
+
+/** Vincula manualmente um código do relógio a um colaborador — usado quando não há como saber o
+ * PIS de antemão (o arquivo AFDT não traz nome). Preenche o PIS do colaborador só se ele ainda
+ * não tiver um (nunca sobrescreve um PIS já cadastrado por engano) e religa todas as marcações
+ * daquele código já importadas, sem precisar reimportar o arquivo. */
+export async function linkTimeClockPisToCollaborator(
+  user: CurrentUser,
+  pis: string,
+  collaboratorId: string,
+): Promise<{ linkedRecords: number }> {
+  requirePermission(user, PERMISSIONS.HR_MANAGE);
+
+  const collaborator = await db.collaborator.findUniqueOrThrow({ where: { id: collaboratorId } });
+
+  const result = await db.$transaction(async (tx) => {
+    if (!collaborator.pis) {
+      await tx.collaborator.update({ where: { id: collaboratorId }, data: { pis } });
+    }
+    return tx.timeClockRecord.updateMany({ where: { pis, collaboratorId: null }, data: { collaboratorId } });
+  });
+
+  await recordAudit({
+    userId: user.id,
+    action: "UPDATE",
+    entityType: "Collaborator",
+    entityId: collaboratorId,
+    newValue: { pis, linkedTimeClockRecords: result.count },
+  });
+
+  return { linkedRecords: result.count };
+}
+
 export type TimeClockAnomalyType = "ATRASO" | "FALTA" | "CHECKLIST_PENDENTE" | "BATIDA_IMPAR";
 
 export type TimeClockAnomaly = {

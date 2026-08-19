@@ -1,7 +1,8 @@
 import { requireUser, requirePermission } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
 import { PageHeader, PageBody } from "@/components/domain/page-header";
-import { getTimeClockReport, getChecklistAdherence } from "@/server/services/time-clock.service";
+import { getTimeClockReport, getChecklistAdherence, listUnmatchedTimeClockPis } from "@/server/services/time-clock.service";
+import { listCollaboratorsForUser } from "@/server/services/collaborator.service";
 import { PontoPanel } from "./ponto-panel";
 
 function toInputValue(date: Date): string {
@@ -19,9 +20,11 @@ export default async function PontoPage() {
   const from = new Date();
   from.setDate(from.getDate() - 13);
 
-  const [anomalies, adherence] = await Promise.all([
+  const [anomalies, adherence, unmatchedPis, collaborators] = await Promise.all([
     getTimeClockReport(user, { from, to }),
     getChecklistAdherence(user, { from, to }),
+    listUnmatchedTimeClockPis(user),
+    listCollaboratorsForUser(user, { onlyActive: true }),
   ]);
 
   return (
@@ -36,6 +39,8 @@ export default async function PontoPage() {
           initialTo={toInputValue(to)}
           initialAnomalies={anomalies}
           initialAdherence={adherence}
+          initialUnmatchedPis={unmatchedPis}
+          collaborators={collaborators.map((c) => ({ id: c.id, name: c.name }))}
         />
       </PageBody>
     </>

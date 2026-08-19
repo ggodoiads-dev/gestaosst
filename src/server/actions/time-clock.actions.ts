@@ -7,6 +7,7 @@ import type {
   TimeClockAnomaly,
   TimeClockImportSummary,
   ChecklistAdherenceReport,
+  UnmatchedTimeClockPis,
 } from "@/server/services/time-clock.service";
 import type { ChecklistJustificationReason } from "@/domain/time-clock/checklist-justification-reasons";
 import { parseDateOnly } from "@/lib/dates";
@@ -68,6 +69,35 @@ export async function getChecklistAdherenceAction(fromIso: string, toIso: string
     if (error instanceof ForbiddenError) return { ok: false, error: error.message };
     console.error("[time-clock] falha ao montar aderência de checklist:", error);
     return { ok: false, error: "Não foi possível montar a aderência." };
+  }
+}
+
+export type GetUnmatchedPisResult = { ok: true; items: UnmatchedTimeClockPis[] } | { ok: false; error: string };
+
+export async function getUnmatchedTimeClockPisAction(): Promise<GetUnmatchedPisResult> {
+  try {
+    const user = await requireUser();
+    const items = await timeClockService.listUnmatchedTimeClockPis(user);
+    return { ok: true, items };
+  } catch (error) {
+    if (error instanceof ForbiddenError) return { ok: false, error: error.message };
+    console.error("[time-clock] falha ao listar códigos não identificados:", error);
+    return { ok: false, error: "Não foi possível listar os códigos não identificados." };
+  }
+}
+
+export type LinkPisResult = { ok: true; linkedRecords: number } | { ok: false; error: string };
+
+export async function linkTimeClockPisAction(pis: string, collaboratorId: string): Promise<LinkPisResult> {
+  try {
+    const user = await requireUser();
+    const result = await timeClockService.linkTimeClockPisToCollaborator(user, pis, collaboratorId);
+    revalidatePath("/rh/ponto");
+    return { ok: true, linkedRecords: result.linkedRecords };
+  } catch (error) {
+    if (error instanceof ForbiddenError) return { ok: false, error: error.message };
+    console.error("[time-clock] falha ao vincular código ao colaborador:", error);
+    return { ok: false, error: "Não foi possível vincular esse código." };
   }
 }
 
