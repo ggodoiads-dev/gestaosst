@@ -48,6 +48,18 @@ const TYPE_ALIASES: Record<string, AccidentType> = {
   quase: "QUASE_ACIDENTE",
   doencaocupacional: "DOENCA_OCUPACIONAL",
   doenca: "DOENCA_OCUPACIONAL",
+  // Vocabulário de classificação de severidade de lesão (comum em exportações de sistemas
+  // corporativos de SST, ex: ABInbev) — "sem lesão" = quase acidente, os demais tiveram lesão.
+  incidentessemlesao: "QUASE_ACIDENTE",
+  semlesao: "QUASE_ACIDENTE",
+  faiprimeiroatendimentoambulatorial: "ACIDENTE_TIPICO",
+  fai: "ACIDENTE_TIPICO",
+  mdiacidentesemafastamentocomtrabalhocompativel: "ACIDENTE_TIPICO",
+  mdi: "ACIDENTE_TIPICO",
+  ltiacidentecomafastamento: "ACIDENTE_TIPICO",
+  lti: "ACIDENTE_TIPICO",
+  mtiacidentesemafastamento: "ACIDENTE_TIPICO",
+  mti: "ACIDENTE_TIPICO",
 };
 
 const SEVERITY_ALIASES: Record<string, Criticality> = {
@@ -62,8 +74,12 @@ const SIF_CLASS_ALIASES: Record<string, SifClassification> = {
   sifprecursor: "SIF_PRECURSOR",
   potencial: "SIF_POTENCIAL",
   sifpotencial: "SIF_POTENCIAL",
+  potential: "SIF_POTENCIAL",
+  sifpotential: "SIF_POTENCIAL",
   real: "SIF_REAL",
   sifreal: "SIF_REAL",
+  actual: "SIF_REAL",
+  sifactual: "SIF_REAL",
 };
 
 const STATUS_ALIASES: Record<string, AccidentStatus> = {
@@ -107,6 +123,7 @@ export type AccidentImportRowResult = {
   severityValue: Criticality;
   area: string | null;
   areaId?: string;
+  areaUnmatched?: boolean;
   description: string;
   immediateCause: string | null;
   rootCause: string | null;
@@ -235,21 +252,10 @@ export async function buildAccidentImportPreview(
       continue;
     }
 
+    // Área não cadastrada não bloqueia a linha — é um dado a mais, não uma chave obrigatória
+    // (diferente do import de equipamentos, onde área errada vincularia à unidade errada).
     const matchedArea = findArea(areaRaw);
-    if (areaRaw && !matchedArea) {
-      results.push({
-        ...base,
-        dateParsed,
-        typeValue,
-        severityValue: resolveSeverity(severityRaw, "MEDIA"),
-        isSif: false,
-        sifClassification: null,
-        status: "CONCLUIDO",
-        action: "error",
-        error: `Área "${areaRaw}" não cadastrada.`,
-      });
-      continue;
-    }
+    const areaUnmatched = !!areaRaw && !matchedArea;
 
     const isSif = parseBoolean(isSifRaw);
     const sifClassification = isSif && sifClassRaw ? (SIF_CLASS_ALIASES[normalize(sifClassRaw)] ?? null) : null;
@@ -261,6 +267,7 @@ export async function buildAccidentImportPreview(
       typeValue,
       severityValue: resolveSeverity(severityRaw, "MEDIA"),
       areaId: matchedArea?.id,
+      areaUnmatched,
       isSif,
       sifClassification,
       status,

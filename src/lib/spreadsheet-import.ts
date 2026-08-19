@@ -2,9 +2,30 @@ import ExcelJS from "exceljs";
 
 export type ParsedSheet = { headers: string[]; rows: string[][] };
 
-function cellToString(v: ExcelJS.CellValue): string {
+/** Formato numérico "hora pura" (sem parte de data) — ex: "h:mm AM/PM", "HH:mm:ss". Excel/ExcelJS
+ * guarda esse tipo de célula como Date com a data-base 1899/1900 (herdado do Lotus 1-2-3); só a
+ * hora é significativa. Distingue pelo padrão de formatação em vez do valor, que é mais confiável
+ * que checar o ano (o "ano zero" do Excel varia por regionalização). */
+function isTimeOnlyFormat(numFmt: string | undefined): boolean {
+  if (!numFmt) return false;
+  const fmt = numFmt.toLowerCase();
+  // "h"/"s" só aparecem em formato de hora; "m" é ambíguo (minuto perto de h/s, mês perto de d/y),
+  // por isso não entra na checagem — só "y"/"d" são indicadores de data sem ambiguidade.
+  const hasTimeMarker = /[hs]/.test(fmt);
+  const hasDateMarker = /[yd]/.test(fmt);
+  return hasTimeMarker && !hasDateMarker;
+}
+
+function cellToString(v: ExcelJS.CellValue, numFmt?: string): string {
   if (v === null || v === undefined) return "";
   if (v instanceof Date) {
+    if (isTimeOnlyFormat(numFmt)) {
+      // ExcelJS constrói esse Date a partir do número serial assumindo UTC (Excel não guarda fuso
+      // horário) — ler em UTC evita que o fuso local desloque a hora certa.
+      const hh = String(v.getUTCHours()).padStart(2, "0");
+      const min = String(v.getUTCMinutes()).padStart(2, "0");
+      return `${hh}:${min}`;
+    }
     const yyyy = v.getFullYear();
     const mm = String(v.getMonth() + 1).padStart(2, "0");
     const dd = String(v.getDate()).padStart(2, "0");
@@ -47,7 +68,7 @@ export async function parseSpreadsheet(buffer: Buffer, filename: string): Promis
       // Célula mesclada (comum em planilhas de RH pra agrupar categoria/tipo em várias linhas):
       // só a célula do topo/esquerda da mesclagem carrega o valor real, as outras ficam vazias.
       const source = cell.isMerged && cell.master ? cell.master : cell;
-      values.push(cellToString(source.value));
+      values.push(cellToString(source.value, source.numFmt));
     });
     allRows.push(values);
   });

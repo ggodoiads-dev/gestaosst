@@ -239,7 +239,14 @@ export function ImportWizard() {
                       {row.typeValue ? TYPE_LABELS[row.typeValue] : row.type || "—"}
                     </TableCell>
                     <TableCell className="text-foreground-subtle">{row.severityValue}</TableCell>
-                    <TableCell className="text-foreground-subtle">{row.area ?? "—"}</TableCell>
+                    <TableCell className="text-foreground-subtle">
+                      {row.area ?? "—"}
+                      {row.areaUnmatched && (
+                        <Badge tone="warning" title="Área não cadastrada — o acidente é criado assim mesmo, sem área vinculada." className="ml-1.5">
+                          não encontrada
+                        </Badge>
+                      )}
+                    </TableCell>
                     <TableCell className="text-foreground-subtle">{STATUS_LABELS[row.status]}</TableCell>
                     <TableCell className="text-foreground-subtle">
                       {row.involvedCollaboratorIds.length > 0 && `${row.involvedCollaboratorIds.length} ok`}
