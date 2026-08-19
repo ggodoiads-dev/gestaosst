@@ -101,8 +101,8 @@ export function PontoPanel({ initialFrom, initialTo, initialAnomalies, initialAd
           <CardTitle>Importar arquivo AFDT</CardTitle>
           <CardDescription>
             Envie o arquivo .txt do relógio de ponto (padrão Portaria 671/2021). As batidas são identificadas
-            pelo PIS — garanta que o PIS de cada colaborador esteja preenchido na planilha de importação de RH
-            antes de importar.
+            pelo PIS de cada colaborador — se o relógio estiver configurado com a matrícula interna em vez do
+            PIS de verdade, o sistema tenta casar pela matrícula também.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
@@ -119,8 +119,8 @@ export function PontoPanel({ initialFrom, initialTo, initialAnomalies, initialAd
                   <AlertTriangle className="size-4 shrink-0 translate-y-0.5" />
                   <span>
                     {summary.unmatched} marcação(ões) de {summary.unmatchedPis.length} colaborador(es) não
-                    identificado(s) — PIS: {summary.unmatchedPis.join(", ")}. Cadastre o PIS certo em RH e
-                    reimporte o mesmo arquivo.
+                    identificado(s) — número do relógio: {summary.unmatchedPis.join(", ")}. Cadastre esse
+                    número como PIS ou como matrícula do colaborador certo em RH e reimporte o mesmo arquivo.
                   </span>
                 </p>
               )}
