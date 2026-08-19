@@ -38,15 +38,16 @@ export type TimeClockImportSummary = {
 };
 
 /**
- * Importa um arquivo AFDT: casa cada marcação pela matrícula do colaborador e grava de forma
+ * Importa um arquivo AFDT: casa cada marcação pelo PIS do colaborador e grava de forma
  * idempotente (`createMany` + `skipDuplicates`, chave `[pis, timestamp, markNumber]`) — reenviar
- * o mesmo arquivo não duplica nada. Quando a matrícula de uma marcação já gravada antes (sem
+ * o mesmo arquivo não duplica nada. Quando o PIS de uma marcação já gravada antes (sem
  * colaborador correspondente na época) passa a ter dono, o `updateMany` final corrige o vínculo
  * sem precisar reimportar tudo de novo.
  *
- * O campo do arquivo AFDT é rotulado "PIS" pelo padrão (Portaria 671/2021), mas o relógio de
- * ponto (REP) desta empresa está configurado com a matrícula interna nesse campo, não o PIS de
- * verdade do governo — por isso o casamento é só por `Collaborator.matricula`.
+ * O código do relógio de ponto (REP) tem 11 dígitos — formato padrão de PIS/NIT no Brasil —, bem
+ * diferente das matrículas curtas cadastradas (5-6 dígitos). Por isso o casamento é só por
+ * `Collaborator.pis`, também com fallback por `matricula` pro caso raro de empresa que configura
+ * o relógio com a matrícula interna nesse campo (não é o caso desta base hoje).
  */
 export async function importTimeClockFile(user: CurrentUser, buffer: Buffer): Promise<TimeClockImportSummary> {
   requirePermission(user, PERMISSIONS.HR_MANAGE);
@@ -56,10 +57,15 @@ export async function importTimeClockFile(user: CurrentUser, buffer: Buffer): Pr
   const distinctPis = [...new Set(marks.map((m) => m.pis))];
   const collaborators =
     distinctPis.length > 0
-      ? await db.collaborator.findMany({ where: { matricula: { in: distinctPis } } })
+      ? await db.collaborator.findMany({
+          where: { OR: [{ pis: { in: distinctPis } }, { matricula: { in: distinctPis } }] },
+        })
       : [];
 
   const collaboratorByPis = new Map<string, (typeof collaborators)[number]>();
+  for (const c of collaborators) {
+    if (c.pis && distinctPis.includes(c.pis) && !collaboratorByPis.has(c.pis)) collaboratorByPis.set(c.pis, c);
+  }
   for (const c of collaborators) {
     if (c.matricula && distinctPis.includes(c.matricula) && !collaboratorByPis.has(c.matricula)) {
       collaboratorByPis.set(c.matricula, c);
