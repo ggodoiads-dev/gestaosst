@@ -43,7 +43,7 @@ export default async function AcidenteDetailPage({
           <div className="flex items-center gap-2">
             <CriticalityBadge value={accident.severity} />
             <AccidentStatusBadge status={accident.status} />
-            <AccidentStatusActions id={accident.id} status={accident.status} />
+            <AccidentStatusActions id={accident.id} status={accident.status} code={accident.code} />
           </div>
         }
       />

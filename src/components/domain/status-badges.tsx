@@ -119,6 +119,7 @@ const ACCIDENT_STATUS_MAP: Record<AccidentStatus, { label: string; tone: "succes
   ABERTO: { label: "Aberto", tone: "danger" },
   EM_INVESTIGACAO: { label: "Em investigação", tone: "warning" },
   CONCLUIDO: { label: "Concluído", tone: "success" },
+  CANCELADA: { label: "Cancelado", tone: "neutral" },
 };
 
 export function AccidentStatusBadge({ status }: { status: AccidentStatus }) {

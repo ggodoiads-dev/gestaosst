@@ -946,6 +946,7 @@ enum AccidentStatus {
   ABERTO
   EM_INVESTIGACAO
   CONCLUIDO
+  CANCELADA
 }
 
 enum InvolvementRole {

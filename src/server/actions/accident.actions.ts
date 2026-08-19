@@ -66,7 +66,10 @@ export async function createAccidentAction(_prev: ActionResult, formData: FormDa
   });
 }
 
-export async function updateAccidentStatusAction(id: string, status: "ABERTO" | "EM_INVESTIGACAO" | "CONCLUIDO") {
+export async function updateAccidentStatusAction(
+  id: string,
+  status: "ABERTO" | "EM_INVESTIGACAO" | "CONCLUIDO" | "CANCELADA",
+) {
   const user = await requireUser();
   await accidentService.updateAccidentStatus(user, id, status);
   revalidatePath("/acidentes");
