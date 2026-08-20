@@ -14,22 +14,16 @@ export async function GET(request: NextRequest) {
     },
   });
 
-  const trapped = questions
-    .map((q) => ({
-      questionId: q.id,
-      title: q.title,
-      templateName: q.version.template.name,
-      versionStatus: q.version.status,
-      rules: q.rules.map((r) => ({ triggerValue: r.triggerValue, isCritical: r.isCritical, blocksEquipment: r.blocksEquipment, severity: r.severity, createsNonconformity: r.createsNonconformity })),
-    }))
-    .filter((q) => q.rules.some((r) => r.isCritical && !(r.blocksEquipment || r.severity === "CRITICA")));
-
-  const noRuleAtAll = questions.filter((q) => q.rules.length === 0).length;
+  const all = questions.map((q) => ({
+    questionId: q.id,
+    title: q.title,
+    templateName: q.version.template.name,
+    versionStatus: q.version.status,
+    rules: q.rules.map((r) => ({ triggerValue: r.triggerValue, isCritical: r.isCritical, blocksEquipment: r.blocksEquipment, severity: r.severity, createsNonconformity: r.createsNonconformity })),
+  }));
 
   return NextResponse.json({
     totalQuestions: questions.length,
-    questionsWithNoRuleAtAll: noRuleAtAll,
-    trappedCount: trapped.length,
-    trapped,
+    all,
   });
 }
