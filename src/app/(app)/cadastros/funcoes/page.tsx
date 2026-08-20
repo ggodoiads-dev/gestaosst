@@ -1,5 +1,6 @@
 import { requireUser } from "@/server/auth/current-user";
-import { listJobFunctions, listEpiTypes, getJobFunctionKit } from "@/server/services/epi.service";
+import { listJobFunctions, listEpiTypes, getJobFunctionKit, getJobFunctionRequiredChecklists } from "@/server/services/epi.service";
+import { listTemplates } from "@/server/services/checklist-template.service";
 import { PageHeader, PageBody } from "@/components/domain/page-header";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, TableEmpty } from "@/components/ui/table";
@@ -8,11 +9,18 @@ import { SoftDeleteButton, ReactivateButton } from "@/components/domain/soft-del
 import { setJobFunctionActiveAction } from "@/server/actions/epi.actions";
 import { CreateJobFunctionDialog } from "./job-function-form-dialog";
 import { EditJobFunctionKitDialog } from "./job-function-kit-dialog";
+import { EditJobFunctionChecklistsDialog } from "./job-function-checklist-dialog";
 
 export default async function FuncoesCadastroPage() {
   const user = await requireUser();
-  const [jobFunctions, epiTypes] = await Promise.all([listJobFunctions(user), listEpiTypes(user, { onlyActive: true })]);
+  const [jobFunctions, epiTypes, allTemplates] = await Promise.all([
+    listJobFunctions(user),
+    listEpiTypes(user, { onlyActive: true }),
+    listTemplates(),
+  ]);
   const kits = await Promise.all(jobFunctions.map((jf) => getJobFunctionKit(user, jf.id)));
+  const requiredChecklists = await Promise.all(jobFunctions.map((jf) => getJobFunctionRequiredChecklists(jf.id)));
+  const publishedTemplates = allTemplates.filter((t) => t.status === "PUBLICADO").map((t) => ({ id: t.id, name: t.name }));
 
   return (
     <>
@@ -32,19 +40,24 @@ export default async function FuncoesCadastroPage() {
                 <TableRow>
                   <TableHead>Nome</TableHead>
                   <TableHead>Kit de EPI</TableHead>
+                  <TableHead>Checklists obrigatórios</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="w-56" />
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {jobFunctions.length === 0 && <TableEmpty colSpan={4} />}
+                {jobFunctions.length === 0 && <TableEmpty colSpan={5} />}
                 {jobFunctions.map((jobFunction, index) => {
                   const kit = kits[index];
+                  const required = requiredChecklists[index]!;
                   return (
                     <TableRow key={jobFunction.id} className={!jobFunction.active ? "opacity-60" : undefined}>
                       <TableCell>{jobFunction.name}</TableCell>
                       <TableCell className="text-foreground-subtle">
                         {kit.length === 0 ? "Nenhum item" : kit.map((item) => item.epiType.name).join(", ")}
+                      </TableCell>
+                      <TableCell className="text-foreground-subtle">
+                        {required.length === 0 ? "Nenhum" : required.map((r) => r.template.name).join(", ")}
                       </TableCell>
                       <TableCell>
                         <Badge tone={jobFunction.active ? "success" : "neutral"}>
@@ -57,6 +70,11 @@ export default async function FuncoesCadastroPage() {
                             jobFunction={jobFunction}
                             epiTypes={epiTypes}
                             currentKit={kit.map((item) => ({ epiTypeId: item.epiTypeId, quantity: item.quantity }))}
+                          />
+                          <EditJobFunctionChecklistsDialog
+                            jobFunction={jobFunction}
+                            templates={publishedTemplates}
+                            currentTemplateIds={required.map((r) => r.templateId)}
                           />
                           {jobFunction.active ? (
                             <SoftDeleteButton

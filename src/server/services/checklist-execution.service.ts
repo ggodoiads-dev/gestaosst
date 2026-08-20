@@ -52,6 +52,14 @@ export async function listChecklistBoardForUser(
   const canSeeAll = user.permissions.has(PERMISSIONS.EQUIPMENT_VIEW_ALL_AREAS);
   const allowedAreaIds = canSeeAll ? undefined : Array.from(user.areaIds);
 
+  // Se a função do colaborador logado exige checklist(s) específico(s), a tela mostra só
+  // esses — não todo equipamento/área que ele tecnicamente enxerga pela permissão de área.
+  const collaborator = await db.collaborator.findFirst({
+    where: { userId: user.id },
+    select: { function: { select: { requiredChecklists: { select: { templateId: true } } } } },
+  });
+  const requiredTemplateIds = new Set(collaborator?.function?.requiredChecklists.map((r) => r.templateId) ?? []);
+
   const equipments = await db.equipment.findMany({
     where: {
       active: true,
@@ -139,7 +147,8 @@ export async function listChecklistBoardForUser(
     });
   }
 
-  return [...equipmentItems, ...areaGroups.values()];
+  const allItems = [...equipmentItems, ...areaGroups.values()];
+  return requiredTemplateIds.size > 0 ? allItems.filter((item) => requiredTemplateIds.has(item.templateId)) : allItems;
 }
 
 /**

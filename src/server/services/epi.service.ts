@@ -162,6 +162,36 @@ export async function setJobFunctionKit(
   return getJobFunctionKit(user, jobFunctionId);
 }
 
+export function getJobFunctionRequiredChecklists(jobFunctionId: string) {
+  return db.jobFunctionRequiredChecklist.findMany({
+    where: { functionId: jobFunctionId },
+    include: { template: true },
+    orderBy: { template: { name: "asc" } },
+  });
+}
+
+/** Substitui a lista completa de checklists obrigatórios de uma função — quem tiver essa
+ * função passa a ser cobrado especificamente por esses templates (ver evaluateRange em
+ * time-clock.service.ts e listChecklistBoardForUser em checklist-execution.service.ts). */
+export async function setJobFunctionRequiredChecklists(user: CurrentUser, jobFunctionId: string, templateIds: string[]) {
+  requirePermission(user, PERMISSIONS.CHECKLIST_TEMPLATE_MANAGE);
+
+  await db.$transaction(async (tx) => {
+    await tx.jobFunctionRequiredChecklist.deleteMany({ where: { functionId: jobFunctionId } });
+    if (templateIds.length > 0) {
+      await tx.jobFunctionRequiredChecklist.createMany({
+        data: templateIds.map((templateId) => ({ functionId: jobFunctionId, templateId })),
+      });
+    }
+    await recordAudit(
+      { userId: user.id, action: "UPDATE", entityType: "JobFunctionRequiredChecklist", entityId: jobFunctionId, newValue: templateIds },
+      tx,
+    );
+  });
+
+  return getJobFunctionRequiredChecklists(jobFunctionId);
+}
+
 // =========================================================================
 // Entregas de EPI (ficha do colaborador)
 // =========================================================================

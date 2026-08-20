@@ -110,6 +110,23 @@ export async function setJobFunctionKitAction(
   });
 }
 
+const requiredChecklistsSchema = z.object({
+  jobFunctionId: z.string().min(1),
+  templateIds: z.array(z.string().min(1)),
+});
+
+export async function setJobFunctionRequiredChecklistsAction(
+  jobFunctionId: string,
+  templateIds: string[],
+): Promise<ActionResult> {
+  return toResult(async () => {
+    const user = await requireUser();
+    const parsed = requiredChecklistsSchema.parse({ jobFunctionId, templateIds });
+    await epiService.setJobFunctionRequiredChecklists(user, parsed.jobFunctionId, parsed.templateIds);
+    revalidatePath("/cadastros/funcoes");
+  });
+}
+
 // =========================================================================
 // Entregas de EPI (ficha do colaborador)
 // =========================================================================

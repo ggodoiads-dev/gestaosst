@@ -316,9 +316,10 @@ model ChecklistTemplate {
   area          Area?         @relation(fields: [areaId], references: [id])
   createdBy     User          @relation("TemplateCreatedBy", fields: [createdById], references: [id])
 
-  versions    ChecklistVersion[]
-  assignments EquipmentChecklistAssignment[]
-  schedules   ChecklistSchedule[]
+  versions            ChecklistVersion[]
+  assignments         EquipmentChecklistAssignment[]
+  schedules           ChecklistSchedule[]
+  requiredByFunctions JobFunctionRequiredChecklist[]
 
   @@index([equipmentTypeId])
   @@index([areaId])
@@ -869,9 +870,10 @@ model JobFunction {
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
 
-  collaborators Collaborator[]
-  kitItems      JobFunctionEpiKitItem[]
-  userFunctions UserFunction[]
+  collaborators      Collaborator[]
+  kitItems           JobFunctionEpiKitItem[]
+  userFunctions      UserFunction[]
+  requiredChecklists JobFunctionRequiredChecklist[]
 }
 
 model JobFunctionEpiKitItem {
@@ -885,6 +887,23 @@ model JobFunctionEpiKitItem {
 
   @@unique([jobFunctionId, epiTypeId])
   @@index([epiTypeId])
+}
+
+/** Checklist(s) que todo colaborador de uma função precisa realizar por dia — ex: função
+ * "Amarrador" exige o checklist de Amarração. Quando configurado, isso passa a valer sozinho
+ * (independe do Collaborator.requiresChecklist manual) tanto na cobrança de pendência
+ * (time-clock.service.ts) quanto na tela de Realizar Checklist (só mostra o que é da função). */
+model JobFunctionRequiredChecklist {
+  id         String   @id @default(uuid())
+  functionId String
+  templateId String
+  createdAt  DateTime @default(now())
+
+  function JobFunction       @relation(fields: [functionId], references: [id])
+  template ChecklistTemplate @relation(fields: [templateId], references: [id])
+
+  @@unique([functionId, templateId])
+  @@index([templateId])
 }
 
 model EpiType {

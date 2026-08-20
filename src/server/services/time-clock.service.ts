@@ -310,7 +310,10 @@ async function evaluateRange(range: { from: Date; to: Date }, options?: { areaId
 
   const collaborators = await db.collaborator.findMany({
     where: { active: true, areaId: options?.areaIds ? { in: options.areaIds } : undefined },
-    include: { turno: { include: { scheduleType: true } } },
+    include: {
+      turno: { include: { scheduleType: true } },
+      function: { include: { requiredChecklists: { select: { templateId: true, template: { select: { name: true } } } } } },
+    },
   });
   const collaboratorIds = collaborators.map((c) => c.id);
   if (collaboratorIds.length === 0) return { anomalies: [], checklistLedger: [] };
@@ -328,7 +331,7 @@ async function evaluateRange(range: { from: Date; to: Date }, options?: { areaId
     userIds.length > 0
       ? db.checklistExecution.findMany({
           where: { executedById: { in: userIds }, startedAt: { gte: rangeStartUtc, lte: rangeEndUtc } },
-          select: { executedById: true, startedAt: true },
+          select: { executedById: true, startedAt: true, checklistVersion: { select: { templateId: true } } },
         })
       : Promise.resolve([]),
   ]);
@@ -348,11 +351,17 @@ async function evaluateRange(range: { from: Date; to: Date }, options?: { areaId
   const noteByKey = new Map(notes.map((n) => [`${n.collaboratorId}-${dayKeyFromLocalDate(n.date)}`, n]));
 
   const executionDaysByUser = new Map<string, Set<string>>();
+  const executionTemplateDaysByUser = new Map<string, Set<string>>();
   for (const exec of executions) {
     const day = dayKeyFromTimestamp(exec.startedAt);
     const set = executionDaysByUser.get(exec.executedById);
     if (set) set.add(day);
     else executionDaysByUser.set(exec.executedById, new Set([day]));
+
+    const templateKey = `${exec.executedById}-${exec.checklistVersion.templateId}`;
+    const templateSet = executionTemplateDaysByUser.get(templateKey);
+    if (templateSet) templateSet.add(day);
+    else executionTemplateDaysByUser.set(templateKey, new Set([day]));
   }
 
   const anomalies: TimeClockAnomaly[] = [];
@@ -413,7 +422,27 @@ async function evaluateRange(range: { from: Date; to: Date }, options?: { areaId
           });
         }
 
-        if (collaborator.requiresChecklist) {
+        const requiredByFunction = collaborator.function?.requiredChecklists ?? [];
+
+        if (requiredByFunction.length > 0) {
+          const missing = requiredByFunction.filter(
+            (r) => !(collaborator.userId && executionTemplateDaysByUser.get(`${collaborator.userId}-${r.templateId}`)?.has(dayKey)),
+          );
+          const done = missing.length === 0;
+          checklistLedger.push({ collaboratorId: collaborator.id, collaboratorName: collaborator.name, date: dayKey, done });
+
+          if (!done) {
+            anomalies.push({
+              collaboratorId: collaborator.id,
+              collaboratorName: collaborator.name,
+              date: dayKey,
+              type: "CHECKLIST_PENDENTE",
+              detail: collaborator.userId
+                ? `Bateu ponto mas não realizou o checklist obrigatório da função (${missing.map((m) => m.template.name).join(", ")})`
+                : "Precisa de checklist, mas ainda não tem acesso ao sistema pra registrar",
+            });
+          }
+        } else if (collaborator.requiresChecklist) {
           const done = collaborator.userId ? Boolean(executionDaysByUser.get(collaborator.userId)?.has(dayKey)) : false;
           checklistLedger.push({ collaboratorId: collaborator.id, collaboratorName: collaborator.name, date: dayKey, done });
 
