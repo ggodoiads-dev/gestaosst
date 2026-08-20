@@ -91,3 +91,24 @@ export async function createQualificationRecordAction(_prev: ActionResult, formD
     revalidatePath(`/colaboradores/${parsed.collaboratorId}`);
   });
 }
+
+export async function updateQualificationRecordAction(_prev: ActionResult, formData: FormData) {
+  return toResult(async () => {
+    const user = await requireUser();
+    const id = String(formData.get("id"));
+    const parsed = qualificationRecordSchema.parse({
+      collaboratorId: formData.get("collaboratorId"),
+      qualificationTypeId: formData.get("qualificationTypeId"),
+      completedDate: formData.get("completedDate"),
+      notes: formData.get("notes") || null,
+    });
+    await qualificationService.updateQualificationRecord(user, id, {
+      collaboratorId: parsed.collaboratorId,
+      qualificationTypeId: parsed.qualificationTypeId,
+      completedDate: parseDateOnly(parsed.completedDate),
+      notes: parsed.notes,
+    });
+    revalidatePath("/qualificacoes");
+    revalidatePath(`/colaboradores/${parsed.collaboratorId}`);
+  });
+}

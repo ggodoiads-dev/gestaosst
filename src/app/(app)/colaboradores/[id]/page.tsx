@@ -36,7 +36,7 @@ import { RegisterEpiDeliveryDialog } from "./register-epi-delivery-dialog";
 import { MarkEpiReturnedButton } from "./mark-epi-returned-button";
 import { ActivityAptitudeDialog } from "./activity-aptitude-dialog";
 import { EquipmentAptitudeDialog } from "./equipment-aptitude-dialog";
-import { CreateQualificationRecordDialog } from "@/app/(app)/qualificacoes/qualification-record-dialog";
+import { CreateQualificationRecordDialog, EditQualificationRecordDialog } from "@/app/(app)/qualificacoes/qualification-record-dialog";
 import { CreateWarningDialog, DeleteWarningButton } from "./warning-dialog";
 
 const EPI_REASON_LABELS: Record<string, string> = {
@@ -265,10 +265,26 @@ export default async function ColaboradorDetailPage({
               )}
               {currentQualifications.map((record) => {
                 const status = qualificationStatus(record.expiresAt);
-                return (
-                  <Badge key={record.id} tone={status.tone}>
+                const badge = (
+                  <Badge tone={status.tone}>
                     {record.qualificationType.name} — {status.label}
                   </Badge>
+                );
+                if (!canManageQualifications) return <span key={record.id}>{badge}</span>;
+                return (
+                  <EditQualificationRecordDialog
+                    key={record.id}
+                    record={{
+                      id: record.id,
+                      collaboratorId: record.collaboratorId,
+                      qualificationTypeId: record.qualificationTypeId,
+                      completedDate: record.completedDate,
+                      notes: record.notes,
+                    }}
+                    collaborators={[collaborator]}
+                    types={qualificationTypes}
+                    trigger={badge}
+                  />
                 );
               })}
             </CardContent>

@@ -34,10 +34,30 @@ export async function createQualificationType(user: CurrentUser, data: Qualifica
   return type;
 }
 
+/** Editar a validade de um tipo (ex: 24 meses -> 12) só valeria pros próximos registros se
+ * `expiresAt` não fosse recalculado aqui — como ele é gravado uma vez na criação do registro
+ * (createQualificationRecord), sem esse recálculo em cascata os QR codes e o painel continuavam
+ * mostrando o vencimento antigo pra quem já tinha o registro cadastrado antes da edição. */
 export async function updateQualificationType(user: CurrentUser, id: string, data: QualificationTypeInput) {
   requirePermission(user, PERMISSIONS.QUALIFICATION_MANAGE);
   const before = await db.qualificationType.findUniqueOrThrow({ where: { id } });
-  const type = await db.qualificationType.update({ where: { id }, data });
+
+  const type = await db.$transaction(async (tx) => {
+    const updated = await tx.qualificationType.update({ where: { id }, data });
+
+    if (before.validityMonths !== data.validityMonths) {
+      const records = await tx.qualificationRecord.findMany({ where: { qualificationTypeId: id } });
+      for (const record of records) {
+        const expiresAt = data.validityMonths ? addMonths(record.completedDate, data.validityMonths) : null;
+        if (expiresAt?.getTime() !== record.expiresAt?.getTime()) {
+          await tx.qualificationRecord.update({ where: { id: record.id }, data: { expiresAt } });
+        }
+      }
+    }
+
+    return updated;
+  });
+
   await recordAudit({
     userId: user.id,
     action: "UPDATE",
@@ -98,6 +118,35 @@ export async function createQualificationRecord(user: CurrentUser, data: Qualifi
       tx,
     );
     return created;
+  });
+
+  return record;
+}
+
+/** Corrige um registro já lançado (NR errada, data errada) direto do perfil do colaborador —
+ * recalcula expiresAt a partir da validade atual do tipo (pode ter mudado desde o lançamento). */
+export async function updateQualificationRecord(user: CurrentUser, id: string, data: QualificationRecordInput) {
+  requirePermission(user, PERMISSIONS.QUALIFICATION_MANAGE);
+  const before = await db.qualificationRecord.findUniqueOrThrow({ where: { id } });
+  const type = await db.qualificationType.findUniqueOrThrow({ where: { id: data.qualificationTypeId } });
+  const expiresAt = type.validityMonths ? addMonths(data.completedDate, type.validityMonths) : null;
+
+  const record = await db.$transaction(async (tx) => {
+    const updated = await tx.qualificationRecord.update({
+      where: { id },
+      data: {
+        collaboratorId: data.collaboratorId,
+        qualificationTypeId: data.qualificationTypeId,
+        completedDate: data.completedDate,
+        expiresAt,
+        notes: data.notes ?? null,
+      },
+    });
+    await recordAudit(
+      { userId: user.id, action: "UPDATE", entityType: "QualificationRecord", entityId: id, previousValue: before, newValue: { ...data, expiresAt } },
+      tx,
+    );
+    return updated;
   });
 
   return record;
