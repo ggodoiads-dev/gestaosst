@@ -8,18 +8,18 @@ import { uploadActivityDocumentAction } from "@/server/actions/activity.actions"
 import { attachmentUrl } from "@/lib/attachment-url";
 import { formatDateTime } from "@/lib/dates";
 
-type CurrentDoc = { path: string; filename: string; uploadedAt: Date; uploadedBy: { name: string } } | null;
+type Doc = { id: string; path: string; filename: string; uploadedAt: Date; uploadedBy: { name: string } };
 
 export function ActivityDocumentUpload({
   activityId,
   docType,
   label,
-  current,
+  documents,
 }: {
   activityId: string;
   docType: "POP" | "AR_VR" | "LISTA_TREINAMENTO";
   label: string;
-  current: CurrentDoc;
+  documents: Doc[];
 }) {
   const [uploading, setUploading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -34,18 +34,18 @@ export function ActivityDocumentUpload({
       toast.error(result.error);
       return;
     }
-    toast.success(`${label} atualizado.`);
+    toast.success(`${label} anexado.`);
     if (inputRef.current) inputRef.current.value = "";
   }
 
   return (
     <div className="flex flex-col gap-2 rounded-md border border-border p-3">
       <div className="flex items-center justify-between">
-        <p className="text-sm font-medium text-foreground">{label}</p>
+        <p className="text-sm font-medium text-foreground">{label} {documents.length > 0 && `(${documents.length})`}</p>
         <input
           ref={inputRef}
           type="file"
-          accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+          accept=".pdf,.doc,.docx,.ppt,.pptx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation"
           className="hidden"
           onChange={(e) => {
             const file = e.target.files?.[0];
@@ -59,7 +59,7 @@ export function ActivityDocumentUpload({
           loading={uploading}
         >
           {!uploading && <Upload className="size-3.5" />}
-          {current ? "Substituir" : "Enviar"}
+          Adicionar
         </Button>
       </div>
       {uploading && (
@@ -67,23 +67,27 @@ export function ActivityDocumentUpload({
           <Loader2 className="size-3.5 animate-spin" /> Enviando...
         </p>
       )}
-      {current ? (
-        <a
-          href={attachmentUrl(current.path)}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-2 text-sm text-accent hover:underline"
-        >
-          <FileText className="size-4 shrink-0" />
-          <span className="truncate">{current.filename}</span>
-        </a>
-      ) : (
+      {documents.length === 0 ? (
         <p className="text-sm text-foreground-subtle">Nenhum documento enviado ainda.</p>
-      )}
-      {current && (
-        <p className="text-xs text-foreground-subtle">
-          Enviado em {formatDateTime(current.uploadedAt)} por {current.uploadedBy.name}
-        </p>
+      ) : (
+        <div className="flex flex-col gap-1.5">
+          {documents.map((doc) => (
+            <div key={doc.id} className="flex flex-col gap-0.5">
+              <a
+                href={attachmentUrl(doc.path)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 text-sm text-accent hover:underline"
+              >
+                <FileText className="size-4 shrink-0" />
+                <span className="truncate">{doc.filename}</span>
+              </a>
+              <p className="pl-6 text-xs text-foreground-subtle">
+                Enviado em {formatDateTime(doc.uploadedAt)} por {doc.uploadedBy.name}
+              </p>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );

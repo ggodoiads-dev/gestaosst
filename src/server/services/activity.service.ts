@@ -64,11 +64,11 @@ export async function getActivityDetail(user: CurrentUser, id: string) {
     }),
   ]);
 
-  const currentPop = documents.find((d) => d.docType === "POP") ?? null;
-  const currentArVr = documents.find((d) => d.docType === "AR_VR") ?? null;
-  const currentListaTreinamento = documents.find((d) => d.docType === "LISTA_TREINAMENTO") ?? null;
+  const popDocs = documents.filter((d) => d.docType === "POP");
+  const arVrDocs = documents.filter((d) => d.docType === "AR_VR");
+  const listaTreinamentoDocs = documents.filter((d) => d.docType === "LISTA_TREINAMENTO");
 
-  return { activity, documents, currentPop, currentArVr, currentListaTreinamento };
+  return { activity, documents, popDocs, arVrDocs, listaTreinamentoDocs };
 }
 
 export async function createActivity(user: CurrentUser, data: ActivityInput) {

@@ -15,7 +15,7 @@ export default async function AtividadeDetailPage({
 }) {
   const { id } = await params;
   const user = await requireUser();
-  const { activity, documents, currentPop, currentArVr, currentListaTreinamento } = await getActivityDetail(user, id);
+  const { activity, documents, popDocs, arVrDocs, listaTreinamentoDocs } = await getActivityDetail(user, id);
 
   return (
     <>
@@ -37,13 +37,13 @@ export default async function AtividadeDetailPage({
               <CardTitle>Documentos</CardTitle>
             </CardHeader>
             <CardContent className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <ActivityDocumentUpload activityId={activity.id} docType="POP" label="POP" current={currentPop} />
-              <ActivityDocumentUpload activityId={activity.id} docType="AR_VR" label="AR/VR" current={currentArVr} />
+              <ActivityDocumentUpload activityId={activity.id} docType="POP" label="POP" documents={popDocs} />
+              <ActivityDocumentUpload activityId={activity.id} docType="AR_VR" label="AR/VR" documents={arVrDocs} />
               <ActivityDocumentUpload
                 activityId={activity.id}
                 docType="LISTA_TREINAMENTO"
                 label="Lista de Treinamento"
-                current={currentListaTreinamento}
+                documents={listaTreinamentoDocs}
               />
             </CardContent>
           </Card>
