@@ -109,8 +109,14 @@ export async function buildQualificationImportPreview(
   requirePermission(user, PERMISSIONS.QUALIFICATION_MANAGE);
 
   const types = await db.qualificationType.findMany({ where: { active: true } });
-  const findType = (name: string | null) =>
-    name ? types.find((t) => t.name.trim().toLowerCase() === name.trim().toLowerCase()) : undefined;
+  // normalize() já tira acento/espaço/hífen — assim "NR-11", "NR 11" e "NR11" batem entre si, e
+  // um sinônimo cadastrado tipo "Operador de Empilhadeira" também casa direto com o tipo
+  // canônico "NR-11" sem precisar bater a string exata.
+  const findType = (name: string | null) => {
+    if (!name) return undefined;
+    const target = normalize(name);
+    return types.find((t) => normalize(t.name) === target || t.aliases.some((alias) => normalize(alias) === target));
+  };
 
   const results: QualificationImportRowResult[] = [];
 

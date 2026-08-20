@@ -42,10 +42,32 @@ async function getRequiredEquipmentByArea(): Promise<Map<string, RequiredEquipme
   return byArea;
 }
 
+const collaboratorWithFunctionInclude = {
+  turno: { include: { scheduleType: true } },
+  area: true,
+  function: { include: { requiredChecklists: { include: { template: { select: { name: true } } } } } },
+} as const;
+
+/** O que é exigido do colaborador num dia: se a função dele tiver checklist(s) obrigatório(s)
+ * configurado(s) (JobFunctionRequiredChecklist), é isso especificamente — o mesmo critério já
+ * usado em evaluateRange (time-clock.service.ts) pro relatório de pendência. Sem função
+ * configurada, cai no comportamento antigo (todo equipamento ativo da própria área). O "id" de
+ * cada item, nos dois modos, é a chave usada pra bater contra as execuções concluídas do dia. */
+function getRequiredItemsForCollaborator(
+  collaborator: { areaId: string | null; function: { requiredChecklists: { templateId: string; template: { name: string } }[] } | null },
+  requiredByArea: Map<string, RequiredEquipment[]>,
+): { mode: "function" | "area"; items: RequiredEquipment[] } {
+  const functionTemplates = collaborator.function?.requiredChecklists ?? [];
+  if (functionTemplates.length > 0) {
+    return { mode: "function", items: functionTemplates.map((r) => ({ id: r.templateId, code: r.template.name, name: r.template.name })) };
+  }
+  return { mode: "area", items: collaborator.areaId ? (requiredByArea.get(collaborator.areaId) ?? []) : [] };
+}
+
 function listEligibleCollaboratorsQuery() {
   return db.collaborator.findMany({
     where: { active: true, checklistEnabled: true, userId: { not: null } },
-    include: { turno: { include: { scheduleType: true } }, area: true },
+    include: collaboratorWithFunctionInclude,
     orderBy: { name: "asc" },
   });
 }
@@ -59,25 +81,22 @@ async function buildCollaboratorChecklistDays(collaboratorId: string, from: Date
   const [collaborator, notes, requiredByArea] = await Promise.all([
     db.collaborator.findUniqueOrThrow({
       where: { id: collaboratorId },
-      include: { turno: { include: { scheduleType: true } }, area: true },
+      include: collaboratorWithFunctionInclude,
     }),
     db.scheduleDayNote.findMany({ where: { collaboratorId, date: { gte: rangeStart, lt: rangeEndExclusive } } }),
     getRequiredEquipmentByArea(),
   ]);
 
-  const required = collaborator.areaId ? (requiredByArea.get(collaborator.areaId) ?? []) : [];
-  const requiredIds = required.map((e) => e.id);
+  const { items: required } = getRequiredItemsForCollaborator(collaborator, requiredByArea);
 
+  // equipmentId e checklistVersion.templateId nunca colidem (UUIDs de tabelas diferentes), então
+  // dá pra jogar os dois no mesmo Set por dia sem branch por modo — o "required" de cada
+  // colaborador já usa o id certo (equipamento ou template) conforme getRequiredItemsForCollaborator.
   const executions =
-    collaborator.userId && requiredIds.length > 0
+    collaborator.userId && required.length > 0
       ? await db.checklistExecution.findMany({
-          where: {
-            executedById: collaborator.userId,
-            equipmentId: { in: requiredIds },
-            status: "CONCLUIDO",
-            finishedAt: { gte: rangeStart, lt: rangeEndExclusive },
-          },
-          select: { equipmentId: true, finishedAt: true },
+          where: { executedById: collaborator.userId, status: "CONCLUIDO", finishedAt: { gte: rangeStart, lt: rangeEndExclusive } },
+          select: { equipmentId: true, finishedAt: true, checklistVersion: { select: { templateId: true } } },
         })
       : [];
 
@@ -86,6 +105,7 @@ async function buildCollaboratorChecklistDays(collaboratorId: string, from: Date
     const key = localDateKey(ex.finishedAt!);
     const set = completedByDay.get(key) ?? new Set<string>();
     set.add(ex.equipmentId);
+    set.add(ex.checklistVersion.templateId);
     completedByDay.set(key, set);
   }
 
@@ -156,22 +176,26 @@ async function computeCompliancePeriodStats(from: Date, toInclusive: Date): Prom
     getRequiredEquipmentByArea(),
   ]);
 
-  const eligible = collaborators.filter((c) => c.areaId && c.userId && (requiredByArea.get(c.areaId)?.length ?? 0) > 0);
+  const requiredByCollaborator = new Map(collaborators.map((c) => [c.id, getRequiredItemsForCollaborator(c, requiredByArea)]));
+  const eligible = collaborators.filter((c) => c.userId && (requiredByCollaborator.get(c.id)?.items.length ?? 0) > 0);
   const userIds = eligible.map((c) => c.userId!);
 
   const executions =
     userIds.length > 0
       ? await db.checklistExecution.findMany({
           where: { executedById: { in: userIds }, status: "CONCLUIDO", finishedAt: { gte: rangeStart, lt: rangeEndExclusive } },
-          select: { executedById: true, equipmentId: true, finishedAt: true },
+          select: { executedById: true, equipmentId: true, finishedAt: true, checklistVersion: { select: { templateId: true } } },
         })
       : [];
 
+  // equipmentId e checklistVersion.templateId nunca colidem (UUIDs de tabelas diferentes) — dá pra
+  // guardar os dois no mesmo Set por pessoa/dia sem precisar ramificar por modo mais abaixo.
   const completedByKey = new Map<string, Set<string>>();
   for (const ex of executions) {
     const key = `${ex.executedById}|${localDateKey(ex.finishedAt!)}`;
     const set = completedByKey.get(key) ?? new Set<string>();
     set.add(ex.equipmentId);
+    set.add(ex.checklistVersion.templateId);
     completedByKey.set(key, set);
   }
 
@@ -181,7 +205,7 @@ async function computeCompliancePeriodStats(from: Date, toInclusive: Date): Prom
   const incomplete: PeriodComplianceStats["collaboratorsIncomplete"] = [];
 
   for (const c of eligible) {
-    const required = requiredByArea.get(c.areaId!) ?? [];
+    const required = requiredByCollaborator.get(c.id)!.items;
     let scheduledAnyDay = false;
     let pendingTotal = 0;
 

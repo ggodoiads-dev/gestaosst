@@ -25,6 +25,7 @@ const qualificationTypeSchema = z.object({
   name: z.string().trim().min(2, "Informe o nome do tipo de qualificação."),
   category: z.enum(["NR", "ASO", "INTEGRACAO", "OUTRO"]),
   validityMonths: z.string().trim().optional().nullable(),
+  aliases: z.array(z.string().trim().min(1)).default([]),
 });
 
 function parseQualificationTypeForm(formData: FormData) {
@@ -32,11 +33,13 @@ function parseQualificationTypeForm(formData: FormData) {
     name: formData.get("name"),
     category: formData.get("category") ?? "OUTRO",
     validityMonths: formData.get("validityMonths") || null,
+    aliases: formData.getAll("aliases").map(String),
   });
   return {
     name: parsed.name,
     category: parsed.category,
     validityMonths: parsed.validityMonths ? Number(parsed.validityMonths) : null,
+    aliases: parsed.aliases,
   };
 }
 

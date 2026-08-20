@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { headers } from "next/headers";
-import { AlertTriangle, AlertOctagon, GraduationCap, HardHat, Printer, ClipboardList, QrCode } from "lucide-react";
+import { AlertTriangle, AlertOctagon, GraduationCap, HardHat, Printer, ClipboardList, ClipboardCheck, QrCode } from "lucide-react";
 import { requireUser, hasPermission } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
 import { getCollaboratorProntuario, getCollaboratorPhoto } from "@/server/services/collaborator.service";
@@ -18,6 +18,7 @@ import { listActivityAptitudesForCollaborator } from "@/server/services/activity
 import { listEquipmentAptitudesForCollaborator } from "@/server/services/equipment.service";
 import { listQualificationTypes } from "@/server/services/qualification.service";
 import { listWarningsForCollaborator } from "@/server/services/warning.service";
+import { getChecklistComplianceRange } from "@/server/services/checklist-compliance.service";
 import { PageHeader, PageBody } from "@/components/domain/page-header";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, TableEmpty } from "@/components/ui/table";
@@ -58,6 +59,10 @@ export default async function ColaboradorDetailPage({
   const canSeeHr = hasPermission(user, PERMISSIONS.HR_MANAGE);
   const canManageCheckIn = hasPermission(user, PERMISSIONS.SHIFT_CHECKIN_MANAGE);
   const canManageQualifications = hasPermission(user, PERMISSIONS.QUALIFICATION_MANAGE);
+  const canSeeChecklistCompliance = hasPermission(user, PERMISSIONS.CHECKLIST_COMPLIANCE_VIEW);
+  const complianceTo = new Date();
+  const complianceFrom = new Date();
+  complianceFrom.setDate(complianceFrom.getDate() - 29);
   const [
     { collaborator, history, qualifications },
     areas,
@@ -71,6 +76,7 @@ export default async function ColaboradorDetailPage({
     qualificationTypes,
     warnings,
     photo,
+    checklistCompliance,
   ] = await Promise.all([
     getCollaboratorProntuario(user, id),
     listAreas(),
@@ -84,6 +90,9 @@ export default async function ColaboradorDetailPage({
     canManageQualifications ? listQualificationTypes(user, { onlyActive: true }) : Promise.resolve([]),
     canSeeHr ? listWarningsForCollaborator(user, id) : Promise.resolve([]),
     getCollaboratorPhoto(id),
+    canSeeChecklistCompliance
+      ? getChecklistComplianceRange(user, { collaboratorId: id, from: complianceFrom, to: complianceTo })
+      : Promise.resolve(null),
   ]);
   const photoUrl = photo ? attachmentUrl(photo.path) : null;
 
@@ -289,6 +298,54 @@ export default async function ColaboradorDetailPage({
               })}
             </CardContent>
           </Card>
+
+          {checklistCompliance && (
+            <Card>
+              <CardHeader>
+                <CardTitle>
+                  <span className="flex items-center gap-2"><ClipboardCheck className="size-4" /> Checklist — aderência (30 dias)</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-3">
+                <div className="grid grid-cols-3 gap-3 text-sm">
+                  <div>
+                    <p className="text-xs text-foreground-subtle">Turnos trabalhados</p>
+                    <p className="text-lg font-semibold text-foreground">{checklistCompliance.summary.workDays}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-foreground-subtle">Cumpriu tudo</p>
+                    <p className="text-lg font-semibold text-success">{checklistCompliance.summary.completeDays}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-foreground-subtle">Com pendência</p>
+                    <p className={`text-lg font-semibold ${checklistCompliance.summary.incompleteDays > 0 ? "text-danger" : "text-success"}`}>
+                      {checklistCompliance.summary.incompleteDays}
+                    </p>
+                  </div>
+                </div>
+                {(() => {
+                  const missedDays = checklistCompliance.days.filter(
+                    (d) => d.status === "TRABALHO" && d.required.length > 0 && d.pending.length > 0 && !d.future,
+                  );
+                  if (missedDays.length === 0) {
+                    return <p className="text-sm text-foreground-subtle">Nenhum dia com checklist pendente nos últimos 30 dias.</p>;
+                  }
+                  return (
+                    <div className="flex flex-col gap-1.5">
+                      {missedDays.map((d) => (
+                        <div key={d.date.toISOString()} className="flex items-center justify-between rounded-md border border-border px-3 py-2 text-sm">
+                          <span className="text-foreground">{formatDate(d.date)}</span>
+                          <span className="text-xs text-foreground-subtle">
+                            faltou: {d.pending.map((e) => e.code).join(", ")}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </CardContent>
+            </Card>
+          )}
 
           {canManage && (
             <Card>

@@ -1069,6 +1069,7 @@ enum QualificationCategory {
 model QualificationType {
   id             String                @id @default(uuid())
   name           String                @unique
+  aliases        String[]              @default([]) // nomes alternativos que devem casar com este tipo na importação (ex: "NR11", "Operador de Empilhadeira")
   category       QualificationCategory
   validityMonths Int? // null = não expira
   active         Boolean               @default(true)

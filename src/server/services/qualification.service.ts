@@ -11,6 +11,7 @@ export type QualificationTypeInput = {
   name: string;
   category: QualificationCategory;
   validityMonths?: number | null;
+  aliases?: string[];
 };
 
 export function listQualificationTypes(user: CurrentUser, filters: { onlyActive?: boolean } = {}) {
