@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/dialog";
 import { addQuestionAction, type ActionResult } from "@/server/actions/checklist-template.actions";
 import { useCloseOnSuccess } from "@/lib/use-close-on-success";
+import { cn } from "@/lib/utils";
 import {
   FIXED_ANSWER_OPTIONS,
   QUESTION_TYPE_LABELS,
@@ -211,8 +212,21 @@ export function AddQuestionDialog({
 
                     <div className="grid grid-cols-2 gap-3">
                       <label className="flex items-center gap-2 text-sm text-foreground-muted">
-                        <Checkbox checked={isCritical} onCheckedChange={(v) => setIsCritical(v === true)} />
-                        Pergunta crítica
+                        <Checkbox
+                          checked={isCritical}
+                          onCheckedChange={(v) => {
+                            const critical = v === true;
+                            setIsCritical(critical);
+                            // "Crítica" só significa algo se ela realmente bloquear o equipamento na
+                            // severidade máxima — senão fica marcada como crítica sem bloquear nada,
+                            // que foi exatamente o problema encontrado (checklist de área sem esse vínculo).
+                            if (critical) {
+                              setBlocksEquipment(true);
+                              setSeverity("CRITICA");
+                            }
+                          }}
+                        />
+                        Pergunta crítica (bloqueia o equipamento)
                       </label>
                       <label className="flex items-center gap-2 text-sm text-foreground-muted">
                         <Checkbox checked={requiresComment} onCheckedChange={(v) => setRequiresComment(v === true)} />
@@ -226,15 +240,19 @@ export function AddQuestionDialog({
                         <Checkbox checked={createsNC} onCheckedChange={(v) => setCreatesNC(v === true)} />
                         Gera não conformidade
                       </label>
-                      <label className="flex items-center gap-2 text-sm text-foreground-muted">
-                        <Checkbox checked={blocksEquipment} onCheckedChange={(v) => setBlocksEquipment(v === true)} />
+                      <label className={cn("flex items-center gap-2 text-sm text-foreground-muted", isCritical && "opacity-60")}>
+                        <Checkbox
+                          checked={blocksEquipment}
+                          disabled={isCritical}
+                          onCheckedChange={(v) => setBlocksEquipment(v === true)}
+                        />
                         Bloqueia o equipamento
                       </label>
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">
                       <FormField label="Severidade">
-                        <Select value={severity} onValueChange={setSeverity}>
+                        <Select value={severity} onValueChange={setSeverity} disabled={isCritical}>
                           <SelectTrigger><SelectValue /></SelectTrigger>
                           <SelectContent>
                             {SEVERITY_OPTIONS.map((s) => (

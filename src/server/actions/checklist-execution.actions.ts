@@ -77,7 +77,7 @@ export async function uploadAnswerPhotoAction(
 }
 
 export type FinalizeExecutionResult =
-  | { ok: true }
+  | { ok: true; blockedMessage: string | null }
   | { ok: false; issues: { questionId: string; questionTitle: string; reason: string }[] };
 
 export async function finalizeExecutionAction(

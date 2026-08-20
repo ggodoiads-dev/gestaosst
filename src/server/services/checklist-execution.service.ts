@@ -314,7 +314,7 @@ export async function attachAnswerPhoto(
 }
 
 export type FinalizeResult =
-  | { ok: true }
+  | { ok: true; blockedMessage: string | null }
   | { ok: false; issues: { questionId: string; questionTitle: string; reason: string }[] };
 
 const REASON_LABELS: Record<string, string> = {
@@ -404,6 +404,7 @@ export async function finalizeExecution(
   const finishedAt = new Date();
   const delayMinutes = computeDelayMinutes(execution.scheduledFor, finishedAt);
   const previousStatus = execution.equipment.status;
+  let blockedMessage: string | null = null;
 
   await db.$transaction(async (tx) => {
     await tx.checklistExecution.update({
@@ -471,6 +472,7 @@ export async function finalizeExecution(
       });
 
       if (evaluation.newEquipmentStatus === "BLOQUEADO") {
+        blockedMessage = "Equipamento bloqueado por item crítico reprovado. Deixe a ferramenta com o técnico de segurança e não utilize até a liberação.";
         await recordEquipmentEvent(
           {
             equipmentId: execution.equipmentId,
@@ -481,6 +483,14 @@ export async function finalizeExecution(
           },
           tx,
         );
+        await tx.notification.create({
+          data: {
+            type: "EQUIPAMENTO_BLOQUEADO",
+            entityType: "Equipment",
+            entityId: execution.equipmentId,
+            message: `${execution.equipment.code} bloqueado após checklist ${execution.code} — item crítico reprovado. Ferramenta deve ficar com o técnico de segurança.`,
+          },
+        });
       } else if (evaluation.newEquipmentStatus === "RESTRITO") {
         await recordEquipmentEvent(
           {
@@ -519,7 +529,7 @@ export async function finalizeExecution(
     );
   });
 
-  return { ok: true };
+  return { ok: true, blockedMessage };
 }
 
 export async function invalidateExecution(user: CurrentUser, executionId: string, reason: string) {

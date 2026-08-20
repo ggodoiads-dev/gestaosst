@@ -72,6 +72,7 @@ export function ChecklistRunner({
   const [finalizing, startFinalize] = useTransition();
   const [issues, setIssues] = useState<{ questionId: string; questionTitle: string; reason: string }[]>([]);
   const [completed, setCompleted] = useState(false);
+  const [blockedMessage, setBlockedMessage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -161,20 +162,33 @@ export function ChecklistRunner({
         return;
       }
       setIssues([]);
+      setBlockedMessage(result.blockedMessage);
       setCompleted(true);
+      if (result.blockedMessage) toast.error(result.blockedMessage, { duration: 10000 });
     });
   }
 
   if (completed) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 py-20 text-center">
-        <CheckCircle2 className="size-12 text-success" />
+        {blockedMessage ? (
+          <AlertTriangle className="size-12 text-danger" />
+        ) : (
+          <CheckCircle2 className="size-12 text-success" />
+        )}
         <div>
-          <h1 className="text-base font-semibold text-foreground">Checklist finalizado</h1>
+          <h1 className="text-base font-semibold text-foreground">
+            {blockedMessage ? "Checklist finalizado — equipamento bloqueado" : "Checklist finalizado"}
+          </h1>
           <p className="mt-1 text-sm text-foreground-subtle">
             {equipmentCode} — {equipmentName}
           </p>
         </div>
+        {blockedMessage && (
+          <p className="max-w-sm rounded-lg border border-danger/30 bg-danger/10 px-4 py-3 text-sm font-medium text-danger">
+            {blockedMessage}
+          </p>
+        )}
         <div className="flex gap-2">
           <Button variant="secondary" onClick={() => router.push("/checklist/realizar")}>
             Voltar à lista

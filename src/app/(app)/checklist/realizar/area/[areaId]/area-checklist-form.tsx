@@ -107,6 +107,7 @@ export function AreaChecklistForm({
       }
 
       const nextIssues: Record<string, string> = {};
+      const blockedCodes: string[] = [];
       let okCount = 0;
 
       await Promise.all(
@@ -117,6 +118,7 @@ export function AreaChecklistForm({
           ]);
           if (result.ok) {
             okCount++;
+            if (result.blockedMessage) blockedCodes.push(item.code);
           } else {
             nextIssues[item.equipmentId] = result.issues[0]?.reason ?? "Pendência não identificada.";
           }
@@ -125,6 +127,12 @@ export function AreaChecklistForm({
 
       setRowIssues(nextIssues);
       if (okCount > 0) toast.success(`${okCount} equipamento${okCount === 1 ? "" : "s"} finalizado${okCount === 1 ? "" : "s"}.`);
+      if (blockedCodes.length > 0) {
+        toast.error(
+          `${blockedCodes.join(", ")} bloqueado${blockedCodes.length === 1 ? "" : "s"} por item crítico. Deixe a(s) ferramenta(s) com o técnico de segurança.`,
+          { duration: 10000 },
+        );
+      }
       if (Object.keys(nextIssues).length > 0) {
         toast.error("Alguns equipamentos ficaram pendentes — confira abaixo.");
       } else {
