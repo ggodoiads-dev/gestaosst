@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import {
-  uploadAfdtAction,
+  uploadTimeClockFileAction,
   getTimeClockReportAction,
   getChecklistAdherenceAction,
   getUnmatchedTimeClockPisAction,
@@ -110,7 +110,7 @@ export function PontoPanel({
     const formData = new FormData();
     formData.append("file", file);
     startUpload(async () => {
-      const res = await uploadAfdtAction(formData);
+      const res = await uploadTimeClockFileAction(formData);
       if (!res.ok) {
         setUploadError(res.error);
         return;
@@ -174,12 +174,12 @@ export function PontoPanel({
         <CardHeader>
           <CardTitle>Importar arquivo do relógio de ponto</CardTitle>
           <CardDescription>
-            Aceita o arquivo AFD (.txt, identifica pelo PIS) ou o AEJ (.zip, identifica direto pela
-            matrícula — mais fácil, use esse quando tiver os dois disponíveis). Padrão Portaria 671/2021.
+            Aceita o arquivo AEJ (.zip) do relógio de ponto — identifica cada marcação direto pela
+            matrícula já cadastrada no colaborador. Padrão Portaria 671/2021, Anexo IV.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
-          <input ref={fileInputRef} type="file" accept=".txt,.zip" className="text-sm" />
+          <input ref={fileInputRef} type="file" accept=".zip" className="text-sm" />
           {uploadError && <p className="text-sm text-danger">{uploadError}</p>}
           {summary && (
             <div className="flex flex-col gap-1.5 rounded-lg border border-border bg-surface-muted px-4 py-3 text-sm">
@@ -193,7 +193,7 @@ export function PontoPanel({
                   <span>
                     {summary.unmatched} marcação(ões) de {summary.unmatchedPis.length} colaborador(es) não
                     identificado(s). Vincule manualmente cada código no quadro &ldquo;Batidas não
-                    identificadas&rdquo; abaixo, ou cadastre o PIS certo em RH e reimporte o arquivo.
+                    identificadas&rdquo; abaixo, ou corrija a matrícula em RH e reimporte o arquivo.
                   </span>
                 </p>
               )}

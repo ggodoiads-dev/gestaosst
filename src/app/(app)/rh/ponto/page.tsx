@@ -31,7 +31,7 @@ export default async function PontoPage() {
     <>
       <PageHeader
         title="Importar Ponto"
-        description="Importe o arquivo AFDT do relógio de ponto e veja quem atrasou, faltou, esqueceu de bater o ponto ou não fez o checklist do dia."
+        description="Importe o arquivo AEJ do relógio de ponto e veja quem atrasou, faltou, esqueceu de bater o ponto ou não fez o checklist do dia."
       />
       <PageBody className="flex flex-col gap-6">
         <PontoPanel

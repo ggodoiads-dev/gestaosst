@@ -2,7 +2,6 @@ import "server-only";
 import { fromZonedTime, toZonedTime, formatInTimeZone } from "date-fns-tz";
 import { db } from "@/server/db";
 import { recordAudit } from "@/server/services/audit";
-import { parseAfdt } from "@/domain/time-clock/afdt-parser";
 import { parseAej } from "@/domain/time-clock/aej-parser";
 import { extractFirstTextFile } from "@/lib/zip-extract";
 import { getCollaboratorDayStatus } from "@/domain/schedule/schedule-calendar";
@@ -42,13 +41,15 @@ export type TimeClockImportSummary = {
 export class InvalidTimeClockFileError extends Error {}
 
 /**
- * Importa um arquivo do relógio de ponto — aceita tanto o AFD (.txt, identifica cada marcação
- * pelo PIS) quanto o AEJ (.zip com um .txt assinado dentro, identifica cada marcação direto pela
- * matrícula — formato mais rico e mais fácil de casar, já que a matrícula é o mesmo número curto
- * já cadastrado nos colaboradores). Casa cada marcação e grava de forma idempotente (`createMany`
- * + `skipDuplicates`, chave `[pis, timestamp, markNumber]`) — reenviar o mesmo arquivo não
- * duplica nada. Quando uma marcação já gravada antes (sem colaborador correspondente na época)
- * passa a ter dono, o `updateMany` final corrige o vínculo sem precisar reimportar tudo de novo.
+ * Importa um arquivo AEJ do relógio de ponto (.zip com um .txt assinado dentro) — cada marcação
+ * já vem identificada diretamente pela matrícula, o mesmo número curto já cadastrado nos
+ * colaboradores (nada de PIS: a maioria dos colaboradores nem tem PIS cadastrado no SIGO, e o
+ * formato antigo AFD/AFDT identificava pelo PIS de 11 dígitos do relógio, que não bate com nada —
+ * isso gerava um monte de batida "não identificada" sem jeito confiável de saber de quem era).
+ * Casa cada marcação e grava de forma idempotente (`createMany` + `skipDuplicates`, chave
+ * `[pis, timestamp, markNumber]`) — reenviar o mesmo arquivo não duplica nada. Quando uma marcação
+ * já gravada antes (sem colaborador correspondente na época) passa a ter dono, o `updateMany`
+ * final corrige o vínculo sem precisar reimportar tudo de novo.
  */
 export async function importTimeClockFile(
   user: CurrentUser,
@@ -58,35 +59,26 @@ export async function importTimeClockFile(
   requirePermission(user, PERMISSIONS.HR_MANAGE);
 
   const isZip = /\.zip$/i.test(filename) || (buffer.length > 1 && buffer[0] === 0x50 && buffer[1] === 0x4b);
+  if (!isZip) {
+    throw new InvalidTimeClockFileError("Envie o arquivo AEJ (.zip) do relógio de ponto — esse é o único formato aceito.");
+  }
 
-  const { marks, ignoredLines } = await (async () => {
-    if (isZip) {
-      const extracted = await extractFirstTextFile(buffer);
-      if (!extracted) {
-        throw new InvalidTimeClockFileError("Não encontrei nenhum arquivo .txt dentro do .zip.");
-      }
-      return parseAej(extracted.content);
-    }
-    return parseAfdt(buffer.toString("utf-8"));
-  })();
+  const extracted = await extractFirstTextFile(buffer);
+  if (!extracted) {
+    throw new InvalidTimeClockFileError("Não encontrei nenhum arquivo .txt dentro do .zip.");
+  }
+  const { marks, ignoredLines } = parseAej(extracted.content);
 
-  const distinctPis = [...new Set(marks.map((m) => m.pis))];
+  const distinctMatriculas = [...new Set(marks.map((m) => m.pis))];
   const collaborators =
-    distinctPis.length > 0
-      ? await db.collaborator.findMany({
-          where: { OR: [{ pis: { in: distinctPis } }, { matricula: { in: distinctPis } }] },
-        })
+    distinctMatriculas.length > 0
+      ? await db.collaborator.findMany({ where: { matricula: { in: distinctMatriculas } } })
       : [];
 
-  const collaboratorByPis = new Map<string, (typeof collaborators)[number]>();
+  const collaboratorByMatricula = new Map<string, (typeof collaborators)[number]>();
   for (const c of collaborators) {
-    if (c.pis && distinctPis.includes(c.pis) && !collaboratorByPis.has(c.pis)) {
-      collaboratorByPis.set(c.pis, c);
-    }
-  }
-  for (const c of collaborators) {
-    if (c.matricula && distinctPis.includes(c.matricula) && !collaboratorByPis.has(c.matricula)) {
-      collaboratorByPis.set(c.matricula, c);
+    if (c.matricula && distinctMatriculas.includes(c.matricula) && !collaboratorByMatricula.has(c.matricula)) {
+      collaboratorByMatricula.set(c.matricula, c);
     }
   }
 
@@ -94,7 +86,7 @@ export async function importTimeClockFile(
   let matched = 0;
 
   const data = marks.map((mark) => {
-    const collaborator = collaboratorByPis.get(mark.pis);
+    const collaborator = collaboratorByMatricula.get(mark.pis);
     if (collaborator) matched++;
     else unmatchedPis.add(mark.pis);
 
@@ -114,8 +106,8 @@ export async function importTimeClockFile(
     await db.timeClockRecord.createMany({ data, skipDuplicates: true });
   }
 
-  for (const [pis, collaborator] of collaboratorByPis) {
-    await db.timeClockRecord.updateMany({ where: { pis, collaboratorId: null }, data: { collaboratorId: collaborator.id } });
+  for (const [matricula, collaborator] of collaboratorByMatricula) {
+    await db.timeClockRecord.updateMany({ where: { pis: matricula, collaboratorId: null }, data: { collaboratorId: collaborator.id } });
   }
 
   await recordAudit({
@@ -142,9 +134,10 @@ export type UnmatchedTimeClockPis = {
   lastTimestamp: Date;
 };
 
-/** Códigos do relógio de ponto sem colaborador vinculado — base pra reconciliação manual, já
- * que o arquivo AFDT não traz nome nenhum, só esse código e os horários. Não lista os códigos
- * marcados como ignorados (ex: código de erro do relógio, sobra de arquivo antigo). */
+/** Matrículas do relógio de ponto sem colaborador vinculado — base pra reconciliação manual, pra
+ * quando o código não bate com nenhuma matrícula cadastrada (typo no cadastro, funcionário novo
+ * ainda não lançado no SIGO). Não lista os códigos marcados como ignorados (ex: código de erro do
+ * relógio, sobra de arquivo antigo). */
 export async function listUnmatchedTimeClockPis(user: CurrentUser): Promise<UnmatchedTimeClockPis[]> {
   requirePermission(user, PERMISSIONS.HR_MANAGE);
 
@@ -199,10 +192,11 @@ export async function ignoreAllUnmatchedTimeClockPis(user: CurrentUser): Promise
   return { ignoredCount: unmatched.length };
 }
 
-/** Vincula manualmente um código do relógio a um colaborador — usado quando não há como saber o
- * PIS de antemão (o arquivo AFDT não traz nome). Preenche o PIS do colaborador só se ele ainda
- * não tiver um (nunca sobrescreve um PIS já cadastrado por engano) e religa todas as marcações
- * daquele código já importadas, sem precisar reimportar o arquivo. */
+/** Vincula manualmente uma matrícula do relógio a um colaborador — usado quando o código não bate
+ * com a matrícula já cadastrada (typo, ou colaborador lançado no SIGO depois do relógio). Preenche
+ * a matrícula do colaborador só se ele ainda não tiver uma (nunca sobrescreve uma já cadastrada
+ * por engano) e religa todas as marcações daquele código já importadas, sem precisar reimportar
+ * o arquivo. */
 export async function linkTimeClockPisToCollaborator(
   user: CurrentUser,
   pis: string,
@@ -213,8 +207,8 @@ export async function linkTimeClockPisToCollaborator(
   const collaborator = await db.collaborator.findUniqueOrThrow({ where: { id: collaboratorId } });
 
   const result = await db.$transaction(async (tx) => {
-    if (!collaborator.pis) {
-      await tx.collaborator.update({ where: { id: collaboratorId }, data: { pis } });
+    if (!collaborator.matricula) {
+      await tx.collaborator.update({ where: { id: collaboratorId }, data: { matricula: pis } });
     }
     return tx.timeClockRecord.updateMany({ where: { pis, collaboratorId: null }, data: { collaboratorId } });
   });

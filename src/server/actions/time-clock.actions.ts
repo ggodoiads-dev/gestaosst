@@ -13,15 +13,15 @@ import type {
 import type { ChecklistJustificationReason } from "@/domain/time-clock/checklist-justification-reasons";
 import { parseDateOnly } from "@/lib/dates";
 
-export type UploadAfdtResult = { ok: true; summary: TimeClockImportSummary } | { ok: false; error: string };
+export type UploadTimeClockFileResult = { ok: true; summary: TimeClockImportSummary } | { ok: false; error: string };
 
-export async function uploadAfdtAction(formData: FormData): Promise<UploadAfdtResult> {
+export async function uploadTimeClockFileAction(formData: FormData): Promise<UploadTimeClockFileResult> {
   try {
     const user = await requireUser();
 
     const file = formData.get("file");
     if (!(file instanceof File) || file.size === 0) {
-      return { ok: false, error: "Selecione um arquivo válido (.txt do AFD ou .zip do AEJ)." };
+      return { ok: false, error: "Selecione um arquivo AEJ válido (.zip)." };
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
