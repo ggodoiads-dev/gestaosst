@@ -220,6 +220,29 @@ export async function getQualificationDashboard(user: CurrentUser) {
   };
 }
 
+/** NR/ASO/integração vencidas ou vencendo dentro da janela pedida — base do Rico pra responder
+ * "o que tá vencendo nos próximos meses" sem precisar abrir o painel. Só olha o registro mais
+ * recente de cada par colaborador+tipo (a mesma lógica do dashboard), pra não repetir uma NR já
+ * renovada. */
+export async function getExpiringQualifications(user: CurrentUser, withinDays: number = 90) {
+  requirePermission(user, PERMISSIONS.QUALIFICATION_MANAGE);
+
+  const latestRecords = await listLatestRecordsPerPair();
+  const now = new Date();
+  const horizon = new Date(now.getTime() + withinDays * 24 * 60 * 60 * 1000);
+
+  const relevant = latestRecords.filter((r) => r.collaborator.active && r.expiresAt && r.expiresAt <= horizon);
+
+  const expired = relevant
+    .filter((r) => r.expiresAt! < now)
+    .sort((a, b) => a.expiresAt!.getTime() - b.expiresAt!.getTime());
+  const expiringSoon = relevant
+    .filter((r) => r.expiresAt! >= now)
+    .sort((a, b) => a.expiresAt!.getTime() - b.expiresAt!.getTime());
+
+  return { withinDays, expired, expiringSoon };
+}
+
 export type QualificationRecordFilters = {
   category?: QualificationCategory;
   qualificationTypeId?: string;

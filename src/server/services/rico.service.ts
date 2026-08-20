@@ -9,7 +9,7 @@ import { getGestaoSummary, getTopProblemEquipments } from "@/server/services/ind
 import { getEquipmentRiskRanking } from "@/server/services/risk-score.service";
 import { listChecklistBoardForUser } from "@/server/services/checklist-execution.service";
 import { listNonconformitiesForUser, setNonconformityStatus } from "@/server/services/nonconformity.service";
-import { getQualificationDashboard, listQualificationTypes } from "@/server/services/qualification.service";
+import { getExpiringQualifications, listQualificationTypes } from "@/server/services/qualification.service";
 import { listAccidentsForUser } from "@/server/services/accident.service";
 import { listCollaboratorsForUser } from "@/server/services/collaborator.service";
 import { listAreas } from "@/server/services/masterdata.service";
@@ -130,8 +130,14 @@ const READ_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     type: "function",
     function: {
       name: "qualificacoes_vencendo",
-      description: "Qualificações (NR, ASO, integração) com vencimento mais próximo, e quantos colaboradores válidos por tipo.",
-      parameters: { type: "object", properties: {} },
+      description:
+        "Qualificações (NR, ASO, integração) já vencidas ou que vão vencer dentro do período pedido, com colaborador e data — use pra qualquer pergunta tipo 'o que tá vencendo nos próximos meses', 'quais NRs estão vencidas'. Sem o parâmetro meses, usa 3 meses (90 dias) pra frente.",
+      parameters: {
+        type: "object",
+        properties: {
+          meses: { type: "number", description: "Quantos meses pra frente considerar (padrão 3 se não informado)" },
+        },
+      },
     },
   },
   {
@@ -431,10 +437,16 @@ async function runReadTool(user: CurrentUser, name: string, args: Record<string,
           descricao: nc.description,
         }));
     case "qualificacoes_vencendo": {
-      const dashboard = await getQualificationDashboard(user);
+      const meses = typeof args.meses === "number" && args.meses > 0 ? args.meses : 3;
+      const result = await getExpiringQualifications(user, Math.round(meses * 30));
       return {
-        colaboradoresAtivos: dashboard.activeCollaboratorsCount,
-        proximosVencimentos: dashboard.upcoming.map((r) => ({
+        periodoDias: result.withinDays,
+        jaVencidas: result.expired.map((r) => ({
+          colaborador: r.collaborator.name,
+          tipo: r.qualificationType.name,
+          venceu: r.expiresAt,
+        })),
+        vencendoNoPeriodo: result.expiringSoon.map((r) => ({
           colaborador: r.collaborator.name,
           tipo: r.qualificationType.name,
           vence: r.expiresAt,
