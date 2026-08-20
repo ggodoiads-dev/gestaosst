@@ -18,13 +18,13 @@ const TYPE_LABELS: Record<string, string> = {
   ACIDENTE_TRAJETO: "Acidente de trajeto",
   QUASE_ACIDENTE: "Quase acidente",
   DOENCA_OCUPACIONAL: "Doença ocupacional",
+  FAI: "FAI",
 };
 
 const SIF_LABELS: Record<string, string> = {
   SIF_PRECURSOR: "SIF Precursor",
   SIF_POTENCIAL: "SIF Potencial",
   SIF_REAL: "SIF Real",
-  FAI: "FAI",
 };
 
 export default async function AcidenteDetailPage({

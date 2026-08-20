@@ -960,6 +960,7 @@ enum AccidentType {
   ACIDENTE_TRAJETO
   QUASE_ACIDENTE
   DOENCA_OCUPACIONAL
+  FAI
 }
 
 enum AccidentStatus {

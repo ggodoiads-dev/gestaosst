@@ -24,6 +24,7 @@ const TYPE_LABELS: Record<string, string> = {
   ACIDENTE_TRAJETO: "Acidente de Trajeto",
   QUASE_ACIDENTE: "Quase Acidente",
   DOENCA_OCUPACIONAL: "Doença Ocupacional",
+  FAI: "FAI",
 };
 
 const STATUS_LABELS: Record<string, string> = {

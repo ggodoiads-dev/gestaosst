@@ -29,6 +29,7 @@ const TYPE_OPTIONS = [
   { value: "ACIDENTE_TRAJETO", label: "Acidente de trajeto" },
   { value: "QUASE_ACIDENTE", label: "Quase acidente" },
   { value: "DOENCA_OCUPACIONAL", label: "Doença ocupacional" },
+  { value: "FAI", label: "FAI" },
 ];
 
 const SEVERITY_OPTIONS = [
@@ -42,7 +43,6 @@ const SIF_OPTIONS = [
   { value: "SIF_PRECURSOR", label: "SIF Precursor" },
   { value: "SIF_POTENCIAL", label: "SIF Potencial" },
   { value: "SIF_REAL", label: "SIF Real" },
-  { value: "FAI", label: "FAI" },
 ];
 
 function toDateInputValue(date: Date): string {

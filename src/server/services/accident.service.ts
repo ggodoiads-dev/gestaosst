@@ -237,6 +237,7 @@ const ACCIDENT_TYPE_LABELS: Record<AccidentType, string> = {
   ACIDENTE_TRAJETO: "Acidente de trajeto",
   QUASE_ACIDENTE: "Quase acidente",
   DOENCA_OCUPACIONAL: "Doença ocupacional",
+  FAI: "FAI",
 };
 
 export type AccidentMonthlyStats = {

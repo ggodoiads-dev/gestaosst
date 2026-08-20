@@ -52,8 +52,8 @@ const TYPE_ALIASES: Record<string, AccidentType> = {
   // corporativos de SST, ex: ABInbev) — "sem lesão" = quase acidente, os demais tiveram lesão.
   incidentessemlesao: "QUASE_ACIDENTE",
   semlesao: "QUASE_ACIDENTE",
-  faiprimeiroatendimentoambulatorial: "ACIDENTE_TIPICO",
-  fai: "ACIDENTE_TIPICO",
+  faiprimeiroatendimentoambulatorial: "FAI",
+  fai: "FAI",
   mdiacidentesemafastamentocomtrabalhocompativel: "ACIDENTE_TIPICO",
   mdi: "ACIDENTE_TIPICO",
   ltiacidentecomafastamento: "ACIDENTE_TIPICO",

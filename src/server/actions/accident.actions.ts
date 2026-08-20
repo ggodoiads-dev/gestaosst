@@ -26,7 +26,7 @@ const accidentSchema = z.object({
   date: z.string().min(1, "Informe a data do acidente."),
   time: z.string().trim().optional().nullable(),
   areaId: z.string().optional().nullable(),
-  type: z.enum(["ACIDENTE_TIPICO", "ACIDENTE_TRAJETO", "QUASE_ACIDENTE", "DOENCA_OCUPACIONAL"]),
+  type: z.enum(["ACIDENTE_TIPICO", "ACIDENTE_TRAJETO", "QUASE_ACIDENTE", "DOENCA_OCUPACIONAL", "FAI"]),
   severity: z.enum(["BAIXA", "MEDIA", "ALTA", "CRITICA"]),
   description: z.string().trim().min(2, "Descreva o que aconteceu."),
   immediateCause: z.string().trim().optional().nullable(),
