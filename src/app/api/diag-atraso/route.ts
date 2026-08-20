@@ -1,7 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/server/db";
-import { formatInTimeZone } from "date-fns-tz";
-import { toZonedTime } from "date-fns-tz";
+import { formatInTimeZone, toZonedTime } from "date-fns-tz";
 
 const TOKEN = "7d3a9f2c6e0b8a4d1f7c3e9b6a2d8f5c0e4b7a1d9f3c6e8b2a5d0f7c4e9b1a6d";
 const APP_TIMEZONE = "America/Sao_Paulo";
@@ -27,12 +26,20 @@ export async function GET(request: NextRequest) {
   const token = request.nextUrl.searchParams.get("token");
   if (token !== TOKEN) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
-  const name = request.nextUrl.searchParams.get("name") ?? "ALEX";
+  const name = request.nextUrl.searchParams.get("name");
+  const idParam = request.nextUrl.searchParams.get("id");
 
-  const collaborator = await db.collaborator.findFirst({
-    where: { name: { contains: name, mode: "insensitive" } },
-    include: { turno: true },
-  });
+  if (!name && !idParam) {
+    const matches = await db.collaborator.findMany({
+      where: { name: { contains: "alex", mode: "insensitive" } },
+      select: { id: true, name: true, matricula: true },
+    });
+    return NextResponse.json({ matches });
+  }
+
+  const collaborator = idParam
+    ? await db.collaborator.findUnique({ where: { id: idParam }, include: { turno: true } })
+    : await db.collaborator.findFirst({ where: { name: { contains: name!, mode: "insensitive" } }, include: { turno: true } });
   if (!collaborator) return NextResponse.json({ error: "colaborador não encontrado" });
 
   const records = await db.timeClockRecord.findMany({
