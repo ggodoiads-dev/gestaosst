@@ -175,6 +175,30 @@ export async function updateAccidentStatus(user: CurrentUser, id: string, status
   return accident;
 }
 
+/** Anexa uma evidência ao acidente (foto, PDF, apresentação de investigação, etc.) — sempre
+ * adiciona, nunca substitui, já que um acidente costuma acumular várias evidências ao longo
+ * da investigação. */
+export async function attachAccidentFile(
+  user: CurrentUser,
+  accidentId: string,
+  file: { filename: string; path: string; mimeType: string; size: number },
+) {
+  requirePermission(user, PERMISSIONS.ACCIDENT_MANAGE);
+  await db.accident.findUniqueOrThrow({ where: { id: accidentId } });
+
+  return db.attachment.create({
+    data: {
+      filename: file.filename,
+      path: file.path,
+      mimeType: file.mimeType,
+      size: file.size,
+      context: "ACIDENTE",
+      accidentId,
+      uploadedById: user.id,
+    },
+  });
+}
+
 export type AccidentActionInput = {
   description: string;
   responsibleUserId?: string | null;
@@ -221,6 +245,10 @@ export type AccidentMonthlyStats = {
   byType: { type: AccidentType; label: string; count: number }[];
   totalCount: number;
   topType: { type: AccidentType; label: string; count: number } | null;
+  /** Descrição em texto livre de cada ocorrência — o campo "tipo" estruturado é amplo demais
+   * (ex: tudo cai em ACIDENTE_TIPICO); o padrão real de reincidência (ex: "queda de bulks",
+   * "prensamento de mão") normalmente só aparece lendo a descrição. */
+  descriptions: string[];
 };
 
 /** Painel mensal de acidentes/incidentes do ano — usado no dashboard da tela de Acidentes.
@@ -233,7 +261,7 @@ export async function getAccidentMonthlyStats(user: CurrentUser, year?: number):
 
   const accidents = await db.accident.findMany({
     where: { date: { gte: from, lte: to }, status: { not: "CANCELADA" } },
-    select: { date: true, type: true },
+    select: { date: true, type: true, description: true },
   });
 
   const monthCounts = Array<number>(12).fill(0);
@@ -253,6 +281,7 @@ export async function getAccidentMonthlyStats(user: CurrentUser, year?: number):
     byType,
     totalCount: accidents.length,
     topType: byType[0] ?? null,
+    descriptions: accidents.map((a) => a.description).slice(0, 100),
   };
 }
 

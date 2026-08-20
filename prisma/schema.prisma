@@ -980,6 +980,7 @@ enum SifClassification {
   SIF_PRECURSOR
   SIF_POTENCIAL
   SIF_REAL
+  FAI
 }
 
 enum AccidentActionStatus {

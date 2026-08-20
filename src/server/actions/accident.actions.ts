@@ -4,6 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { requireUser, ForbiddenError } from "@/server/auth/current-user";
 import * as accidentService from "@/server/services/accident.service";
+import { saveAttachmentUpload, InvalidUploadError } from "@/server/services/storage";
 import { parseDateOnly } from "@/lib/dates";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
@@ -75,6 +76,25 @@ export async function updateAccidentAction(_prev: ActionResult, formData: FormDa
     revalidatePath("/acidentes");
     revalidatePath(`/acidentes/${id}`);
   });
+}
+
+export async function uploadAccidentAttachmentAction(accidentId: string, formData: FormData): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    const file = formData.get("file");
+    if (!(file instanceof File) || file.size === 0) {
+      return { ok: false, error: "Selecione um arquivo válido." };
+    }
+    const saved = await saveAttachmentUpload(file);
+    await accidentService.attachAccidentFile(user, accidentId, saved);
+    revalidatePath(`/acidentes/${accidentId}`);
+    return { ok: true };
+  } catch (error) {
+    if (error instanceof InvalidUploadError) return { ok: false, error: error.message };
+    if (error instanceof ForbiddenError) return { ok: false, error: error.message };
+    console.error(error);
+    return { ok: false, error: "Não foi possível enviar o arquivo." };
+  }
 }
 
 export async function updateAccidentStatusAction(

@@ -22,6 +22,7 @@ export async function AccidentInsightCard({ user, stats }: { user: CurrentUser; 
     totalCount: stats.totalCount,
     monthly: stats.monthly,
     topType: stats.topType,
+    descriptions: stats.descriptions,
   });
   if (!insight) return null;
 

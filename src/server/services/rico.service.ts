@@ -138,7 +138,8 @@ const READ_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     type: "function",
     function: {
       name: "acidentes_recentes",
-      description: "Lista os acidentes/incidentes/quase-acidentes registrados, mais recentes primeiro.",
+      description:
+        "Lista acidentes/incidentes/quase-acidentes registrados (até 80, mais recentes primeiro), com a descrição completa de cada um. Use pra perguntas sobre o que mais se repete (ex: 'qual a maior recorrência', 'que tipo de acidente mais acontece') — a categoria estruturada (tipo) é ampla demais sozinha, o padrão real geralmente está na descrição em texto livre (ex: vários acidentes descritos como queda de bulk, prensamento de mão, etc.) — leia as descrições e identifique o tema que mais se repete, não só o campo tipo.",
       parameters: { type: "object", properties: {} },
     },
   },
@@ -441,7 +442,7 @@ async function runReadTool(user: CurrentUser, name: string, args: Record<string,
       };
     }
     case "acidentes_recentes":
-      return (await listAccidentsForUser(user)).slice(0, 15).map((a) => ({
+      return (await listAccidentsForUser(user, { status: "ALL" })).slice(0, 80).map((a) => ({
         codigo: a.code,
         data: a.date,
         tipo: a.type,
@@ -678,6 +679,7 @@ export type AccidentInsightContext = {
   totalCount: number;
   monthly: { label: string; count: number }[];
   topType: { label: string; count: number } | null;
+  descriptions: string[];
 };
 
 function describeAccidentInsightContext(ctx: AccidentInsightContext): string | null {
@@ -685,14 +687,20 @@ function describeAccidentInsightContext(ctx: AccidentInsightContext): string | n
   const monthsWithData = ctx.monthly.filter((m) => m.count > 0).map((m) => `${m.label}: ${m.count}`);
   const parts = [`Total de ${ctx.totalCount} acidente(s)/incidente(s) registrado(s) em ${ctx.year}.`];
   if (monthsWithData.length > 0) parts.push(`Por mês: ${monthsWithData.join(", ")}.`);
-  if (ctx.topType) parts.push(`Tipo mais recorrente: ${ctx.topType.label} (${ctx.topType.count} ocorrência(s)).`);
+  if (ctx.topType) parts.push(`Tipo mais recorrente (categoria estruturada): ${ctx.topType.label} (${ctx.topType.count} ocorrência(s)).`);
+  if (ctx.descriptions.length > 0) {
+    parts.push(
+      `Descrições de cada ocorrência (leia com atenção — o padrão real de reincidência costuma estar aqui, não na categoria estruturada acima, ex: várias descrições mencionando "queda de bulk" ou "prensamento de mão"): ${ctx.descriptions.map((d, i) => `(${i + 1}) ${d}`).join(" | ")}`,
+    );
+  }
   return parts.join(" ");
 }
 
 /**
  * Comentário curto do Rico pro dashboard de Acidentes — mesma lógica best-effort do
- * getProactiveTip/getDailyBriefing, só que reagindo à distribuição mensal e ao tipo mais
- * recorrente em vez de um evento pontual ou o estado do dia.
+ * getProactiveTip/getDailyBriefing, só que reagindo à distribuição mensal e ao padrão real de
+ * reincidência lido nas descrições em texto livre (a categoria estruturada é ampla demais pra
+ * isso sozinha) em vez de um evento pontual ou o estado do dia.
  */
 export async function getAccidentInsight(user: CurrentUser, context: AccidentInsightContext): Promise<string | null> {
   const apiKey = process.env.OPENAI_API_KEY;
@@ -709,7 +717,7 @@ export async function getAccidentInsight(user: CurrentUser, context: AccidentIns
       messages: [
         {
           role: "system",
-          content: `${SYSTEM_PROMPT}\n\nVocê está comentando o painel de acidentes/incidentes do ano pra ${user.name.split(" ")[0]} — 1 a 2 frases, tom direto. Destaque o que mais chama atenção (tipo mais recorrente, mês com mais casos, ou uma tendência de queda/alta), como se fosse uma observação de quem realmente olhou os números, não uma repetição fria deles. Nunca invente números além dos que foram passados a você.`,
+          content: `${SYSTEM_PROMPT}\n\nVocê está comentando o painel de acidentes/incidentes do ano pra ${user.name.split(" ")[0]} — 1 a 2 frases, tom direto. Leia as descrições em texto livre passadas e identifique o padrão que mais se repete de verdade (ex: "queda de bulk" aparecendo em várias descrições diferentes) — isso é mais valioso que só repetir a categoria estruturada, que costuma ser ampla demais. Destaque esse padrão, o mês com mais casos, ou uma tendência de queda/alta, como se fosse uma observação de quem realmente leu os relatos, não uma repetição fria dos números. Nunca invente números ou padrões além dos que foram passados a você.`,
         },
         { role: "user", content: description },
       ],

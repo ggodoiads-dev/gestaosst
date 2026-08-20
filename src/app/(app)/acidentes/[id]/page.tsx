@@ -1,13 +1,17 @@
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import { requireUser } from "@/server/auth/current-user";
 import { getAccidentDetail } from "@/server/services/accident.service";
 import { listCollaboratorsForUser } from "@/server/services/collaborator.service";
 import { PageHeader, PageBody } from "@/components/domain/page-header";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { AccidentStatusBadge, AccidentActionStatusBadge, CriticalityBadge } from "@/components/domain/status-badges";
 import { Badge } from "@/components/ui/badge";
 import { formatDate, formatDateTime } from "@/lib/dates";
 import { AccidentStatusActions } from "../accident-status-actions";
 import { CreateAccidentActionDialog, CompleteAccidentActionButton } from "../accident-action-dialog";
+import { AccidentAttachments } from "../accident-attachments";
 
 const TYPE_LABELS: Record<string, string> = {
   ACIDENTE_TIPICO: "Acidente típico",
@@ -20,6 +24,7 @@ const SIF_LABELS: Record<string, string> = {
   SIF_PRECURSOR: "SIF Precursor",
   SIF_POTENCIAL: "SIF Potencial",
   SIF_REAL: "SIF Real",
+  FAI: "FAI",
 };
 
 export default async function AcidenteDetailPage({
@@ -41,6 +46,11 @@ export default async function AcidenteDetailPage({
         description={`${TYPE_LABELS[accident.type] ?? accident.type} · ${formatDate(accident.date)}${accident.area ? ` · ${accident.area.name}` : ""}`}
         actions={
           <div className="flex items-center gap-2">
+            <Button asChild variant="ghost" size="sm">
+              <Link href="/acidentes">
+                <ArrowLeft className="size-4" /> Voltar
+              </Link>
+            </Button>
             <CriticalityBadge value={accident.severity} />
             <AccidentStatusBadge status={accident.status} />
             <AccidentStatusActions id={accident.id} status={accident.status} code={accident.code} />
@@ -122,6 +132,15 @@ export default async function AcidenteDetailPage({
         </div>
 
         <div className="flex flex-col gap-5">
+          <Card>
+            <CardHeader>
+              <CardTitle>Evidências ({accident.attachments.length})</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <AccidentAttachments accidentId={accident.id} attachments={accident.attachments} />
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle>Envolvidos ({accident.involvements.length})</CardTitle>
