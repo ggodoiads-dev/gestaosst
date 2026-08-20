@@ -13,9 +13,12 @@ function workdayKeyFromTimestamp(timestamp: Date, shiftStartTime: string | null 
   if (!shiftStartTime) return dayKeyFromTimestamp(timestamp);
   const [startHour, startMinute] = shiftStartTime.split(":").map(Number);
   if (!Number.isFinite(startHour) || !Number.isFinite(startMinute)) return dayKeyFromTimestamp(timestamp);
+  const cutoffTotalMinutes = (startHour * 60 + startMinute + 12 * 60) % (24 * 60);
+  const cutoffHour = Math.floor(cutoffTotalMinutes / 60);
+  const cutoffMinute = cutoffTotalMinutes % 60;
   const local = toZonedTime(timestamp, APP_TIMEZONE);
   const shifted = new Date(local);
-  shifted.setHours(shifted.getHours() - startHour, shifted.getMinutes() - startMinute, shifted.getSeconds(), 0);
+  shifted.setHours(shifted.getHours() - cutoffHour, shifted.getMinutes() - cutoffMinute, shifted.getSeconds(), 0);
   const y = shifted.getFullYear();
   const m = String(shifted.getMonth() + 1).padStart(2, "0");
   const d = String(shifted.getDate()).padStart(2, "0");

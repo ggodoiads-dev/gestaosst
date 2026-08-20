@@ -255,19 +255,28 @@ function dayKeyFromTimestamp(timestamp: Date): string {
   return formatInTimeZone(timestamp, APP_TIMEZONE, "yyyy-MM-dd");
 }
 
-/** Chave de "dia de trabalho" ancorada no horário de início do turno, não na meia-noite — evita
- * que um turno noturno (ex: entra 22h, sai 7h do dia seguinte) seja partido em dois dias de
- * calendário diferentes. Sem isso, a "primeira entrada" achada no dia seguinte era na verdade a
- * volta do intervalo, não a entrada real, gerando atraso e batida ímpar falsos pra quem trabalha
- * de noite. Sem horário de início cadastrado, cai pro dia-calendário puro. */
+/** Chave de "dia de trabalho" ancorada no turno, não na meia-noite — evita que um turno noturno
+ * (ex: entra 22h, sai 7h do dia seguinte) seja partido em dois dias de calendário diferentes. Sem
+ * isso, a "primeira entrada" achada no dia seguinte era na verdade a volta do intervalo, não a
+ * entrada real, gerando atraso e batida ímpar falsos pra quem trabalha de noite.
+ *
+ * O corte do dia fica 12h OPOSTAS ao horário de início do turno (não exatamente nesse horário):
+ * bater o corte em cima do horário de início faria uma entrada só alguns minutos adiantada (comum
+ * na prática) cair no dia de calendário errado. Cortando no ponto mais distante do início do
+ * turno, tanto adiantar quanto atrasar a entrada em até ~12h continua caindo no mesmo dia de
+ * trabalho. Sem horário de início cadastrado, cai pro dia-calendário puro. */
 function workdayKeyFromTimestamp(timestamp: Date, shiftStartTime: string | null | undefined): string {
   if (!shiftStartTime) return dayKeyFromTimestamp(timestamp);
   const [startHour, startMinute] = shiftStartTime.split(":").map(Number);
   if (!Number.isFinite(startHour) || !Number.isFinite(startMinute)) return dayKeyFromTimestamp(timestamp);
 
+  const cutoffTotalMinutes = (startHour * 60 + startMinute + 12 * 60) % (24 * 60);
+  const cutoffHour = Math.floor(cutoffTotalMinutes / 60);
+  const cutoffMinute = cutoffTotalMinutes % 60;
+
   const local = toZonedTime(timestamp, APP_TIMEZONE);
   const shifted = new Date(local);
-  shifted.setHours(shifted.getHours() - startHour, shifted.getMinutes() - startMinute, shifted.getSeconds(), 0);
+  shifted.setHours(shifted.getHours() - cutoffHour, shifted.getMinutes() - cutoffMinute, shifted.getSeconds(), 0);
 
   const y = shifted.getFullYear();
   const m = String(shifted.getMonth() + 1).padStart(2, "0");
