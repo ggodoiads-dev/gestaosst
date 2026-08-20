@@ -17,17 +17,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       preview: true,
       collaborator: { id: collaborator.id, name: collaborator.name, pis: collaborator.pis, matricula: collaborator.matricula },
-      willSetMatricula: collaborator.matricula ? null : "11127",
-      note: "chame de novo com &apply=1 pra aplicar, só se o nome acima bater com ARI HENDRIEL DE OLIVEIRA MENDES",
+      note: "chame de novo com &apply=1 pra religar as 40 batidas órfãs do código 11127 a esse colaborador (sem mexer na matrícula já cadastrada)",
     });
   }
 
-  if (collaborator.matricula) {
-    return NextResponse.json({ applied: false, reason: "colaborador já tem matrícula cadastrada, nada foi alterado", current: collaborator.matricula });
-  }
-
-  const updated = await db.collaborator.update({ where: { id: COLLABORATOR_ID }, data: { matricula: "11127" } });
+  // Matrícula já cadastrada (11227) difere em 1 dígito do código do relógio (11127) — não
+  // sobrescreve o cadastro, só religa as batidas órfãs desse código a esse colaborador mesmo.
   const linked = await db.timeClockRecord.updateMany({ where: { pis: "11127", collaboratorId: null }, data: { collaboratorId: COLLABORATOR_ID } });
 
-  return NextResponse.json({ applied: true, name: updated.name, matricula: updated.matricula, linkedRecords: linked.count });
+  return NextResponse.json({ applied: true, name: collaborator.name, matricula: collaborator.matricula, linkedRecords: linked.count });
 }
