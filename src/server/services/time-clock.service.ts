@@ -255,6 +255,26 @@ function dayKeyFromTimestamp(timestamp: Date): string {
   return formatInTimeZone(timestamp, APP_TIMEZONE, "yyyy-MM-dd");
 }
 
+/** Chave de "dia de trabalho" ancorada no horário de início do turno, não na meia-noite — evita
+ * que um turno noturno (ex: entra 22h, sai 7h do dia seguinte) seja partido em dois dias de
+ * calendário diferentes. Sem isso, a "primeira entrada" achada no dia seguinte era na verdade a
+ * volta do intervalo, não a entrada real, gerando atraso e batida ímpar falsos pra quem trabalha
+ * de noite. Sem horário de início cadastrado, cai pro dia-calendário puro. */
+function workdayKeyFromTimestamp(timestamp: Date, shiftStartTime: string | null | undefined): string {
+  if (!shiftStartTime) return dayKeyFromTimestamp(timestamp);
+  const [startHour, startMinute] = shiftStartTime.split(":").map(Number);
+  if (!Number.isFinite(startHour) || !Number.isFinite(startMinute)) return dayKeyFromTimestamp(timestamp);
+
+  const local = toZonedTime(timestamp, APP_TIMEZONE);
+  const shifted = new Date(local);
+  shifted.setHours(shifted.getHours() - startHour, shifted.getMinutes() - startMinute, shifted.getSeconds(), 0);
+
+  const y = shifted.getFullYear();
+  const m = String(shifted.getMonth() + 1).padStart(2, "0");
+  const d = String(shifted.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 export type ChecklistLedgerEntry = {
   collaboratorId: string;
   collaboratorName: string;
@@ -310,10 +330,13 @@ async function evaluateRange(range: { from: Date; to: Date }, options?: { areaId
       : Promise.resolve([]),
   ]);
 
+  const collaboratorById = new Map(collaborators.map((c) => [c.id, c]));
+
   const recordsByCollaboratorDay = new Map<string, typeof records>();
   for (const rec of records) {
     if (!rec.collaboratorId) continue;
-    const key = `${rec.collaboratorId}-${dayKeyFromTimestamp(rec.timestamp)}`;
+    const shiftStartTime = collaboratorById.get(rec.collaboratorId)?.turno?.startTime;
+    const key = `${rec.collaboratorId}-${workdayKeyFromTimestamp(rec.timestamp, shiftStartTime)}`;
     const arr = recordsByCollaboratorDay.get(key);
     if (arr) arr.push(rec);
     else recordsByCollaboratorDay.set(key, [rec]);
