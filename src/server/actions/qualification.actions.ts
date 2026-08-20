@@ -115,3 +115,12 @@ export async function updateQualificationRecordAction(_prev: ActionResult, formD
     revalidatePath(`/colaboradores/${parsed.collaboratorId}`);
   });
 }
+
+export async function deleteQualificationRecordAction(id: string, collaboratorId: string): Promise<ActionResult> {
+  return toResult(async () => {
+    const user = await requireUser();
+    await qualificationService.deleteQualificationRecord(user, id);
+    revalidatePath("/qualificacoes");
+    revalidatePath(`/colaboradores/${collaboratorId}`);
+  });
+}

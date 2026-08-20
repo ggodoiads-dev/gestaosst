@@ -153,6 +153,24 @@ export async function updateQualificationRecord(user: CurrentUser, id: string, d
   return record;
 }
 
+/** Remove um registro lançado por engano (não pra renovação — pra isso é só lançar um novo, o
+ * histórico existe justamente pra guardar as renovações anteriores). Apaga de vez, não é
+ * soft-delete: diferente de acidente/NC, um lançamento errado de qualificação não tem valor
+ * nenhum de manter — mas fica registrado no log de auditoria antes de sumir. */
+export async function deleteQualificationRecord(user: CurrentUser, id: string) {
+  requirePermission(user, PERMISSIONS.QUALIFICATION_MANAGE);
+  const before = await db.qualificationRecord.findUniqueOrThrow({ where: { id } });
+
+  await db.$transaction(async (tx) => {
+    await tx.attachment.deleteMany({ where: { qualificationRecordId: id } });
+    await tx.qualificationRecord.delete({ where: { id } });
+    await recordAudit(
+      { userId: user.id, action: "DELETE", entityType: "QualificationRecord", entityId: id, previousValue: before },
+      tx,
+    );
+  });
+}
+
 async function listLatestRecordsPerPair() {
   const records = await db.qualificationRecord.findMany({
     include: { qualificationType: true, collaborator: true },

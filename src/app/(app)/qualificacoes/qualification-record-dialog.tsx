@@ -1,7 +1,8 @@
 "use client";
 
-import { useActionState, useState } from "react";
-import { Plus, Pencil } from "lucide-react";
+import { useActionState, useState, useTransition } from "react";
+import { Plus, Pencil, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -19,6 +20,7 @@ import {
 import {
   createQualificationRecordAction,
   updateQualificationRecordAction,
+  deleteQualificationRecordAction,
   type ActionResult,
 } from "@/server/actions/qualification.actions";
 import { useCloseOnSuccess } from "@/lib/use-close-on-success";
@@ -118,6 +120,20 @@ export function EditQualificationRecordDialog({
   useCloseOnSuccess(pending, state, () => setOpen(false));
   const [collaboratorId, setCollaboratorId] = useState(record.collaboratorId);
   const [qualificationTypeId, setQualificationTypeId] = useState(record.qualificationTypeId);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, startDelete] = useTransition();
+
+  function handleDelete() {
+    startDelete(async () => {
+      const result = await deleteQualificationRecordAction(record.id, record.collaboratorId);
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success("Qualificação excluída.");
+      setOpen(false);
+    });
+  }
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -160,12 +176,36 @@ export function EditQualificationRecordDialog({
               <Textarea id="edit-notes" name="notes" rows={2} defaultValue={record.notes ?? ""} />
             </FormField>
             {!state.ok && <p className="text-sm text-danger">{state.error}</p>}
+
+            {confirmingDelete && (
+              <div className="flex items-center justify-between gap-3 rounded-md border border-danger/30 bg-danger/10 px-3 py-2.5">
+                <p className="text-sm text-danger">Excluir esta qualificação de vez? Não pode ser desfeito.</p>
+                <div className="flex shrink-0 gap-2">
+                  <Button type="button" size="sm" variant="secondary" onClick={() => setConfirmingDelete(false)}>
+                    Cancelar
+                  </Button>
+                  <Button type="button" size="sm" variant="danger" loading={deleting} onClick={handleDelete}>
+                    Sim, excluir
+                  </Button>
+                </div>
+              </div>
+            )}
           </DialogBody>
-          <DialogFooter>
-            <DialogClose asChild>
-              <Button type="button" variant="secondary">Cancelar</Button>
-            </DialogClose>
-            <Button type="submit" loading={pending}>Salvar</Button>
+          <DialogFooter className="justify-between">
+            <Button
+              type="button"
+              variant="ghost"
+              className="text-danger hover:text-danger"
+              onClick={() => setConfirmingDelete(true)}
+            >
+              <Trash2 className="size-4" /> Excluir
+            </Button>
+            <div className="flex gap-2">
+              <DialogClose asChild>
+                <Button type="button" variant="secondary">Cancelar</Button>
+              </DialogClose>
+              <Button type="submit" loading={pending}>Salvar</Button>
+            </div>
           </DialogFooter>
         </form>
       </DialogContent>
