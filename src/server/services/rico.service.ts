@@ -673,6 +673,54 @@ export async function getDailyBriefing(user: CurrentUser, context: DailyBriefing
   }
 }
 
+export type AccidentInsightContext = {
+  year: number;
+  totalCount: number;
+  monthly: { label: string; count: number }[];
+  topType: { label: string; count: number } | null;
+};
+
+function describeAccidentInsightContext(ctx: AccidentInsightContext): string | null {
+  if (ctx.totalCount === 0) return null;
+  const monthsWithData = ctx.monthly.filter((m) => m.count > 0).map((m) => `${m.label}: ${m.count}`);
+  const parts = [`Total de ${ctx.totalCount} acidente(s)/incidente(s) registrado(s) em ${ctx.year}.`];
+  if (monthsWithData.length > 0) parts.push(`Por mês: ${monthsWithData.join(", ")}.`);
+  if (ctx.topType) parts.push(`Tipo mais recorrente: ${ctx.topType.label} (${ctx.topType.count} ocorrência(s)).`);
+  return parts.join(" ");
+}
+
+/**
+ * Comentário curto do Rico pro dashboard de Acidentes — mesma lógica best-effort do
+ * getProactiveTip/getDailyBriefing, só que reagindo à distribuição mensal e ao tipo mais
+ * recorrente em vez de um evento pontual ou o estado do dia.
+ */
+export async function getAccidentInsight(user: CurrentUser, context: AccidentInsightContext): Promise<string | null> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return null;
+
+  const description = describeAccidentInsightContext(context);
+  if (!description) return null;
+
+  try {
+    const client = new OpenAI({ apiKey });
+    const response = await client.chat.completions.create({
+      model: MODEL,
+      max_tokens: 140,
+      messages: [
+        {
+          role: "system",
+          content: `${SYSTEM_PROMPT}\n\nVocê está comentando o painel de acidentes/incidentes do ano pra ${user.name.split(" ")[0]} — 1 a 2 frases, tom direto. Destaque o que mais chama atenção (tipo mais recorrente, mês com mais casos, ou uma tendência de queda/alta), como se fosse uma observação de quem realmente olhou os números, não uma repetição fria deles. Nunca invente números além dos que foram passados a você.`,
+        },
+        { role: "user", content: description },
+      ],
+    });
+    return response.choices[0]?.message.content?.trim() || null;
+  } catch (error) {
+    console.error("[rico] falha ao gerar insight de acidentes:", error);
+    return null;
+  }
+}
+
 /** Executa de verdade uma ação de escrita já confirmada pelo usuário no chat. */
 export async function executeRicoAction(
   user: CurrentUser,

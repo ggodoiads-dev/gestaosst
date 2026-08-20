@@ -66,6 +66,17 @@ export async function createAccidentAction(_prev: ActionResult, formData: FormDa
   });
 }
 
+export async function updateAccidentAction(_prev: ActionResult, formData: FormData) {
+  return toResult(async () => {
+    const user = await requireUser();
+    const id = String(formData.get("id"));
+    const data = parseAccidentForm(formData);
+    await accidentService.updateAccident(user, id, data);
+    revalidatePath("/acidentes");
+    revalidatePath(`/acidentes/${id}`);
+  });
+}
+
 export async function updateAccidentStatusAction(
   id: string,
   status: "ABERTO" | "EM_INVESTIGACAO" | "CONCLUIDO" | "CANCELADA",

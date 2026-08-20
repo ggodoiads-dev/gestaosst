@@ -27,10 +27,13 @@ export type AccidentInput = {
   closedAt?: Date | null;
 };
 
-export function listAccidentsForUser(user: CurrentUser, filters: { status?: string } = {}) {
+/** Sem filtro, esconde os cancelados por padrão (soft-delete "some da aba", não fica só com uma
+ * etiqueta na lista) — passe status: "CANCELADA" pra ver só os cancelados, ou "ALL" pra ver tudo. */
+export function listAccidentsForUser(user: CurrentUser, filters: { status?: AccidentStatus | "ALL" } = {}) {
   requirePermission(user, PERMISSIONS.ACCIDENT_MANAGE);
+  const where = filters.status === "ALL" ? {} : filters.status ? { status: filters.status } : { status: { not: "CANCELADA" as const } };
   return db.accident.findMany({
-    where: { status: (filters.status as AccidentStatus) || undefined },
+    where,
     include: { area: true, involvements: { include: { collaborator: true } } },
     orderBy: { date: "desc" },
   });
@@ -99,6 +102,49 @@ export async function createAccident(user: CurrentUser, data: AccidentInput) {
   return accident;
 }
 
+export async function updateAccident(user: CurrentUser, id: string, data: AccidentInput) {
+  requirePermission(user, PERMISSIONS.ACCIDENT_MANAGE);
+  const before = await db.accident.findUniqueOrThrow({ where: { id } });
+
+  const accident = await db.$transaction(async (tx) => {
+    const updated = await tx.accident.update({
+      where: { id },
+      data: {
+        date: data.date,
+        time: data.time,
+        areaId: data.areaId,
+        type: data.type,
+        severity: data.severity,
+        description: data.description,
+        immediateCause: data.immediateCause,
+        rootCause: data.rootCause,
+        isSif: data.isSif,
+        sifClassification: data.isSif ? data.sifClassification : null,
+        creditNumber: data.creditNumber,
+      },
+    });
+
+    // Recria os envolvimentos do zero — mais simples e seguro que tentar calcular o diff, já que
+    // um acidente raramente tem mais que uma dezena de envolvidos.
+    await tx.accidentInvolvement.deleteMany({ where: { accidentId: id } });
+    for (const collaboratorId of data.involvedCollaboratorIds) {
+      await tx.accidentInvolvement.create({ data: { accidentId: id, collaboratorId, role: "VITIMA" } });
+    }
+    for (const collaboratorId of data.witnessCollaboratorIds) {
+      await tx.accidentInvolvement.create({ data: { accidentId: id, collaboratorId, role: "TESTEMUNHA" } });
+    }
+
+    await recordAudit(
+      { userId: user.id, action: "UPDATE", entityType: "Accident", entityId: id, previousValue: before, newValue: data },
+      tx,
+    );
+
+    return updated;
+  });
+
+  return accident;
+}
+
 export async function updateAccidentStatus(user: CurrentUser, id: string, status: AccidentStatus) {
   requirePermission(user, PERMISSIONS.ACCIDENT_MANAGE);
   const before = await db.accident.findUniqueOrThrow({ where: { id } });
@@ -158,6 +204,56 @@ export async function createAccidentAction(user: CurrentUser, accidentId: string
   });
 
   return action;
+}
+
+const MONTH_LABELS = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+
+const ACCIDENT_TYPE_LABELS: Record<AccidentType, string> = {
+  ACIDENTE_TIPICO: "Acidente típico",
+  ACIDENTE_TRAJETO: "Acidente de trajeto",
+  QUASE_ACIDENTE: "Quase acidente",
+  DOENCA_OCUPACIONAL: "Doença ocupacional",
+};
+
+export type AccidentMonthlyStats = {
+  year: number;
+  monthly: { month: number; label: string; count: number }[];
+  byType: { type: AccidentType; label: string; count: number }[];
+  totalCount: number;
+  topType: { type: AccidentType; label: string; count: number } | null;
+};
+
+/** Painel mensal de acidentes/incidentes do ano — usado no dashboard da tela de Acidentes.
+ * Cancelados não entram na contagem (registro de teste/duplicado não deveria distorcer a série). */
+export async function getAccidentMonthlyStats(user: CurrentUser, year?: number): Promise<AccidentMonthlyStats> {
+  requirePermission(user, PERMISSIONS.ACCIDENT_MANAGE);
+  const targetYear = year ?? new Date().getFullYear();
+  const from = new Date(targetYear, 0, 1);
+  const to = new Date(targetYear, 11, 31, 23, 59, 59);
+
+  const accidents = await db.accident.findMany({
+    where: { date: { gte: from, lte: to }, status: { not: "CANCELADA" } },
+    select: { date: true, type: true },
+  });
+
+  const monthCounts = Array<number>(12).fill(0);
+  const typeCounts = new Map<AccidentType, number>();
+  for (const a of accidents) {
+    monthCounts[a.date.getMonth()]!++;
+    typeCounts.set(a.type, (typeCounts.get(a.type) ?? 0) + 1);
+  }
+
+  const byType = [...typeCounts.entries()]
+    .map(([type, count]) => ({ type, label: ACCIDENT_TYPE_LABELS[type], count }))
+    .sort((a, b) => b.count - a.count);
+
+  return {
+    year: targetYear,
+    monthly: MONTH_LABELS.map((label, i) => ({ month: i + 1, label, count: monthCounts[i]! })),
+    byType,
+    totalCount: accidents.length,
+    topType: byType[0] ?? null,
+  };
 }
 
 export async function setAccidentActionStatus(user: CurrentUser, actionId: string, status: AccidentActionStatus) {
