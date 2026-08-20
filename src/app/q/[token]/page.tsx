@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/server/auth/current-user";
 import { db } from "@/server/db";
 import { getEquipmentPhoto } from "@/server/services/equipment.service";
 import { getCollaboratorPhoto } from "@/server/services/collaborator.service";
+import { getCollaboratorQualificationSummary, type CollaboratorQualificationSummary } from "@/server/services/qualification.service";
 import { readFileBuffer } from "@/server/services/storage";
 import { qualificationStatus } from "@/lib/qualification-status";
 import { formatDate } from "@/lib/dates";
@@ -60,8 +61,12 @@ export default async function QrResolverPage({
   const collaborator = await db.collaborator.findUnique({ where: { qrToken: token } });
   if (collaborator) {
     if (user) redirect(`/colaboradores/${collaborator.id}`);
+    // Colaborador desligado: pra um visitante anônimo escaneando o crachá físico, a ficha some —
+    // mesmo comportamento de "não encontrado", pra não deixar foto/CPF/dados expostos indefinidamente
+    // só porque o qrToken nunca é trocado no desligamento. Usuário logado continua vendo via redirect acima.
+    if (!collaborator.active) notFound();
     const [summary, photo, equipmentAptitudes, lastExecution] = await Promise.all([
-      getQualificationSummary(collaborator.id),
+      getCollaboratorQualificationSummary(collaborator.id),
       getCollaboratorPhoto(collaborator.id),
       db.collaboratorEquipment.findMany({
         where: { collaboratorId: collaborator.id },
@@ -97,7 +102,7 @@ export default async function QrResolverPage({
     });
     const summaries = await Promise.all(
       collaborators.map(async (c) => {
-        const [summary, photo] = await Promise.all([getQualificationSummary(c.id), getCollaboratorPhoto(c.id)]);
+        const [summary, photo] = await Promise.all([getCollaboratorQualificationSummary(c.id), getCollaboratorPhoto(c.id)]);
         return { collaborator: c, summary, photoUrl: await photoDataUrl(photo) };
       }),
     );
@@ -111,42 +116,7 @@ export default async function QrResolverPage({
   notFound();
 }
 
-type QualificationSummary = {
-  aso: { typeName: string; expiresAt: Date | null } | null;
-  nrs: { typeName: string; expiresAt: Date | null }[];
-  hasAnyRecord: boolean;
-  hasAnyExpired: boolean;
-  apt: boolean;
-};
-
-/** ASO/NR mais recente de cada tipo pro colaborador, e se ele está "apto" (sem nenhum vencido e com pelo menos 1 registro). */
-async function getQualificationSummary(collaboratorId: string): Promise<QualificationSummary> {
-  const records = await db.qualificationRecord.findMany({
-    where: { collaboratorId },
-    include: { qualificationType: true },
-    orderBy: { completedDate: "desc" },
-  });
-
-  const seenTypeIds = new Set<string>();
-  const current = records.filter((r) => {
-    if (seenTypeIds.has(r.qualificationTypeId)) return false;
-    seenTypeIds.add(r.qualificationTypeId);
-    return true;
-  });
-
-  const now = new Date();
-  const hasAnyExpired = current.some((r) => r.expiresAt && r.expiresAt < now);
-  const aso = current.find((r) => r.qualificationType.category === "ASO");
-  const nrs = current.filter((r) => r.qualificationType.category === "NR");
-
-  return {
-    aso: aso ? { typeName: aso.qualificationType.name, expiresAt: aso.expiresAt } : null,
-    nrs: nrs.map((r) => ({ typeName: r.qualificationType.name, expiresAt: r.expiresAt })),
-    hasAnyRecord: current.length > 0,
-    hasAnyExpired,
-    apt: current.length > 0 && !hasAnyExpired,
-  };
-}
+type QualificationSummary = CollaboratorQualificationSummary;
 
 function PublicPageShell({ children, wide }: { children: React.ReactNode; wide?: boolean }) {
   return (
@@ -251,6 +221,7 @@ function PublicCollaboratorView({
         <div className="size-28 rounded-full border border-dashed border-border-strong bg-surface-muted" />
       )}
       <h1 className="text-lg font-semibold text-foreground">{collaborator.name}</h1>
+      <Badge tone={summary.apt ? "success" : "danger"}>{summary.apt ? "Apto" : "Não apto"}</Badge>
 
       <div className="grid w-full grid-cols-2 gap-3 text-left text-sm">
         <div>

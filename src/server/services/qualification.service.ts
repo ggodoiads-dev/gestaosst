@@ -171,6 +171,47 @@ export async function deleteQualificationRecord(user: CurrentUser, id: string) {
   });
 }
 
+export type CollaboratorQualificationSummary = {
+  aso: { typeName: string; expiresAt: Date | null } | null;
+  nrs: { typeName: string; expiresAt: Date | null }[];
+  hasAnyRecord: boolean;
+  hasAnyExpired: boolean;
+  /** "Apto" olha só NR (o que o usuário pediu: sem nenhuma NR cadastrada, ou com alguma vencida,
+   * é inapto — independe de ter ASO em dia ou não). */
+  apt: boolean;
+};
+
+/** ASO/NR mais recente de cada tipo pro colaborador, e se ele está "apto" — usado no QR público
+ * (individual e por área) e no perfil interno, pra manter a mesma regra nos dois lugares. */
+export async function getCollaboratorQualificationSummary(collaboratorId: string): Promise<CollaboratorQualificationSummary> {
+  const records = await db.qualificationRecord.findMany({
+    where: { collaboratorId },
+    include: { qualificationType: true },
+    orderBy: { completedDate: "desc" },
+  });
+
+  const seenTypeIds = new Set<string>();
+  const current = records.filter((r) => {
+    if (seenTypeIds.has(r.qualificationTypeId)) return false;
+    seenTypeIds.add(r.qualificationTypeId);
+    return true;
+  });
+
+  const now = new Date();
+  const hasAnyExpired = current.some((r) => r.expiresAt && r.expiresAt < now);
+  const aso = current.find((r) => r.qualificationType.category === "ASO");
+  const nrs = current.filter((r) => r.qualificationType.category === "NR");
+  const hasAnyNrExpired = nrs.some((r) => r.expiresAt && r.expiresAt < now);
+
+  return {
+    aso: aso ? { typeName: aso.qualificationType.name, expiresAt: aso.expiresAt } : null,
+    nrs: nrs.map((r) => ({ typeName: r.qualificationType.name, expiresAt: r.expiresAt })),
+    hasAnyRecord: current.length > 0,
+    hasAnyExpired,
+    apt: nrs.length > 0 && !hasAnyNrExpired,
+  };
+}
+
 async function listLatestRecordsPerPair() {
   const records = await db.qualificationRecord.findMany({
     include: { qualificationType: true, collaborator: true },

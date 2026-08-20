@@ -105,7 +105,7 @@ export default async function ColaboradoresPage() {
                       {collaborator.active ? (
                         <Badge tone="success">Ativo</Badge>
                       ) : (
-                        <Badge tone="neutral">Excluído</Badge>
+                        <Badge tone="neutral">Desligado</Badge>
                       )}
                     </TableCell>
                     {canSeeHr && (

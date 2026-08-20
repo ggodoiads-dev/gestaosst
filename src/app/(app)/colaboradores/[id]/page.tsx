@@ -16,7 +16,7 @@ import {
 import { generateEpiDeliveryQrCode, generateCollaboratorQrCode } from "@/server/services/qrcode.service";
 import { listActivityAptitudesForCollaborator } from "@/server/services/activity.service";
 import { listEquipmentAptitudesForCollaborator } from "@/server/services/equipment.service";
-import { listQualificationTypes } from "@/server/services/qualification.service";
+import { listQualificationTypes, getCollaboratorQualificationSummary } from "@/server/services/qualification.service";
 import { listWarningsForCollaborator } from "@/server/services/warning.service";
 import { getChecklistComplianceRange } from "@/server/services/checklist-compliance.service";
 import { PageHeader, PageBody } from "@/components/domain/page-header";
@@ -94,6 +94,7 @@ export default async function ColaboradorDetailPage({
       ? getChecklistComplianceRange(user, { collaboratorId: id, from: complianceFrom, to: complianceTo })
       : Promise.resolve(null),
   ]);
+  const nrAptSummary = canManageQualifications ? await getCollaboratorQualificationSummary(id) : null;
   const photoUrl = photo ? attachmentUrl(photo.path) : null;
 
   const headerList = await headers();
@@ -127,7 +128,7 @@ export default async function ColaboradorDetailPage({
         description={`${collaborator.cargo ?? "Cargo não informado"}${collaborator.area ? ` · ${collaborator.area.name}` : ""}`}
         actions={
           <div className="flex items-center gap-2">
-            {collaborator.active ? <Badge tone="success">Ativo</Badge> : <Badge tone="neutral">Excluído</Badge>}
+            {collaborator.active ? <Badge tone="success">Ativo</Badge> : <Badge tone="neutral">Desligado</Badge>}
             {canManage && (
               <EditCollaboratorDialog
                 collaborator={collaborator}
@@ -258,7 +259,14 @@ export default async function ColaboradorDetailPage({
           <Card>
             <CardHeader>
               <CardTitle>
-                <span className="flex items-center gap-2"><GraduationCap className="size-4" /> Qualificações</span>
+                <span className="flex items-center gap-2">
+                  <GraduationCap className="size-4" /> Qualificações
+                  {nrAptSummary && (
+                    <Badge tone={nrAptSummary.apt ? "success" : "danger"}>
+                      {nrAptSummary.apt ? "Apto" : "Não apto"}
+                    </Badge>
+                  )}
+                </span>
               </CardTitle>
               {canManageQualifications && (
                 <CreateQualificationRecordDialog

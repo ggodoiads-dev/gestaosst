@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Trash2, RotateCcw } from "lucide-react";
+import { UserX, UserCheck } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,23 +23,23 @@ export function DeleteCollaboratorButton({ id, name }: { id: string; name: strin
   function handleConfirm() {
     startTransition(async () => {
       await setCollaboratorActiveAction(id, false);
-      toast.success(`${name} excluído. O histórico dele continua disponível.`);
+      toast.success(`${name} desligado. O histórico dele continua disponível.`);
       setOpen(false);
     });
   }
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <Button size="icon" variant="ghost" onClick={() => setOpen(true)} aria-label="Excluir colaborador">
-        <Trash2 className="size-4 text-danger" />
+      <Button size="icon" variant="ghost" onClick={() => setOpen(true)} aria-label="Desligar colaborador">
+        <UserX className="size-4 text-danger" />
       </Button>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Excluir {name}?</DialogTitle>
+          <DialogTitle>Desligar {name}?</DialogTitle>
           <DialogDescription>
-            O colaborador deixa de aparecer nas listas ativas. Acidentes, qualificações e o
-            histórico já registrados para ele continuam disponíveis, e você pode reativá-lo
-            depois se precisar.
+            O colaborador deixa de aparecer nas listas ativas, relatórios, áreas e no QR code
+            público dele. Acidentes, qualificações e o histórico já registrados continuam
+            disponíveis, e você pode recontratá-lo depois se precisar.
           </DialogDescription>
         </DialogHeader>
         <DialogBody />
@@ -48,7 +48,7 @@ export function DeleteCollaboratorButton({ id, name }: { id: string; name: strin
             <Button type="button" variant="secondary">Cancelar</Button>
           </DialogClose>
           <Button variant="danger" onClick={handleConfirm} loading={isPending}>
-            Excluir
+            Desligar
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -62,13 +62,13 @@ export function ReactivateCollaboratorButton({ id, name }: { id: string; name: s
   function handleClick() {
     startTransition(async () => {
       await setCollaboratorActiveAction(id, true);
-      toast.success(`${name} reativado.`);
+      toast.success(`${name} recontratado.`);
     });
   }
 
   return (
-    <Button size="icon" variant="ghost" onClick={handleClick} loading={isPending} aria-label="Reativar colaborador">
-      <RotateCcw className="size-4" />
+    <Button size="icon" variant="ghost" onClick={handleClick} loading={isPending} aria-label="Recontratar colaborador">
+      <UserCheck className="size-4" />
     </Button>
   );
 }
