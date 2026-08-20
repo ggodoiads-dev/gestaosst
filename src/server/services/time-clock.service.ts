@@ -143,19 +143,26 @@ export type UnmatchedTimeClockPis = {
 };
 
 /** Códigos do relógio de ponto sem colaborador vinculado — base pra reconciliação manual, já
- * que o arquivo AFDT não traz nome nenhum, só esse código e os horários. */
+ * que o arquivo AFDT não traz nome nenhum, só esse código e os horários. Não lista os códigos
+ * marcados como ignorados (ex: código de erro do relógio, sobra de arquivo antigo). */
 export async function listUnmatchedTimeClockPis(user: CurrentUser): Promise<UnmatchedTimeClockPis[]> {
   requirePermission(user, PERMISSIONS.HR_MANAGE);
 
-  const groups = await db.timeClockRecord.groupBy({
-    by: ["pis"],
-    where: { collaboratorId: null },
-    _count: { _all: true },
-    _min: { timestamp: true },
-    _max: { timestamp: true },
-  });
+  const [groups, ignored] = await Promise.all([
+    db.timeClockRecord.groupBy({
+      by: ["pis"],
+      where: { collaboratorId: null },
+      _count: { _all: true },
+      _min: { timestamp: true },
+      _max: { timestamp: true },
+    }),
+    db.ignoredTimeClockPis.findMany({ select: { pis: true } }),
+  ]);
+
+  const ignoredSet = new Set(ignored.map((i) => i.pis));
 
   return groups
+    .filter((g) => !ignoredSet.has(g.pis))
     .map((g) => ({
       pis: g.pis,
       recordCount: g._count._all,
@@ -163,6 +170,33 @@ export async function listUnmatchedTimeClockPis(user: CurrentUser): Promise<Unma
       lastTimestamp: g._max.timestamp!,
     }))
     .sort((a, b) => b.recordCount - a.recordCount);
+}
+
+/** Marca um código como "não vale a pena investigar" (ex: código de erro do relógio, sobra de
+ * arquivo antigo) — só some da lista de reconciliação, nenhuma marcação já importada é apagada. */
+export async function ignoreTimeClockPis(user: CurrentUser, pis: string): Promise<void> {
+  requirePermission(user, PERMISSIONS.HR_MANAGE);
+  await db.ignoredTimeClockPis.upsert({
+    where: { pis },
+    update: {},
+    create: { pis, ignoredById: user.id },
+  });
+}
+
+/** Ignora de uma vez todos os códigos hoje sem colaborador vinculado — atalho pra limpar uma
+ * lista cheia de sobras de importações antigas sem precisar clicar um por um. */
+export async function ignoreAllUnmatchedTimeClockPis(user: CurrentUser): Promise<{ ignoredCount: number }> {
+  requirePermission(user, PERMISSIONS.HR_MANAGE);
+
+  const unmatched = await listUnmatchedTimeClockPis(user);
+  if (unmatched.length === 0) return { ignoredCount: 0 };
+
+  await db.ignoredTimeClockPis.createMany({
+    data: unmatched.map((u) => ({ pis: u.pis, ignoredById: user.id })),
+    skipDuplicates: true,
+  });
+
+  return { ignoredCount: unmatched.length };
 }
 
 /** Vincula manualmente um código do relógio a um colaborador — usado quando não há como saber o

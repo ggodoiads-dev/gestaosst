@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
-import { Upload, AlertTriangle, CheckCircle2, Search, Link2 } from "lucide-react";
+import { Upload, AlertTriangle, CheckCircle2, Search, Link2, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
@@ -16,6 +16,8 @@ import {
   getChecklistAdherenceAction,
   getUnmatchedTimeClockPisAction,
   linkTimeClockPisAction,
+  ignoreTimeClockPisAction,
+  ignoreAllUnmatchedTimeClockPisAction,
 } from "@/server/actions/time-clock.actions";
 import type {
   TimeClockAnomaly,
@@ -63,6 +65,9 @@ export function PontoPanel({
   const [loadingReport, startReport] = useTransition();
   const [linking, startLink] = useTransition();
   const [linkingPis, setLinkingPis] = useState<string | null>(null);
+  const [ignoring, startIgnore] = useTransition();
+  const [ignoringPis, setIgnoringPis] = useState<string | null>(null);
+  const [ignoringAll, startIgnoreAll] = useTransition();
 
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [summary, setSummary] = useState<TimeClockImportSummary | null>(null);
@@ -138,6 +143,31 @@ export function PontoPanel({
     });
   }
 
+  function handleIgnore(pis: string) {
+    setIgnoringPis(pis);
+    startIgnore(async () => {
+      const res = await ignoreTimeClockPisAction(pis);
+      setIgnoringPis(null);
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      setUnmatchedPis((prev) => prev.filter((u) => u.pis !== pis));
+    });
+  }
+
+  function handleIgnoreAll() {
+    startIgnoreAll(async () => {
+      const res = await ignoreAllUnmatchedTimeClockPisAction();
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success(`${res.ignoredCount} código(s) ignorado(s).`);
+      setUnmatchedPis([]);
+    });
+  }
+
   return (
     <>
       <Card>
@@ -185,11 +215,18 @@ export function PontoPanel({
       {unmatchedPis.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Batidas não identificadas ({unmatchedPis.length})</CardTitle>
-            <CardDescription>
-              O arquivo do relógio não traz nome, só esse código — escolha o colaborador certo pra cada um.
-              Depois de vincular, o código vira o PIS dele e todo o histórico já importado se ajusta sozinho.
-            </CardDescription>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <CardTitle>Batidas não identificadas ({unmatchedPis.length})</CardTitle>
+                <CardDescription>
+                  O arquivo do relógio não traz nome, só esse código — escolha o colaborador certo pra cada
+                  um, ou ignore se for sobra de arquivo antigo/código de erro do relógio.
+                </CardDescription>
+              </div>
+              <Button size="sm" variant="secondary" loading={ignoringAll} onClick={handleIgnoreAll}>
+                <EyeOff className="size-4" /> Ignorar todos
+              </Button>
+            </div>
           </CardHeader>
           <CardContent className="p-0">
             <Table>
@@ -199,7 +236,7 @@ export function PontoPanel({
                   <TableHead>Marcações</TableHead>
                   <TableHead>Período</TableHead>
                   <TableHead>Colaborador</TableHead>
-                  <TableHead className="w-24" />
+                  <TableHead className="w-52" />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -226,15 +263,26 @@ export function PontoPanel({
                       </Select>
                     </TableCell>
                     <TableCell>
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        loading={linking && linkingPis === u.pis}
-                        disabled={!selectedCollaborator[u.pis]}
-                        onClick={() => handleLink(u.pis)}
-                      >
-                        <Link2 className="size-4" /> Vincular
-                      </Button>
+                      <div className="flex items-center gap-1.5">
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          loading={linking && linkingPis === u.pis}
+                          disabled={!selectedCollaborator[u.pis]}
+                          onClick={() => handleLink(u.pis)}
+                        >
+                          <Link2 className="size-4" /> Vincular
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          loading={ignoring && ignoringPis === u.pis}
+                          onClick={() => handleIgnore(u.pis)}
+                          aria-label="Ignorar código"
+                        >
+                          <EyeOff className="size-4" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}

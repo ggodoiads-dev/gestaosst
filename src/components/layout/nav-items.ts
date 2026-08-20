@@ -191,7 +191,7 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
   }
   if (p.has(PERMISSIONS.HR_MANAGE)) {
     rh.push({ href: "/rh/importar", label: "Importar Planilha", icon: "hrImport" });
-    rh.push({ href: "/rh/ponto", label: "Importar Ponto (AFDT)", icon: "timeClock" });
+    rh.push({ href: "/rh/ponto", label: "Importar Ponto", icon: "timeClock" });
     rh.push({ href: "/pendencias-advertencia", label: "Pendências de Advertência", icon: "warningPending" });
   }
   if (p.has(PERMISSIONS.SCHEDULE_MANAGE)) {

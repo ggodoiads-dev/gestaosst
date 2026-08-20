@@ -97,6 +97,7 @@ model User {
   productivityGoalsCreated      ProductivityGoal[]       @relation("ProductivityGoalCreatedBy")
   epiDeliveriesCreated          EpiDelivery[]            @relation("EpiDeliveryCreatedBy")
   timeClockRecordsImported      TimeClockRecord[]        @relation("TimeClockImportedBy")
+  timeClockPisIgnored           IgnoredTimeClockPis[]     @relation("TimeClockPisIgnoredBy")
   checklistJustificationsMade   ChecklistJustification[] @relation("ChecklistJustificationCreatedBy")
   collaboratorActivitiesGranted CollaboratorActivity[]   @relation("CollaboratorActivityGrantedBy")
   collaboratorEquipmentsGranted CollaboratorEquipment[]  @relation("CollaboratorEquipmentCreatedBy")
@@ -1309,6 +1310,17 @@ model TimeClockRecord {
   @@unique([pis, timestamp, markNumber])
   @@index([collaboratorId, timestamp])
   @@index([timestamp])
+}
+
+/// Código do relógio marcado como "não vale a pena investigar" (ex: código de erro do próprio
+/// relógio tipo "00000000000", ou sobra de um arquivo antigo) — só tira da lista de reconciliação,
+/// não apaga nenhuma marcação já importada.
+model IgnoredTimeClockPis {
+  pis        String   @id
+  ignoredById String
+  ignoredAt  DateTime @default(now())
+
+  ignoredBy User @relation("TimeClockPisIgnoredBy", fields: [ignoredById], references: [id])
 }
 
 enum ChecklistJustificationReason {

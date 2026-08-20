@@ -103,6 +103,36 @@ export async function linkTimeClockPisAction(pis: string, collaboratorId: string
   }
 }
 
+export type IgnorePisResult = { ok: true } | { ok: false; error: string };
+
+export async function ignoreTimeClockPisAction(pis: string): Promise<IgnorePisResult> {
+  try {
+    const user = await requireUser();
+    await timeClockService.ignoreTimeClockPis(user, pis);
+    revalidatePath("/rh/ponto");
+    return { ok: true };
+  } catch (error) {
+    if (error instanceof ForbiddenError) return { ok: false, error: error.message };
+    console.error("[time-clock] falha ao ignorar código:", error);
+    return { ok: false, error: "Não foi possível ignorar esse código." };
+  }
+}
+
+export type IgnoreAllPisResult = { ok: true; ignoredCount: number } | { ok: false; error: string };
+
+export async function ignoreAllUnmatchedTimeClockPisAction(): Promise<IgnoreAllPisResult> {
+  try {
+    const user = await requireUser();
+    const result = await timeClockService.ignoreAllUnmatchedTimeClockPis(user);
+    revalidatePath("/rh/ponto");
+    return { ok: true, ignoredCount: result.ignoredCount };
+  } catch (error) {
+    if (error instanceof ForbiddenError) return { ok: false, error: error.message };
+    console.error("[time-clock] falha ao ignorar todos os códigos:", error);
+    return { ok: false, error: "Não foi possível ignorar os códigos." };
+  }
+}
+
 export type JustifyResult = { ok: true } | { ok: false; error: string };
 
 export async function justifyChecklistPendingAction(input: {
