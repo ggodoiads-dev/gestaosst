@@ -59,6 +59,8 @@ import { ROLE_LABELS, type RoleKeyValue } from "@/domain/shared/permissions";
 import { GlobalSearch } from "@/components/domain/global-search";
 import { RicoProvider } from "@/components/rico/rico-context";
 import { RicoFloatingWidget } from "@/components/rico/rico-floating-widget";
+import { AlertsBell } from "@/components/layout/alerts-bell";
+import type { AlertsSummary } from "@/server/services/alerts.service";
 
 const ICONS: Record<NavIconKey, LucideIcon> = {
   dashboard: LayoutDashboard,
@@ -128,10 +130,12 @@ function useCollapsedGroups(activePathname: string) {
 export function AppShell({
   navGroups,
   user,
+  alerts,
   children,
 }: {
   navGroups: NavGroup[];
   user: { name: string; email: string; roleKey: string };
+  alerts: AlertsSummary;
   children: React.ReactNode;
 }) {
   const [mobileOpen, setMobileOpen] = React.useState(false);
@@ -231,7 +235,8 @@ export function AppShell({
             <GlobalSearch />
           </div>
 
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-1.5">
+            <AlertsBell items={alerts.items} count={alerts.count} />
             <DropdownMenu>
               <DropdownMenuTrigger className="flex items-center gap-2.5 rounded-md px-1.5 py-1 hover:bg-surface-muted focus:outline-none">
                 <Avatar name={user.name} size="sm" />
