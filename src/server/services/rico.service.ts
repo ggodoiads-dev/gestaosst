@@ -11,6 +11,7 @@ import { listChecklistBoardForUser } from "@/server/services/checklist-execution
 import { listNonconformitiesForUser, setNonconformityStatus } from "@/server/services/nonconformity.service";
 import { getExpiringQualifications, listQualificationTypes } from "@/server/services/qualification.service";
 import { listAccidentsForUser } from "@/server/services/accident.service";
+import { listEquipmentDamagesForUser } from "@/server/services/equipment-damage.service";
 import { listCollaboratorsForUser } from "@/server/services/collaborator.service";
 import { listAreas } from "@/server/services/masterdata.service";
 import * as activityService from "@/server/services/activity.service";
@@ -146,6 +147,15 @@ const READ_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
       name: "acidentes_recentes",
       description:
         "Lista acidentes/incidentes/quase-acidentes registrados (até 80, mais recentes primeiro), com a descrição completa de cada um. Use pra perguntas sobre o que mais se repete (ex: 'qual a maior recorrência', 'que tipo de acidente mais acontece') — a categoria estruturada (tipo) é ampla demais sozinha, o padrão real geralmente está na descrição em texto livre (ex: vários acidentes descritos como queda de bulk, prensamento de mão, etc.) — leia as descrições e identifique o tema que mais se repete, não só o campo tipo.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "avarias_frota",
+      description:
+        "Lista as avarias registradas em equipamentos (frota) — data, equipamento, responsável, valor e status (aberto/em reparo/resolvido). Use pra perguntas sobre danos, batidas em empilhadeira, custo de avaria etc.",
       parameters: { type: "object", properties: {} },
     },
   },
@@ -462,6 +472,15 @@ async function runReadTool(user: CurrentUser, name: string, args: Record<string,
         status: a.status,
         descricao: a.description,
       }));
+    case "avarias_frota":
+      return (await listEquipmentDamagesForUser(user, { status: "ALL" })).slice(0, 80).map((d) => ({
+        codigo: d.code,
+        data: d.date,
+        equipamento: `${d.equipment.code} — ${d.equipment.name}`,
+        responsavel: d.collaborator?.name ?? "não apurado",
+        valor: d.cost ? Number(d.cost) : null,
+        status: d.status,
+      }));
     case "listar_colaboradores":
       return (await listCollaboratorsForUser(user, { onlyActive: true })).map((c) => ({
         id: c.id,
@@ -624,6 +643,10 @@ export type DailyBriefingContext = {
     totalColaboradores: number;
     semSalarioDefinido: number;
   };
+  frota?: {
+    avariasAbertasNoMes: number;
+    custoAvariasNoMes: number;
+  };
 };
 
 function describeBriefingContext(ctx: DailyBriefingContext): string {
@@ -649,6 +672,13 @@ function describeBriefingContext(ctx: DailyBriefingContext): string {
     blocks.push(`[RH] ${r.totalColaboradores} colaborador(es) ativo(s), sendo ${r.semSalarioDefinido} sem salário cadastrado ainda.`);
   }
 
+  if (ctx.frota) {
+    const f = ctx.frota;
+    blocks.push(
+      `[Frota] ${f.avariasAbertasNoMes} avaria(s) em aberto registrada(s) neste mês, custo somado de R$ ${f.custoAvariasNoMes.toFixed(2)} até agora.`,
+    );
+  }
+
   return blocks.join(" ");
 }
 
@@ -664,7 +694,7 @@ export async function getDailyBriefing(user: CurrentUser, context: DailyBriefing
   const description = describeBriefingContext(context);
   if (!description) return null;
 
-  const areaCount = [context.seguranca, context.gestao, context.rh].filter(Boolean).length;
+  const areaCount = [context.seguranca, context.gestao, context.rh, context.frota].filter(Boolean).length;
 
   try {
     const client = new OpenAI({ apiKey });

@@ -14,6 +14,7 @@ import { getDailyBriefing, type DailyBriefingContext } from "@/server/services/r
 import { getChecklistComplianceDashboard } from "@/server/services/checklist-compliance.service";
 import { getAccidentMonthlyStats } from "@/server/services/accident.service";
 import { getExpiringQualifications } from "@/server/services/qualification.service";
+import { getEquipmentDamageCostSummary } from "@/server/services/equipment-damage.service";
 import { RicoAvatar } from "@/components/rico/rico-avatar";
 import { getNavGroups } from "@/components/layout/nav-items";
 import { CommandPalette } from "./command-palette";
@@ -271,8 +272,9 @@ export default async function InicioPage() {
   const canSeeChecklistCompliance = hasPermission(user, PERMISSIONS.CHECKLIST_COMPLIANCE_VIEW);
   const canSeeAccidents = hasPermission(user, PERMISSIONS.ACCIDENT_MANAGE);
   const canSeeQualifications = hasPermission(user, PERMISSIONS.QUALIFICATION_MANAGE);
+  const canSeeFleet = hasPermission(user, PERMISSIONS.EQUIPMENT_DAMAGE_MANAGE);
 
-  const [colaboradorSummary, gestaoSummary, riskRanking, hrStats, checklistComplianceDashboard, accidentStats, expiringQualifications] =
+  const [colaboradorSummary, gestaoSummary, riskRanking, hrStats, checklistComplianceDashboard, accidentStats, expiringQualifications, fleetDamageSummary] =
     await Promise.all([
       getColaboradorSummary(user),
       canSeeGestao ? getGestaoSummary(user) : Promise.resolve(null),
@@ -281,6 +283,12 @@ export default async function InicioPage() {
       canSeeChecklistCompliance ? getChecklistComplianceDashboard(user) : Promise.resolve(null),
       canSeeAccidents ? getAccidentMonthlyStats(user) : Promise.resolve(null),
       canSeeQualifications ? getExpiringQualifications(user, 90) : Promise.resolve(null),
+      canSeeFleet
+        ? getEquipmentDamageCostSummary(user, {
+            from: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
+            to: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0, 23, 59, 59),
+          })
+        : Promise.resolve(null),
     ]);
   const headlineSummary = gestaoSummary ?? colaboradorSummary;
 
@@ -302,6 +310,9 @@ export default async function InicioPage() {
         }
       : undefined,
     rh: hrStats ?? undefined,
+    frota: fleetDamageSummary
+      ? { avariasAbertasNoMes: fleetDamageSummary.openCount, custoAvariasNoMes: fleetDamageSummary.totalCost }
+      : undefined,
   };
 
   return (
