@@ -25,6 +25,7 @@ import type {
   UnmatchedTimeClockPis,
 } from "@/server/services/time-clock.service";
 import { JustifyChecklistDialog } from "@/components/domain/justify-checklist-dialog";
+import { ScheduleDayNoteDialog } from "@/app/(app)/escalas/schedule-day-note-dialog";
 import { formatDate, formatDateTime, parseDateOnly } from "@/lib/dates";
 
 const ANOMALY_LABELS: Record<TimeClockAnomalyType, string> = {
@@ -72,6 +73,7 @@ export function TratativaPontoPanel({
   const [adherence, setAdherence] = useState<ChecklistAdherenceReport>(initialAdherence);
   const [unmatchedPis, setUnmatchedPis] = useState<UnmatchedTimeClockPis[]>(initialUnmatchedPis);
   const [selectedCollaborator, setSelectedCollaborator] = useState<Record<string, string>>({});
+  const [justifyFalta, setJustifyFalta] = useState<{ collaboratorId: string; collaboratorName: string; date: string } | null>(null);
 
   const justificationByKey = new Map(
     adherence.pendingDays.map((d) => [`${d.collaboratorId}-${d.date}`, d.justification]),
@@ -310,6 +312,17 @@ export function TratativaPontoPanel({
                             onSaved={fetchReport}
                           />
                         )}
+                        {a.type === "FALTA" && (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() =>
+                              setJustifyFalta({ collaboratorId: a.collaboratorId, collaboratorName: a.collaboratorName, date: a.date })
+                            }
+                          >
+                            Justificar
+                          </Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   );
@@ -319,6 +332,20 @@ export function TratativaPontoPanel({
           )}
         </CardContent>
       </Card>
+
+      {justifyFalta && (
+        <ScheduleDayNoteDialog
+          collaboratorId={justifyFalta.collaboratorId}
+          collaboratorName={justifyFalta.collaboratorName}
+          date={justifyFalta.date}
+          computed="TRABALHO"
+          note={null}
+          onClose={() => {
+            setJustifyFalta(null);
+            fetchReport();
+          }}
+        />
+      )}
     </>
   );
 }
