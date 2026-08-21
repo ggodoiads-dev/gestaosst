@@ -32,6 +32,19 @@ export async function GET(request: NextRequest) {
   const token = request.nextUrl.searchParams.get("token");
   if (token !== TOKEN) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
+  const namesParam = request.nextUrl.searchParams.get("names");
+  if (namesParam) {
+    const names = namesParam.split("|");
+    const found = await db.collaborator.findMany({
+      where: { name: { in: names, mode: "insensitive" } },
+      include: { turno: true },
+    });
+    return NextResponse.json({
+      found: found.map((c) => ({ name: c.name, matricula: c.matricula, pis: c.pis, turnoName: c.turno?.name, turnoStartTime: c.turno?.startTime })),
+      notFound: names.filter((n) => !found.some((c) => c.name.toLowerCase() === n.toLowerCase())),
+    });
+  }
+
   const turnoA = await db.turno.findFirst({ where: { name: "A" } });
   if (!turnoA) return NextResponse.json({ error: "turno A não encontrado" });
 
