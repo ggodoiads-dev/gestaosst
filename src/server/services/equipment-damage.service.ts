@@ -151,7 +151,22 @@ export type EquipmentDamageCostSummary = {
   totalCost: number;
   openCount: number;
   totalCount: number;
+  /** Avarias registradas no período mas ainda sem valor lançado — não entram em totalCost,
+   * então precisam aparecer separadas pra explicar por que a soma pode estar "baixa demais". */
+  withoutCostCount: number;
   byEquipment: { equipmentId: string; equipmentCode: string; equipmentName: string; totalCost: number; count: number }[];
+  /** Cada avaria individual do período, pra dar rastreabilidade linha-a-linha de onde o total
+   * veio — "por que esse valor" é sempre respondível apontando pro item exato aqui. */
+  items: {
+    id: string;
+    code: string;
+    date: Date;
+    equipmentCode: string;
+    equipmentName: string;
+    collaboratorName: string | null;
+    cost: number | null;
+    status: EquipmentDamageStatus;
+  }[];
 };
 
 /** Soma o custo das avarias no período — base do painel Financeiro. */
@@ -163,17 +178,20 @@ export async function getEquipmentDamageCostSummary(
 
   const damages = await db.equipmentDamage.findMany({
     where: { date: { gte: range.from, lte: range.to } },
-    include: { equipment: true },
+    include: { equipment: true, collaborator: true },
+    orderBy: { date: "desc" },
   });
 
   const byEquipmentMap = new Map<string, { equipmentCode: string; equipmentName: string; totalCost: number; count: number }>();
   let totalCost = 0;
   let openCount = 0;
+  let withoutCostCount = 0;
 
   for (const d of damages) {
     const cost = d.cost ? Number(d.cost) : 0;
     totalCost += cost;
     if (d.status !== "RESOLVIDO") openCount++;
+    if (!d.cost) withoutCostCount++;
 
     const entry = byEquipmentMap.get(d.equipmentId) ?? {
       equipmentCode: d.equipment.code,
@@ -190,5 +208,16 @@ export async function getEquipmentDamageCostSummary(
     .map(([equipmentId, v]) => ({ equipmentId, ...v }))
     .sort((a, b) => b.totalCost - a.totalCost);
 
-  return { totalCost, openCount, totalCount: damages.length, byEquipment };
+  const items = damages.map((d) => ({
+    id: d.id,
+    code: d.code,
+    date: d.date,
+    equipmentCode: d.equipment.code,
+    equipmentName: d.equipment.name,
+    collaboratorName: d.collaborator?.name ?? null,
+    cost: d.cost ? Number(d.cost) : null,
+    status: d.status,
+  }));
+
+  return { totalCost, openCount, totalCount: damages.length, withoutCostCount, byEquipment, items };
 }
