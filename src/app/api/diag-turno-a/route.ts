@@ -39,8 +39,30 @@ export async function GET(request: NextRequest) {
       where: { name: { in: names, mode: "insensitive" } },
       include: { turno: true },
     });
+
+    const lastRecordOverall = await db.timeClockRecord.findFirst({ orderBy: { timestamp: "desc" }, select: { timestamp: true } });
+
+    const withRecords = await Promise.all(
+      found.map(async (c) => {
+        const records = await db.timeClockRecord.findMany({
+          where: { collaboratorId: c.id },
+          orderBy: { timestamp: "desc" },
+          take: 5,
+        });
+        return {
+          name: c.name,
+          matricula: c.matricula,
+          pis: c.pis,
+          turnoName: c.turno?.name,
+          turnoStartTime: c.turno?.startTime,
+          lastRecords: records.map((r) => ({ time: formatInTimeZone(r.timestamp, APP_TIMEZONE, "yyyy-MM-dd HH:mm"), markType: r.markType })),
+        };
+      }),
+    );
+
     return NextResponse.json({
-      found: found.map((c) => ({ name: c.name, matricula: c.matricula, pis: c.pis, turnoName: c.turno?.name, turnoStartTime: c.turno?.startTime })),
+      lastImportedRecordOverall: lastRecordOverall ? formatInTimeZone(lastRecordOverall.timestamp, APP_TIMEZONE, "yyyy-MM-dd HH:mm") : null,
+      found: withRecords,
       notFound: names.filter((n) => !found.some((c) => c.name.toLowerCase() === n.toLowerCase())),
     });
   }
