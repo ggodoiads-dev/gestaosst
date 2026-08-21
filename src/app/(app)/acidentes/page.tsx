@@ -29,6 +29,7 @@ const SIF_LABELS: Record<string, string> = {
   SIF_PRECURSOR: "SIF Precursor",
   SIF_POTENCIAL: "SIF Potencial",
   SIF_REAL: "SIF Real",
+  FAI: "FAI",
 };
 
 const STATUS_FILTERS = [

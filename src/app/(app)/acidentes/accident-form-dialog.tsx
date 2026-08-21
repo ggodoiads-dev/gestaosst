@@ -43,6 +43,7 @@ const SIF_OPTIONS = [
   { value: "SIF_PRECURSOR", label: "SIF Precursor" },
   { value: "SIF_POTENCIAL", label: "SIF Potencial" },
   { value: "SIF_REAL", label: "SIF Real" },
+  { value: "FAI", label: "FAI" },
 ];
 
 function toDateInputValue(date: Date): string {
