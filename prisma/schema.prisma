@@ -1240,6 +1240,7 @@ model Turno {
   startDate      DateTime // dia 1 do ciclo do turno
   startTime      String? // HH:mm — início do expediente
   endTime        String? // HH:mm — fim do expediente
+  usesTimeClock  Boolean  @default(true) // false pra turno que não bate ponto (ex: ADM) — não gera Falta/Atraso/Batida Ímpar
   active         Boolean  @default(true)
   createdById    String
   createdAt      DateTime @default(now())

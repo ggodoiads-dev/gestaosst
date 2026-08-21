@@ -68,6 +68,7 @@ const turnoSchema = z.object({
   startDate: z.string().min(1, "Informe a data de início do ciclo."),
   startTime: z.string().trim().optional().nullable(),
   endTime: z.string().trim().optional().nullable(),
+  usesTimeClock: z.string().optional(),
 });
 
 function parseTurnoForm(formData: FormData) {
@@ -77,6 +78,7 @@ function parseTurnoForm(formData: FormData) {
     startDate: formData.get("startDate"),
     startTime: formData.get("startTime") || null,
     endTime: formData.get("endTime") || null,
+    usesTimeClock: formData.get("usesTimeClock") || undefined,
   });
   return {
     name: parsed.name,
@@ -84,6 +86,7 @@ function parseTurnoForm(formData: FormData) {
     startDate: parseDateOnly(parsed.startDate),
     startTime: parsed.startTime,
     endTime: parsed.endTime,
+    usesTimeClock: parsed.usesTimeClock === "on",
   };
 }
 

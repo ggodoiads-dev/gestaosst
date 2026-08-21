@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FormField } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -42,14 +43,17 @@ function TurnoFields({
     startDate?: Date | null;
     startTime?: string | null;
     endTime?: string | null;
+    usesTimeClock?: boolean;
   };
   idPrefix: string;
 }) {
   const [scheduleTypeId, setScheduleTypeId] = useState(defaults?.scheduleTypeId ?? scheduleTypes[0]?.id ?? "");
+  const [usesTimeClock, setUsesTimeClock] = useState(defaults?.usesTimeClock ?? true);
 
   return (
     <>
       <input type="hidden" name="scheduleTypeId" value={scheduleTypeId} />
+      <input type="hidden" name="usesTimeClock" value={usesTimeClock ? "on" : ""} />
       <FormField label="Nome do turno" htmlFor={`${idPrefix}-name`} required hint="Ex: A, B, C">
         <Input id={`${idPrefix}-name`} name="name" required placeholder="Ex: A" defaultValue={defaults?.name ?? ""} />
       </FormField>
@@ -80,6 +84,16 @@ function TurnoFields({
           <Input id={`${idPrefix}-endTime`} name="endTime" type="time" defaultValue={defaults?.endTime ?? ""} />
         </FormField>
       </div>
+      <label className="flex items-center gap-2.5 text-sm">
+        <Checkbox checked={usesTimeClock} onCheckedChange={(v) => setUsesTimeClock(v === true)} />
+        Colaboradores deste turno batem ponto
+      </label>
+      {!usesTimeClock && (
+        <p className="text-xs text-foreground-subtle">
+          Desmarcado, ninguém deste turno é cobrado por Falta, Atraso ou Batida Ímpar nas Ocorrências —
+          útil pra turno administrativo (ADM) que não usa o relógio de ponto.
+        </p>
+      )}
     </>
   );
 }
@@ -141,6 +155,7 @@ export function EditTurnoDialog({ turno, scheduleTypes }: { turno: Turno; schedu
                 startDate: turno.startDate,
                 startTime: turno.startTime,
                 endTime: turno.endTime,
+                usesTimeClock: turno.usesTimeClock,
               }}
             />
             {!state.ok && <p className="text-sm text-danger">{state.error}</p>}

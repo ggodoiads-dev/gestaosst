@@ -73,6 +73,7 @@ export type TurnoInput = {
   startDate: Date;
   startTime?: string | null;
   endTime?: string | null;
+  usesTimeClock?: boolean;
 };
 
 /** Turnos ativos, com o tipo de escala já carregado — usado tanto na grade quanto no formulário de colaborador. */

@@ -383,8 +383,11 @@ async function evaluateRange(range: { from: Date; to: Date }, options?: { areaId
         .slice()
         .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
       const hasPunches = dayRecords.length > 0;
+      // Turno marcado como "não bate ponto" (ex: ADM) nunca gera Falta/Atraso/Batida Ímpar — só o
+      // checklist obrigatório (função) continua valendo, que é independente do relógio de ponto.
+      const usesTimeClock = collaborator.turno?.usesTimeClock !== false;
 
-      if (collaborator.turno) {
+      if (collaborator.turno && usesTimeClock) {
         const note = noteByKey.get(`${collaborator.id}-${dayKey}`);
         const scheduled = note ? note.overrideStatus : getCollaboratorDayStatus(cursor, collaborator);
 
@@ -399,7 +402,7 @@ async function evaluateRange(range: { from: Date; to: Date }, options?: { areaId
         }
       }
 
-      if (hasPunches) {
+      if (hasPunches && usesTimeClock) {
         if (collaborator.turno?.startTime) {
           const firstEntrada = dayRecords.find((r) => r.markType === "ENTRADA");
           if (firstEntrada) {

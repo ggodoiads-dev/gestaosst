@@ -88,11 +88,12 @@ export default async function EscalasCadastroPage() {
                   <TableHead>Tipo de escala</TableHead>
                   <TableHead>Início do ciclo</TableHead>
                   <TableHead>Horário</TableHead>
+                  <TableHead>Bate ponto</TableHead>
                   <TableHead className="w-10" />
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {turnos.length === 0 && <TableEmpty colSpan={5} />}
+                {turnos.length === 0 && <TableEmpty colSpan={6} />}
                 {turnos.map((turno) => (
                   <TableRow key={turno.id}>
                     <TableCell className="font-medium">Turno {turno.name}</TableCell>
@@ -100,6 +101,9 @@ export default async function EscalasCadastroPage() {
                     <TableCell className="text-foreground-subtle">{formatDate(turno.startDate)}</TableCell>
                     <TableCell className="text-foreground-subtle">
                       {turno.startTime && turno.endTime ? `${turno.startTime} às ${turno.endTime}` : "—"}
+                    </TableCell>
+                    <TableCell>
+                      <Badge tone={turno.usesTimeClock ? "success" : "neutral"}>{turno.usesTimeClock ? "Sim" : "Não"}</Badge>
                     </TableCell>
                     <TableCell>
                       <EditTurnoDialog turno={turno} scheduleTypes={types} />
