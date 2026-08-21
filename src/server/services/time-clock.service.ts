@@ -249,22 +249,30 @@ function dayKeyFromTimestamp(timestamp: Date): string {
   return formatInTimeZone(timestamp, APP_TIMEZONE, "yyyy-MM-dd");
 }
 
+/** Margem antes do início do turno que ainda conta como "cheguei adiantado pro turno de hoje" —
+ * cobre qualquer chegada antecipada plausível sem invadir o horário de expediente do turno
+ * anterior (o mais próximo é ~8h de intervalo entre turnos nesta operação). */
+const WORKDAY_CUTOFF_MARGIN_HOURS = 6;
+
 /** Chave de "dia de trabalho" ancorada no turno, não na meia-noite — evita que um turno noturno
  * (ex: entra 22h, sai 7h do dia seguinte) seja partido em dois dias de calendário diferentes. Sem
  * isso, a "primeira entrada" achada no dia seguinte era na verdade a volta do intervalo, não a
  * entrada real, gerando atraso e batida ímpar falsos pra quem trabalha de noite.
  *
- * O corte do dia fica 12h OPOSTAS ao horário de início do turno (não exatamente nesse horário):
- * bater o corte em cima do horário de início faria uma entrada só alguns minutos adiantada (comum
- * na prática) cair no dia de calendário errado. Cortando no ponto mais distante do início do
- * turno, tanto adiantar quanto atrasar a entrada em até ~12h continua caindo no mesmo dia de
- * trabalho. Sem horário de início cadastrado, cai pro dia-calendário puro. */
+ * O corte do dia fica `WORKDAY_CUTOFF_MARGIN_HOURS` ANTES do horário de início do turno — não em
+ * cima dele (uma entrada adiantada cairia no dia errado) e não 12h opostas (tentado antes: para
+ * turno diurno tipo 08:00, 12h opostas cai às 20:00, e como toda a jornada 08h-17h acontece ANTES
+ * desse corte, o dia inteiro era jogado pro dia anterior — "Falta" falso pra quase todo turno
+ * diurno). Uma margem pequena e fixa antes do início cobre adiantar a chegada em algumas horas
+ * sem overshoot pro turno anterior, e continua funcionando pro turno noturno (a volta do
+ * intervalo de madrugada fica bem depois do corte-margem-antes, então cai no dia certo também).
+ * Sem horário de início cadastrado, cai pro dia-calendário puro. */
 function workdayKeyFromTimestamp(timestamp: Date, shiftStartTime: string | null | undefined): string {
   if (!shiftStartTime) return dayKeyFromTimestamp(timestamp);
   const [startHour, startMinute] = shiftStartTime.split(":").map(Number);
   if (!Number.isFinite(startHour) || !Number.isFinite(startMinute)) return dayKeyFromTimestamp(timestamp);
 
-  const cutoffTotalMinutes = (startHour * 60 + startMinute + 12 * 60) % (24 * 60);
+  const cutoffTotalMinutes = ((startHour * 60 + startMinute - WORKDAY_CUTOFF_MARGIN_HOURS * 60) % (24 * 60) + 24 * 60) % (24 * 60);
   const cutoffHour = Math.floor(cutoffTotalMinutes / 60);
   const cutoffMinute = cutoffTotalMinutes % 60;
 

@@ -12,11 +12,13 @@ function dayKeyFromLocalDate(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
+const WORKDAY_CUTOFF_MARGIN_HOURS = 6;
+
 function workdayKeyFromTimestamp(timestamp: Date, shiftStartTime: string | null | undefined): string {
   if (!shiftStartTime) return formatInTimeZone(timestamp, APP_TIMEZONE, "yyyy-MM-dd");
   const [startHour, startMinute] = shiftStartTime.split(":").map(Number);
   if (!Number.isFinite(startHour) || !Number.isFinite(startMinute)) return formatInTimeZone(timestamp, APP_TIMEZONE, "yyyy-MM-dd");
-  const cutoffTotalMinutes = (startHour * 60 + startMinute + 12 * 60) % (24 * 60);
+  const cutoffTotalMinutes = ((startHour * 60 + startMinute - WORKDAY_CUTOFF_MARGIN_HOURS * 60) % (24 * 60) + 24 * 60) % (24 * 60);
   const cutoffHour = Math.floor(cutoffTotalMinutes / 60);
   const cutoffMinute = cutoffTotalMinutes % 60;
   const local = toZonedTime(timestamp, APP_TIMEZONE);
@@ -42,20 +44,27 @@ export async function GET(request: NextRequest) {
 
     const lastRecordOverall = await db.timeClockRecord.findFirst({ orderBy: { timestamp: "desc" }, select: { timestamp: true } });
 
+    const from = new Date(2026, 7, 17, 0, 0, 0);
+    const to = new Date(2026, 7, 21, 23, 59, 59);
+
     const withRecords = await Promise.all(
       found.map(async (c) => {
         const records = await db.timeClockRecord.findMany({
-          where: { collaboratorId: c.id },
-          orderBy: { timestamp: "desc" },
-          take: 5,
+          where: { collaboratorId: c.id, timestamp: { gte: from, lte: to } },
+          orderBy: { timestamp: "asc" },
         });
+        const byWorkday: Record<string, { time: string; markType: string }[]> = {};
+        for (const r of records) {
+          const key = workdayKeyFromTimestamp(r.timestamp, c.turno?.startTime);
+          (byWorkday[key] ??= []).push({ time: formatInTimeZone(r.timestamp, APP_TIMEZONE, "yyyy-MM-dd HH:mm"), markType: r.markType });
+        }
         return {
           name: c.name,
           matricula: c.matricula,
           pis: c.pis,
           turnoName: c.turno?.name,
           turnoStartTime: c.turno?.startTime,
-          lastRecords: records.map((r) => ({ time: formatInTimeZone(r.timestamp, APP_TIMEZONE, "yyyy-MM-dd HH:mm"), markType: r.markType })),
+          byWorkday,
         };
       }),
     );
