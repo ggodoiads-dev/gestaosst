@@ -1,16 +1,19 @@
 import Link from "next/link";
 import { Suspense } from "react";
-import { Sparkles } from "lucide-react";
+import { Sparkles, ClipboardCheck, HardHat, GraduationCap } from "lucide-react";
 import { requireUser, hasPermission, type CurrentUser } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
 import { PageBody } from "@/components/domain/page-header";
 import { StatCard } from "@/components/domain/stat-card";
-import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { getColaboradorSummary, getGestaoSummary } from "@/server/services/indicators.service";
 import { getEquipmentRiskRanking, type EquipmentRisk } from "@/server/services/risk-score.service";
 import { getHrDailyStats } from "@/server/services/collaborator.service";
 import { getDailyBriefing, type DailyBriefingContext } from "@/server/services/rico.service";
+import { getChecklistComplianceDashboard } from "@/server/services/checklist-compliance.service";
+import { getAccidentMonthlyStats } from "@/server/services/accident.service";
+import { getExpiringQualifications } from "@/server/services/qualification.service";
 import { RicoAvatar } from "@/components/rico/rico-avatar";
 import { getNavGroups } from "@/components/layout/nav-items";
 import { CommandPalette } from "./command-palette";
@@ -140,6 +143,124 @@ function EquipmentStatusCard({ summary }: { summary: GestaoSummary }) {
   );
 }
 
+type ChecklistComplianceDashboard = NonNullable<Awaited<ReturnType<typeof getChecklistComplianceDashboard>>>;
+
+function PersonChecklistCard({ dashboard }: { dashboard: ChecklistComplianceDashboard }) {
+  const { today } = dashboard;
+  const pct = today.collaboratorsScheduled === 0 ? 100 : Math.round((today.collaboratorsComplete / today.collaboratorsScheduled) * 100);
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>
+          <span className="flex items-center gap-2"><ClipboardCheck className="size-4 text-accent" /> Checklist por pessoa hoje</span>
+        </CardTitle>
+        <CardDescription>Colaboradores escalados pra trabalhar hoje com checklist obrigatório.</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        {today.collaboratorsScheduled === 0 ? (
+          <p className="text-sm text-foreground-subtle">Ninguém com checklist obrigatório escalado hoje.</p>
+        ) : (
+          <>
+            <div className="flex items-baseline gap-2">
+              <span className={cn("text-2xl font-semibold tabular-nums", pct === 100 ? "text-success" : pct >= 70 ? "text-warning" : "text-danger")}>
+                {pct}%
+              </span>
+              <span className="text-sm text-foreground-subtle">
+                {today.collaboratorsComplete} de {today.collaboratorsScheduled} cumpriram
+              </span>
+            </div>
+            {today.collaboratorsIncomplete.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {today.collaboratorsIncomplete.slice(0, 6).map((c) => (
+                  <Badge key={c.id} tone="danger">{c.name}</Badge>
+                ))}
+                {today.collaboratorsIncomplete.length > 6 && (
+                  <Badge tone="neutral">+{today.collaboratorsIncomplete.length - 6}</Badge>
+                )}
+              </div>
+            )}
+          </>
+        )}
+      </CardContent>
+      <CardFooter className="justify-end py-2.5">
+        <Link href="/indicadores" className="text-xs font-medium text-accent hover:underline">
+          Ver painel completo →
+        </Link>
+      </CardFooter>
+    </Card>
+  );
+}
+
+type AccidentMonthlyStats = Awaited<ReturnType<typeof getAccidentMonthlyStats>>;
+
+function AccidentsMonthCard({ stats }: { stats: AccidentMonthlyStats }) {
+  const currentMonthCount = stats.monthly[new Date().getMonth()]?.count ?? 0;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>
+          <span className="flex items-center gap-2"><HardHat className="size-4 text-warning" /> Acidentes e incidentes</span>
+        </CardTitle>
+        <CardDescription>Registrados neste mês, sem contar cancelados.</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-2">
+        <span className="text-2xl font-semibold tabular-nums text-foreground">{currentMonthCount}</span>
+        {stats.topType && (
+          <p className="text-sm text-foreground-subtle">
+            Tipo mais recorrente no ano: <span className="text-foreground">{stats.topType.label}</span> ({stats.topType.count})
+          </p>
+        )}
+      </CardContent>
+      <CardFooter className="justify-end py-2.5">
+        <Link href="/acidentes" className="text-xs font-medium text-accent hover:underline">
+          Ver todos →
+        </Link>
+      </CardFooter>
+    </Card>
+  );
+}
+
+type ExpiringQualifications = Awaited<ReturnType<typeof getExpiringQualifications>>;
+
+function QualificationsExpiringCard({ expiring }: { expiring: ExpiringQualifications }) {
+  const total = expiring.expired.length + expiring.expiringSoon.length;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>
+          <span className="flex items-center gap-2"><GraduationCap className="size-4 text-info" /> NR/ASO vencendo</span>
+        </CardTitle>
+        <CardDescription>Vencidas ou vencendo nos próximos {Math.round(expiring.withinDays / 30)} meses.</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-2">
+        {total === 0 ? (
+          <p className="text-sm text-foreground-subtle">Nada vencendo nesse período.</p>
+        ) : (
+          <div className="flex items-baseline gap-3">
+            {expiring.expired.length > 0 && (
+              <span className="text-sm">
+                <strong className="text-lg text-danger tabular-nums">{expiring.expired.length}</strong>{" "}
+                <span className="text-foreground-subtle">vencida(s)</span>
+              </span>
+            )}
+            {expiring.expiringSoon.length > 0 && (
+              <span className="text-sm">
+                <strong className="text-lg text-warning tabular-nums">{expiring.expiringSoon.length}</strong>{" "}
+                <span className="text-foreground-subtle">vencendo</span>
+              </span>
+            )}
+          </div>
+        )}
+      </CardContent>
+      <CardFooter className="justify-end py-2.5">
+        <Link href="/qualificacoes" className="text-xs font-medium text-accent hover:underline">
+          Ver painel completo →
+        </Link>
+      </CardFooter>
+    </Card>
+  );
+}
+
 export default async function InicioPage() {
   const user = await requireUser();
   const firstName = user.name.split(" ")[0];
@@ -147,13 +268,21 @@ export default async function InicioPage() {
   const canSeeGestao =
     hasPermission(user, PERMISSIONS.INDICATORS_VIEW_AREA) || hasPermission(user, PERMISSIONS.INDICATORS_VIEW_CONSOLIDATED);
   const canSeeHr = hasPermission(user, PERMISSIONS.HR_MANAGE);
+  const canSeeChecklistCompliance = hasPermission(user, PERMISSIONS.CHECKLIST_COMPLIANCE_VIEW);
+  const canSeeAccidents = hasPermission(user, PERMISSIONS.ACCIDENT_MANAGE);
+  const canSeeQualifications = hasPermission(user, PERMISSIONS.QUALIFICATION_MANAGE);
 
-  const [colaboradorSummary, gestaoSummary, riskRanking, hrStats] = await Promise.all([
-    getColaboradorSummary(user),
-    canSeeGestao ? getGestaoSummary(user) : Promise.resolve(null),
-    canSeeGestao ? getEquipmentRiskRanking(user, 4) : Promise.resolve([]),
-    canSeeHr ? getHrDailyStats(user) : Promise.resolve(null),
-  ]);
+  const [colaboradorSummary, gestaoSummary, riskRanking, hrStats, checklistComplianceDashboard, accidentStats, expiringQualifications] =
+    await Promise.all([
+      getColaboradorSummary(user),
+      canSeeGestao ? getGestaoSummary(user) : Promise.resolve(null),
+      canSeeGestao ? getEquipmentRiskRanking(user, 4) : Promise.resolve([]),
+      canSeeHr ? getHrDailyStats(user) : Promise.resolve(null),
+      canSeeChecklistCompliance ? getChecklistComplianceDashboard(user) : Promise.resolve(null),
+      canSeeAccidents ? getAccidentMonthlyStats(user) : Promise.resolve(null),
+      canSeeQualifications ? getExpiringQualifications(user, 90) : Promise.resolve(null),
+    ]);
+  const headlineSummary = gestaoSummary ?? colaboradorSummary;
 
   const navGroups = getNavGroups(user);
 
@@ -201,16 +330,16 @@ export default async function InicioPage() {
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 animate-fade-up" style={{ animationDelay: "80ms" }}>
-        <StatCard label="Checklists previstos hoje" value={colaboradorSummary.previstos} />
+        <StatCard label="Checklists de equipamento previstos hoje" value={headlineSummary.previstos} />
         <StatCard
           label="Realizados"
-          value={colaboradorSummary.realizados}
-          tone={colaboradorSummary.realizados === colaboradorSummary.previstos && colaboradorSummary.previstos > 0 ? "success" : "neutral"}
+          value={headlineSummary.realizados}
+          tone={headlineSummary.realizados === headlineSummary.previstos && headlineSummary.previstos > 0 ? "success" : "neutral"}
         />
         <StatCard
           label="Atrasados"
-          value={colaboradorSummary.atrasados}
-          tone={colaboradorSummary.atrasados > 0 ? "danger" : "success"}
+          value={headlineSummary.atrasados}
+          tone={headlineSummary.atrasados > 0 ? "danger" : "success"}
         />
         {gestaoSummary ? (
           <StatCard
@@ -220,7 +349,7 @@ export default async function InicioPage() {
             href="/nao-conformidades"
           />
         ) : (
-          <StatCard label="Pendentes" value={colaboradorSummary.pendentes} tone={colaboradorSummary.pendentes > 0 ? "warning" : "success"} />
+          <StatCard label="Pendentes" value={headlineSummary.pendentes} tone={headlineSummary.pendentes > 0 ? "warning" : "success"} />
         )}
       </div>
 
@@ -228,6 +357,14 @@ export default async function InicioPage() {
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 animate-fade-up" style={{ animationDelay: "140ms" }}>
           <RiskWidget riskRanking={riskRanking} />
           <EquipmentStatusCard summary={gestaoSummary} />
+        </div>
+      )}
+
+      {(checklistComplianceDashboard || accidentStats || expiringQualifications) && (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 animate-fade-up" style={{ animationDelay: "200ms" }}>
+          {checklistComplianceDashboard && <PersonChecklistCard dashboard={checklistComplianceDashboard} />}
+          {accidentStats && <AccidentsMonthCard stats={accidentStats} />}
+          {expiringQualifications && <QualificationsExpiringCard expiring={expiringQualifications} />}
         </div>
       )}
     </PageBody>
