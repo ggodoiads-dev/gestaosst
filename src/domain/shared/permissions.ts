@@ -36,6 +36,7 @@ export const PERMISSIONS = {
 
   COLLABORATOR_MANAGE: "collaborator.manage",
   ACCIDENT_MANAGE: "accident.manage",
+  EQUIPMENT_DAMAGE_MANAGE: "equipment_damage.manage",
   QUALIFICATION_MANAGE: "qualification.manage",
   EPI_MANAGE: "epi.manage",
   ACTIVITY_MANAGE: "activity.manage",
@@ -86,6 +87,7 @@ export const PERMISSION_DESCRIPTIONS: Record<PermissionKey, string> = {
 
   [PERMISSIONS.COLLABORATOR_MANAGE]: "Cadastrar e alterar colaboradores",
   [PERMISSIONS.ACCIDENT_MANAGE]: "Registrar e tratar acidentes/incidentes",
+  [PERMISSIONS.EQUIPMENT_DAMAGE_MANAGE]: "Registrar e tratar avarias em equipamentos (frota)",
   [PERMISSIONS.QUALIFICATION_MANAGE]: "Gerenciar treinamentos, NRs, ASOs e integrações",
   [PERMISSIONS.EPI_MANAGE]: "Gerenciar funções, tipos de EPI e fichas de entrega dos colaboradores",
   [PERMISSIONS.ACTIVITY_MANAGE]: "Gerenciar atividades e documentos (POP/AR-VR)",
@@ -132,6 +134,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<RoleKeyValue, PermissionKey[]> = {
   LIDER_SUPERVISOR: [
     PERMISSIONS.EQUIPMENT_VIEW,
     PERMISSIONS.EQUIPMENT_MAINTENANCE,
+    PERMISSIONS.EQUIPMENT_DAMAGE_MANAGE,
     PERMISSIONS.CHECKLIST_EXECUTE,
     PERMISSIONS.CHECKLIST_VIEW_TEAM,
     PERMISSIONS.NONCONFORMITY_VIEW,
@@ -145,6 +148,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<RoleKeyValue, PermissionKey[]> = {
     PERMISSIONS.EQUIPMENT_VIEW,
     PERMISSIONS.EQUIPMENT_VIEW_ALL_AREAS,
     PERMISSIONS.EQUIPMENT_MAINTENANCE,
+    PERMISSIONS.EQUIPMENT_DAMAGE_MANAGE,
     PERMISSIONS.CHECKLIST_EXECUTE,
     PERMISSIONS.CHECKLIST_VIEW_TEAM,
     PERMISSIONS.NONCONFORMITY_VIEW,

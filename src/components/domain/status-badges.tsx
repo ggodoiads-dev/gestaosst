@@ -9,6 +9,7 @@ import type {
   VersionStatus,
   AccidentStatus,
   AccidentActionStatus,
+  EquipmentDamageStatus,
 } from "@/generated/prisma/enums";
 
 const EQUIPMENT_STATUS_MAP: Record<EquipmentStatus, { label: string; tone: "success" | "warning" | "danger" | "info" | "neutral" }> = {
@@ -141,4 +142,19 @@ const ACCIDENT_ACTION_STATUS_MAP: Record<AccidentActionStatus, { label: string; 
 export function AccidentActionStatusBadge({ status }: { status: AccidentActionStatus }) {
   const cfg = ACCIDENT_ACTION_STATUS_MAP[status];
   return <Badge tone={cfg.tone}>{cfg.label}</Badge>;
+}
+
+const EQUIPMENT_DAMAGE_STATUS_MAP: Record<EquipmentDamageStatus, { label: string; tone: "success" | "warning" | "danger" | "info" | "neutral" }> = {
+  ABERTO: { label: "Aberto", tone: "danger" },
+  EM_REPARO: { label: "Em reparo", tone: "warning" },
+  RESOLVIDO: { label: "Resolvido", tone: "success" },
+};
+
+export function EquipmentDamageStatusBadge({ status }: { status: EquipmentDamageStatus }) {
+  const cfg = EQUIPMENT_DAMAGE_STATUS_MAP[status];
+  return (
+    <Badge tone={cfg.tone} dot>
+      {cfg.label}
+    </Badge>
+  );
 }

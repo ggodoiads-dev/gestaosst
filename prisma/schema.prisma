@@ -102,6 +102,7 @@ model User {
   collaboratorActivitiesGranted CollaboratorActivity[]   @relation("CollaboratorActivityGrantedBy")
   collaboratorEquipmentsGranted CollaboratorEquipment[]  @relation("CollaboratorEquipmentCreatedBy")
   warningsCreated               Warning[]                @relation("WarningCreatedBy")
+  equipmentDamagesReported      EquipmentDamage[]        @relation("EquipmentDamageReportedBy")
   collaboratorProfile           Collaborator?
 
   @@index([roleId])
@@ -262,6 +263,7 @@ model Equipment {
   events          EquipmentEvent[]
   attachments     Attachment[]
   collaboratorAptitudes CollaboratorEquipment[]
+  damages         EquipmentDamage[]
 
   @@index([typeId])
   @@index([areaId])
@@ -554,6 +556,7 @@ enum AttachmentContext {
   ACIDENTE
   ESCALA
   COLABORADOR
+  AVARIA
 }
 
 enum AttachmentDocType {
@@ -579,6 +582,7 @@ model Attachment {
   accidentId            String?
   scheduleDayNoteId     String?
   collaboratorId        String?
+  equipmentDamageId     String?
   uploadedById          String
   uploadedAt            DateTime           @default(now())
 
@@ -591,6 +595,7 @@ model Attachment {
   accident            Accident?            @relation(fields: [accidentId], references: [id])
   scheduleDayNote     ScheduleDayNote?     @relation(fields: [scheduleDayNoteId], references: [id])
   collaborator        Collaborator?        @relation(fields: [collaboratorId], references: [id])
+  equipmentDamage     EquipmentDamage?     @relation(fields: [equipmentDamageId], references: [id])
   uploadedBy          User                 @relation(fields: [uploadedById], references: [id])
 
   aiFinding AiInspectionFinding?
@@ -855,6 +860,7 @@ model Collaborator {
   equipmentAptitudes      CollaboratorEquipment[]
   warnings                Warning[]
   attachments             Attachment[]
+  equipmentDamagesResponsible EquipmentDamage[]
 
   @@index([areaId])
   @@index([functionId])
@@ -1054,6 +1060,40 @@ model AccidentAction {
   @@index([accidentId])
   @@index([status])
   @@index([dueDate])
+}
+
+// =========================================================================
+// Frota — avarias em equipamentos (empilhadeiras etc.)
+// =========================================================================
+
+enum EquipmentDamageStatus {
+  ABERTO
+  EM_REPARO
+  RESOLVIDO
+}
+
+model EquipmentDamage {
+  id             String                @id @default(uuid())
+  code           String                @unique // ex: AVA-000001
+  equipmentId    String
+  date           DateTime
+  collaboratorId String? // quem causou/é responsável — pode ficar em aberto até apurar
+  description    String
+  cost           Decimal?              @db.Decimal(10, 2)
+  status         EquipmentDamageStatus @default(ABERTO)
+  notes          String?
+  reportedById   String
+  reportedAt     DateTime              @default(now())
+  resolvedAt     DateTime?
+
+  equipment    Equipment     @relation(fields: [equipmentId], references: [id])
+  collaborator Collaborator? @relation(fields: [collaboratorId], references: [id])
+  reportedBy   User          @relation("EquipmentDamageReportedBy", fields: [reportedById], references: [id])
+  attachments  Attachment[]
+
+  @@index([equipmentId])
+  @@index([status])
+  @@index([date])
 }
 
 // =========================================================================

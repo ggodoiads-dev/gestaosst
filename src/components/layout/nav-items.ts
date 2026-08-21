@@ -30,6 +30,8 @@ import {
   UserCheck,
   ShieldAlert,
   FileCheck,
+  Truck,
+  CircleDollarSign,
   type LucideIcon,
 } from "lucide-react";
 import { PERMISSIONS } from "@/domain/shared/permissions";
@@ -74,7 +76,9 @@ export type NavIconKey =
   | "qualificationImport"
   | "equipmentImport"
   | "rollCall"
-  | "warningPending";
+  | "warningPending"
+  | "fleet"
+  | "finance";
 
 export type NavItem = {
   href: string;
@@ -124,6 +128,8 @@ export const NAV_ICONS: Record<NavIconKey, LucideIcon> = {
   equipmentImport: Upload,
   rollCall: UserCheck,
   warningPending: ShieldAlert,
+  fleet: Truck,
+  finance: CircleDollarSign,
 };
 
 /**
@@ -156,6 +162,9 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
   }
   if (p.has(PERMISSIONS.ACTIONPLAN_MANAGE)) {
     equipamentos.push({ href: "/planos-de-acao", label: "Planos de Ação", icon: "actionPlan" });
+  }
+  if (p.has(PERMISSIONS.EQUIPMENT_DAMAGE_MANAGE)) {
+    equipamentos.push({ href: "/frota", label: "Frota — Avarias", icon: "fleet" });
   }
   if (equipamentos.length > 0) groups.push({ key: "equipamentos", title: "Equipamentos", items: equipamentos });
 
@@ -212,6 +221,9 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
   }
   if (p.has(PERMISSIONS.HISTORY_VIEW)) {
     indicadores.push({ href: "/historico", label: "Histórico Geral", icon: "historyAll" });
+  }
+  if (p.has(PERMISSIONS.HR_MANAGE) || p.has(PERMISSIONS.EQUIPMENT_DAMAGE_MANAGE)) {
+    indicadores.push({ href: "/financeiro", label: "Financeiro", icon: "finance" });
   }
   if (indicadores.length > 0) groups.push({ key: "indicadores", title: "Supervisão", items: indicadores });
 
