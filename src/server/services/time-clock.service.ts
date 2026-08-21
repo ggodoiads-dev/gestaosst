@@ -306,7 +306,10 @@ type Evaluation = {
  * `getTimeClockReport` (todas as ocorrências) e `getChecklistAdherence` (só a aderência de
  * checklist) — pra não recalcular a mesma coisa duas vezes com lógicas que podem divergir.
  */
-async function evaluateRange(range: { from: Date; to: Date }, options?: { areaIds?: string[] }): Promise<Evaluation> {
+async function evaluateRange(
+  range: { from: Date; to: Date },
+  options?: { areaIds?: string[]; collaboratorIds?: string[] },
+): Promise<Evaluation> {
   const rangeStartUtc = fromZonedTime(
     new Date(range.from.getFullYear(), range.from.getMonth(), range.from.getDate(), 0, 0, 0),
     APP_TIMEZONE,
@@ -317,7 +320,11 @@ async function evaluateRange(range: { from: Date; to: Date }, options?: { areaId
   );
 
   const collaborators = await db.collaborator.findMany({
-    where: { active: true, areaId: options?.areaIds ? { in: options.areaIds } : undefined },
+    where: {
+      active: true,
+      areaId: options?.areaIds ? { in: options.areaIds } : undefined,
+      id: options?.collaboratorIds ? { in: options.collaboratorIds } : undefined,
+    },
     include: {
       turno: { include: { scheduleType: true } },
       function: { include: { requiredChecklists: { select: { templateId: true, template: { select: { name: true } } } } } },
@@ -492,6 +499,52 @@ export async function getTimeClockReport(
   requirePermission(user, PERMISSIONS.HR_MANAGE);
   const { anomalies } = await evaluateRange(range);
   return anomalies;
+}
+
+export type TimeClockAdherenceReport = {
+  /** false quando o turno do colaborador está marcado como "não bate ponto" (ex: ADM) —
+   * nesse caso não há o que acompanhar aqui, e o resto dos campos vem zerado. */
+  usesTimeClock: boolean;
+  daysWithFalta: number;
+  daysWithAtraso: number;
+  daysWithBatidaImpar: number;
+  /** Só as ocorrências de ponto (falta/atraso/batida ímpar) — checklist já tem seu próprio
+   * card no perfil, alimentado por `getChecklistComplianceRange`. */
+  anomalies: TimeClockAnomaly[];
+};
+
+/**
+ * Aderência de ponto de um único colaborador no período — pro card "Ponto" do perfil dele.
+ * Reusa o mesmo motor de `getTimeClockReport`, só filtrando pra esse colaborador.
+ */
+export async function getCollaboratorTimeClockAdherence(
+  user: CurrentUser,
+  params: { collaboratorId: string; from: Date; to: Date },
+): Promise<TimeClockAdherenceReport> {
+  requirePermission(user, PERMISSIONS.HR_MANAGE);
+
+  const collaborator = await db.collaborator.findUnique({
+    where: { id: params.collaboratorId },
+    select: { turno: { select: { usesTimeClock: true } } },
+  });
+  const usesTimeClock = collaborator?.turno?.usesTimeClock !== false;
+  if (!usesTimeClock) {
+    return { usesTimeClock: false, daysWithFalta: 0, daysWithAtraso: 0, daysWithBatidaImpar: 0, anomalies: [] };
+  }
+
+  const { anomalies: allAnomalies } = await evaluateRange(
+    { from: params.from, to: params.to },
+    { collaboratorIds: [params.collaboratorId] },
+  );
+  const anomalies = allAnomalies.filter((a) => a.type !== "CHECKLIST_PENDENTE");
+
+  return {
+    usesTimeClock: true,
+    daysWithFalta: anomalies.filter((a) => a.type === "FALTA").length,
+    daysWithAtraso: anomalies.filter((a) => a.type === "ATRASO").length,
+    daysWithBatidaImpar: anomalies.filter((a) => a.type === "BATIDA_IMPAR").length,
+    anomalies,
+  };
 }
 
 export type ChecklistJustificationInfo = {

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { headers } from "next/headers";
-import { AlertTriangle, AlertOctagon, GraduationCap, HardHat, Printer, ClipboardList, ClipboardCheck, QrCode } from "lucide-react";
+import { AlertTriangle, AlertOctagon, GraduationCap, HardHat, Printer, ClipboardList, ClipboardCheck, QrCode, Clock } from "lucide-react";
 import { requireUser, hasPermission } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
 import { getCollaboratorProntuario, getCollaboratorPhoto } from "@/server/services/collaborator.service";
@@ -19,12 +19,13 @@ import { listEquipmentAptitudesForCollaborator } from "@/server/services/equipme
 import { listQualificationTypes, getCollaboratorQualificationSummary } from "@/server/services/qualification.service";
 import { listWarningsForCollaborator } from "@/server/services/warning.service";
 import { getChecklistComplianceRange } from "@/server/services/checklist-compliance.service";
+import { getCollaboratorTimeClockAdherence } from "@/server/services/time-clock.service";
 import { PageHeader, PageBody } from "@/components/domain/page-header";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, TableEmpty } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { formatDate } from "@/lib/dates";
+import { formatDate, parseDateOnly } from "@/lib/dates";
 import { formatCurrency } from "@/lib/format";
 import { qualificationStatus } from "@/lib/qualification-status";
 import { EditCollaboratorDialog } from "../collaborator-form-dialog";
@@ -77,6 +78,7 @@ export default async function ColaboradorDetailPage({
     warnings,
     photo,
     checklistCompliance,
+    timeClockAdherence,
   ] = await Promise.all([
     getCollaboratorProntuario(user, id),
     listAreas(),
@@ -92,6 +94,9 @@ export default async function ColaboradorDetailPage({
     getCollaboratorPhoto(id),
     canSeeChecklistCompliance
       ? getChecklistComplianceRange(user, { collaboratorId: id, from: complianceFrom, to: complianceTo })
+      : Promise.resolve(null),
+    canSeeHr
+      ? getCollaboratorTimeClockAdherence(user, { collaboratorId: id, from: complianceFrom, to: complianceTo })
       : Promise.resolve(null),
   ]);
   const nrAptSummary = canManageQualifications ? await getCollaboratorQualificationSummary(id) : null;
@@ -351,6 +356,64 @@ export default async function ColaboradorDetailPage({
                     </div>
                   );
                 })()}
+              </CardContent>
+            </Card>
+          )}
+
+          {timeClockAdherence && (
+            <Card>
+              <CardHeader>
+                <CardTitle>
+                  <span className="flex items-center gap-2"><Clock className="size-4" /> Ponto — aderência (30 dias)</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-3">
+                {!timeClockAdherence.usesTimeClock ? (
+                  <p className="text-sm text-foreground-subtle">Turno não bate ponto — sem acompanhamento aqui.</p>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-3 gap-3 text-sm">
+                      <div>
+                        <p className="text-xs text-foreground-subtle">Faltas</p>
+                        <p className={`text-lg font-semibold ${timeClockAdherence.daysWithFalta > 0 ? "text-danger" : "text-success"}`}>
+                          {timeClockAdherence.daysWithFalta}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-foreground-subtle">Atrasos</p>
+                        <p className={`text-lg font-semibold ${timeClockAdherence.daysWithAtraso > 0 ? "text-danger" : "text-success"}`}>
+                          {timeClockAdherence.daysWithAtraso}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-foreground-subtle">Batidas ímpares</p>
+                        <p className={`text-lg font-semibold ${timeClockAdherence.daysWithBatidaImpar > 0 ? "text-danger" : "text-success"}`}>
+                          {timeClockAdherence.daysWithBatidaImpar}
+                        </p>
+                      </div>
+                    </div>
+                    {timeClockAdherence.anomalies.length === 0 ? (
+                      <p className="text-sm text-foreground-subtle">Nenhuma ocorrência de ponto nos últimos 30 dias.</p>
+                    ) : (
+                      <div className="flex flex-col gap-1.5">
+                        {timeClockAdherence.anomalies.map((a, index) => (
+                          <div
+                            key={`${a.date}-${a.type}-${index}`}
+                            className="flex items-center justify-between gap-2 rounded-md border border-border px-3 py-2 text-sm"
+                          >
+                            <span className="text-foreground">{formatDate(parseDateOnly(a.date))}</span>
+                            <div className="flex items-center gap-2">
+                              <Badge tone={a.type === "FALTA" ? "danger" : "warning"}>
+                                {a.type === "FALTA" ? "Falta" : a.type === "ATRASO" ? "Atraso" : "Batida ímpar"}
+                              </Badge>
+                              <span className="text-xs text-foreground-subtle">{a.detail}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
               </CardContent>
             </Card>
           )}
