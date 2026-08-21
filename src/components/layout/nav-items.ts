@@ -29,6 +29,7 @@ import {
   ShoppingBasket,
   UserCheck,
   ShieldAlert,
+  FileCheck,
   type LucideIcon,
 } from "lucide-react";
 import { PERMISSIONS } from "@/domain/shared/permissions";
@@ -68,6 +69,7 @@ export type NavIconKey =
   | "hr"
   | "hrImport"
   | "timeClock"
+  | "timeClockTreatment"
   | "benefits"
   | "qualificationImport"
   | "equipmentImport"
@@ -116,6 +118,7 @@ export const NAV_ICONS: Record<NavIconKey, LucideIcon> = {
   hr: Wallet,
   hrImport: Upload,
   timeClock: Clock,
+  timeClockTreatment: FileCheck,
   benefits: ShoppingBasket,
   qualificationImport: Upload,
   equipmentImport: Upload,
@@ -192,6 +195,7 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
   if (p.has(PERMISSIONS.HR_MANAGE)) {
     rh.push({ href: "/rh/importar", label: "Importar Planilha", icon: "hrImport" });
     rh.push({ href: "/rh/ponto", label: "Importar Ponto", icon: "timeClock" });
+    rh.push({ href: "/rh/tratativa-ponto", label: "Tratativa de Ponto", icon: "timeClockTreatment" });
     rh.push({ href: "/pendencias-advertencia", label: "Pendências de Advertência", icon: "warningPending" });
   }
   if (p.has(PERMISSIONS.SCHEDULE_MANAGE)) {
