@@ -38,7 +38,7 @@ async function assertProductivityAccess(
   selfPermissions: PermissionKey[],
 ) {
   if (user.permissions.has(PERMISSIONS.PRODUCTIVITY_MANAGE)) return;
-  if (user.permissions.has(PERMISSIONS.PRODUCTIVITY_MANAGE_TEAM)) {
+  if (user.permissions.has(PERMISSIONS.PRODUCTIVITY_MANAGE_TEAM) || user.canRollCall) {
     const scope = rollCallCollaboratorWhere(user);
     if (scope) {
       const target = await db.collaborator.findUnique({ where: { id: collaboratorId }, select: { areaId: true, turnoId: true } });
@@ -64,6 +64,7 @@ const LOG_SELF_PERMISSIONS = [PERMISSIONS.PRODUCTIVITY_SELF_LOG];
  * que essas funções alimentam telas de visão geral). */
 function productivityCollaboratorScopeWhere(user: CurrentUser): RollCallCollaboratorWhere | undefined {
   if (user.permissions.has(PERMISSIONS.PRODUCTIVITY_MANAGE)) return undefined;
+  if (!user.permissions.has(PERMISSIONS.PRODUCTIVITY_MANAGE_TEAM) && !user.canRollCall) return { areaId: { in: [] } };
   return rollCallCollaboratorWhere(user) ?? { areaId: { in: [] } };
 }
 
@@ -242,7 +243,7 @@ async function computePeriodStats(
  * quantos estavam escalados pra trabalhar, quantos lançaram alguma produção, e o total por
  * atividade. Base dos cartões e da tabela no topo da tela de Produtividade. */
 export async function getProductivityDashboard(user: CurrentUser, params: { date?: Date } = {}) {
-  if (!hasPermission(user, PERMISSIONS.PRODUCTIVITY_MANAGE) && !hasPermission(user, PERMISSIONS.PRODUCTIVITY_MANAGE_TEAM)) {
+  if (!hasPermission(user, PERMISSIONS.PRODUCTIVITY_MANAGE) && !hasPermission(user, PERMISSIONS.PRODUCTIVITY_MANAGE_TEAM) && !user.canRollCall) {
     throw new ForbiddenError();
   }
   const collaboratorScope = productivityCollaboratorScopeWhere(user);
@@ -347,7 +348,7 @@ export async function getProductivityGoalsProgress(
 /** Metas do mês de todos os colaboradores, com progresso — base da tabela "Metas do mês" no
  * topo da tela de Produtividade (visão consolidada, sem precisar escolher um colaborador). */
 export async function getAllProductivityGoalsProgress(user: CurrentUser, params: { month: number; year: number }) {
-  if (!hasPermission(user, PERMISSIONS.PRODUCTIVITY_MANAGE) && !hasPermission(user, PERMISSIONS.PRODUCTIVITY_MANAGE_TEAM)) {
+  if (!hasPermission(user, PERMISSIONS.PRODUCTIVITY_MANAGE) && !hasPermission(user, PERMISSIONS.PRODUCTIVITY_MANAGE_TEAM) && !user.canRollCall) {
     throw new ForbiddenError();
   }
   const collaboratorScope = productivityCollaboratorScopeWhere(user);

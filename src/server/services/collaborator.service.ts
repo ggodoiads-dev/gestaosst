@@ -123,7 +123,7 @@ export async function setCollaboratorRequiresChecklist(user: CurrentUser, id: st
 export function listActiveCollaboratorsForSupervision(user: CurrentUser) {
   const canSeeAll =
     hasPermission(user, PERMISSIONS.CHECKLIST_COMPLIANCE_VIEW) || hasPermission(user, PERMISSIONS.PRODUCTIVITY_MANAGE);
-  const canSeeTeam = hasPermission(user, PERMISSIONS.PRODUCTIVITY_MANAGE_TEAM);
+  const canSeeTeam = hasPermission(user, PERMISSIONS.PRODUCTIVITY_MANAGE_TEAM) || user.canRollCall;
   if (!canSeeAll && !canSeeTeam) {
     throw new ForbiddenError();
   }

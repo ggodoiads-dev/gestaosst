@@ -8,9 +8,11 @@ import type { Collaborator } from "@/generated/prisma/client";
 export function ChecklistComplianceCollaboratorPicker({
   collaborators,
   selectedId,
+  basePath = "/indicadores",
 }: {
   collaborators: Collaborator[];
   selectedId?: string;
+  basePath?: string;
 }) {
   const router = useRouter();
 
@@ -19,7 +21,7 @@ export function ChecklistComplianceCollaboratorPicker({
       <FormField label="Colaborador">
         <Select
           value={selectedId ?? "none"}
-          onValueChange={(id) => router.push(id === "none" ? "/indicadores" : `/indicadores?collaboratorId=${id}`)}
+          onValueChange={(id) => router.push(id === "none" ? basePath : `${basePath}?collaboratorId=${id}`)}
         >
           <SelectTrigger><SelectValue placeholder="Selecione um colaborador" /></SelectTrigger>
           <SelectContent>

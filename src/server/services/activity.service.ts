@@ -2,7 +2,7 @@ import "server-only";
 import { db } from "@/server/db";
 import { recordAudit } from "@/server/services/audit";
 import type { CurrentUser } from "@/server/auth/current-user";
-import { requirePermission } from "@/server/auth/current-user";
+import { requirePermission, hasPermission, ForbiddenError } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
 import type { AttachmentDocType } from "@/generated/prisma/enums";
 
@@ -25,10 +25,17 @@ export function listActivitiesForUser(user: CurrentUser, filters: { search?: str
   });
 }
 
-/** Catálogo de atividades ativas pro colaborador escolher ao lançar a própria produtividade —
- * não exige `ACTIVITY_MANAGE` (que é sobre cadastrar/editar atividades), só ler a lista. */
-export function listActiveActivitiesForSelfLog(user: CurrentUser) {
-  requirePermission(user, PERMISSIONS.PRODUCTIVITY_SELF_LOG);
+/** Catálogo de atividades ativas pra escolher ao lançar produtividade — a própria (colaborador
+ * com `PRODUCTIVITY_SELF_LOG`) ou de alguém que o usuário pode lançar por (gestor, líder, ou
+ * quem faz chamada dessa pessoa). Não exige `ACTIVITY_MANAGE` (que é sobre cadastrar/editar
+ * atividades), só ler a lista. */
+export function listActiveActivitiesForProductivityLog(user: CurrentUser) {
+  const allowed =
+    hasPermission(user, PERMISSIONS.PRODUCTIVITY_SELF_LOG) ||
+    hasPermission(user, PERMISSIONS.PRODUCTIVITY_MANAGE) ||
+    hasPermission(user, PERMISSIONS.PRODUCTIVITY_MANAGE_TEAM) ||
+    user.canRollCall;
+  if (!allowed) throw new ForbiddenError();
   return db.activity.findMany({ where: { active: true }, orderBy: { name: "asc" } });
 }
 

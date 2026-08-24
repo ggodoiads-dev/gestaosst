@@ -7,7 +7,7 @@ import {
   getProductivityRange,
   getProductivityGoalsProgress,
 } from "@/server/services/productivity.service";
-import { listActiveActivitiesForSelfLog } from "@/server/services/activity.service";
+import { listActiveActivitiesForProductivityLog } from "@/server/services/activity.service";
 import { PageHeader, PageBody } from "@/components/domain/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatCard } from "@/components/domain/stat-card";
@@ -94,7 +94,7 @@ export default async function MinhaProdutividadePage({
   const canLog = hasPermission(user, PERMISSIONS.PRODUCTIVITY_SELF_LOG);
 
   const [activities, rangeReport, goals] = await Promise.all([
-    canLog ? listActiveActivitiesForSelfLog(user) : Promise.resolve([]),
+    canLog ? listActiveActivitiesForProductivityLog(user) : Promise.resolve([]),
     getProductivityRange(user, { collaboratorId: collaborator.id, from: rangeFrom, to: rangeTo }),
     getProductivityGoalsProgress(user, { collaboratorId: collaborator.id, month: refDate.getMonth() + 1, year: refDate.getFullYear() }),
   ]);
