@@ -7,6 +7,22 @@ import { hasPermission, ForbiddenError } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
 import type { ScheduleDayNoteStatus } from "@/generated/prisma/enums";
 
+export type RollCallCollaboratorWhere = { areaId: { in: string[] }; turnoId?: { in: string[] } };
+
+/** Áreas (e, se definido, turnos) marcados como "Faz chamada?" pra esse usuário em Acessos —
+ * `null` quando não tem nada configurado. Exportada pra Produtividade reaproveitar: o pedido do
+ * negócio é que quem lança produtividade da equipe seja exatamente quem já faz a chamada, com o
+ * mesmo escopo configurado uma vez só em Acessos, em vez de um critério próprio (função liderada). */
+export function rollCallCollaboratorWhere(user: CurrentUser): RollCallCollaboratorWhere | null {
+  const areaIds = Array.from(user.rollCallAreaIds);
+  if (areaIds.length === 0) return null;
+  const turnoIds = Array.from(user.rollCallTurnoIds);
+  return {
+    areaId: { in: areaIds },
+    ...(turnoIds.length > 0 ? { turnoId: { in: turnoIds } } : {}),
+  };
+}
+
 /** Todo colaborador ativo se o usuário tem SCHEDULE_MANAGE; senão só os das áreas (e, se
  * definido, dos turnos) marcados como "Faz chamada?" pra esse usuário em Acessos — funciona
  * independente do Role/perfil (um Colaborador comum pode ter `canRollCall`). */
@@ -14,15 +30,11 @@ function scopeWhere(user: CurrentUser) {
   if (hasPermission(user, PERMISSIONS.SCHEDULE_MANAGE)) return {};
   if (!user.canRollCall) throw new ForbiddenError();
 
-  const areaIds = Array.from(user.rollCallAreaIds);
-  if (areaIds.length === 0) {
+  const where = rollCallCollaboratorWhere(user);
+  if (!where) {
     throw new ForbiddenError("Nenhuma área configurada pra sua chamada — peça pro administrador configurar em Acessos.");
   }
-  const turnoIds = Array.from(user.rollCallTurnoIds);
-  return {
-    areaId: { in: areaIds },
-    ...(turnoIds.length > 0 ? { turnoId: { in: turnoIds } } : {}),
-  };
+  return where;
 }
 
 export type RollCallEntry = {

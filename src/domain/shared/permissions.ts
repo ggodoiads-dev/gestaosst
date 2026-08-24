@@ -94,7 +94,7 @@ export const PERMISSION_DESCRIPTIONS: Record<PermissionKey, string> = {
   [PERMISSIONS.SCHEDULE_MANAGE]: "Gerenciar escalas de trabalho dos colaboradores",
   [PERMISSIONS.SCHEDULE_SELF_VIEW]: "Ver a própria escala de trabalho",
   [PERMISSIONS.PRODUCTIVITY_MANAGE]: "Lançar e consultar produtividade de todos os colaboradores",
-  [PERMISSIONS.PRODUCTIVITY_MANAGE_TEAM]: "Lançar e consultar produtividade dos colaboradores das funções que lidera",
+  [PERMISSIONS.PRODUCTIVITY_MANAGE_TEAM]: "Lançar e consultar produtividade dos colaboradores das áreas/turnos em que faz chamada",
   [PERMISSIONS.PRODUCTIVITY_SELF_LOG]: "Lançar a própria produtividade",
   [PERMISSIONS.PRODUCTIVITY_SELF_VIEW]: "Ver a própria produtividade",
   [PERMISSIONS.SHIFT_CHECKIN_SELF]: "Confirmar a própria presença no turno",

@@ -3,6 +3,7 @@ import { addDays, addMonths, startOfDay, startOfMonth } from "date-fns";
 import { db } from "@/server/db";
 import { recordAudit } from "@/server/services/audit";
 import { getCollaboratorDayStatus } from "@/domain/schedule/schedule-calendar";
+import { rollCallCollaboratorWhere, type RollCallCollaboratorWhere } from "@/server/services/attendance-rollcall.service";
 import type { CurrentUser } from "@/server/auth/current-user";
 import { hasPermission, ForbiddenError } from "@/server/auth/current-user";
 import { PERMISSIONS, type PermissionKey } from "@/domain/shared/permissions";
@@ -25,8 +26,10 @@ export function getMyCollaboratorProfile(user: CurrentUser) {
 }
 
 /** Libera acesso a dados de produtividade de `collaboratorId` pra quem gerencia produtividade
- * de qualquer colaborador (`PRODUCTIVITY_MANAGE`), pra um líder gerenciando só as funções que
- * lidera (`PRODUCTIVITY_MANAGE_TEAM`, via `UserFunction`), ou pro próprio colaborador — quais
+ * de qualquer colaborador (`PRODUCTIVITY_MANAGE`), pra um líder lançando pela equipe
+ * (`PRODUCTIVITY_MANAGE_TEAM`, escopado pelas MESMAS áreas/turnos configurados pra ele em
+ * "Faz chamada?" — decisão do negócio: quem lança produtividade da equipe é sempre quem também
+ * faz a chamada dela, um escopo só configurado em Acessos), ou pro próprio colaborador — quais
  * permissões contam como "acesso próprio" variam por caso de uso: ver (`PRODUCTIVITY_SELF_VIEW`
  * ou `PRODUCTIVITY_SELF_LOG`) é mais permissivo que lançar/apagar (só `PRODUCTIVITY_SELF_LOG`). */
 async function assertProductivityAccess(
@@ -36,8 +39,13 @@ async function assertProductivityAccess(
 ) {
   if (user.permissions.has(PERMISSIONS.PRODUCTIVITY_MANAGE)) return;
   if (user.permissions.has(PERMISSIONS.PRODUCTIVITY_MANAGE_TEAM)) {
-    const target = await db.collaborator.findUnique({ where: { id: collaboratorId }, select: { functionId: true } });
-    if (target?.functionId && user.functionIds.has(target.functionId)) return;
+    const scope = rollCallCollaboratorWhere(user);
+    if (scope) {
+      const target = await db.collaborator.findUnique({ where: { id: collaboratorId }, select: { areaId: true, turnoId: true } });
+      const areaOk = Boolean(target?.areaId && scope.areaId.in.includes(target.areaId));
+      const turnoOk = !scope.turnoId || Boolean(target?.turnoId && scope.turnoId.in.includes(target.turnoId));
+      if (areaOk && turnoOk) return;
+    }
   }
   if (selfPermissions.some((p) => user.permissions.has(p))) {
     const own = await getMyCollaboratorProfile(user);
@@ -49,12 +57,14 @@ async function assertProductivityAccess(
 const VIEW_SELF_PERMISSIONS = [PERMISSIONS.PRODUCTIVITY_SELF_LOG, PERMISSIONS.PRODUCTIVITY_SELF_VIEW];
 const LOG_SELF_PERMISSIONS = [PERMISSIONS.PRODUCTIVITY_SELF_LOG];
 
-/** Mesmo critério de `areaScope` em `indicators.service.ts`/`time-clock.service.ts`, mas por
- * função: quem tem `PRODUCTIVITY_MANAGE` vê todo mundo (sem filtro); quem só tem
- * `PRODUCTIVITY_MANAGE_TEAM` fica restrito às funções que lidera. */
-function productivityFunctionFilter(user: CurrentUser): { in: string[] } | undefined {
+/** Mesmo critério de `areaScope` em `indicators.service.ts`/`time-clock.service.ts`, mas
+ * reaproveitando o escopo de chamada: quem tem `PRODUCTIVITY_MANAGE` vê todo mundo (sem filtro);
+ * quem só tem `PRODUCTIVITY_MANAGE_TEAM` fica restrito às áreas/turnos configurados pra ele fazer
+ * chamada — sem nada configurado, o filtro não bate com ninguém (lista vazia, não um erro, já
+ * que essas funções alimentam telas de visão geral). */
+function productivityCollaboratorScopeWhere(user: CurrentUser): RollCallCollaboratorWhere | undefined {
   if (user.permissions.has(PERMISSIONS.PRODUCTIVITY_MANAGE)) return undefined;
-  return { in: Array.from(user.functionIds) };
+  return rollCallCollaboratorWhere(user) ?? { areaId: { in: [] } };
 }
 
 export async function createProductivityEntry(user: CurrentUser, data: ProductivityEntryInput) {
@@ -164,13 +174,13 @@ type PeriodStats = {
 async function computePeriodStats(
   from: Date,
   toInclusive: Date,
-  functionFilter?: { in: string[] },
+  collaboratorScope?: RollCallCollaboratorWhere,
 ): Promise<PeriodStats> {
   const rangeStart = startOfDay(from);
   const rangeEndExclusive = addDays(startOfDay(toInclusive), 1);
 
   const collaborators = await db.collaborator.findMany({
-    where: { active: true, functionId: functionFilter },
+    where: { active: true, ...(collaboratorScope ?? {}) },
     include: { turno: { include: { scheduleType: true } } },
   });
   const collaboratorIds = collaborators.map((c) => c.id);
@@ -235,15 +245,15 @@ export async function getProductivityDashboard(user: CurrentUser, params: { date
   if (!hasPermission(user, PERMISSIONS.PRODUCTIVITY_MANAGE) && !hasPermission(user, PERMISSIONS.PRODUCTIVITY_MANAGE_TEAM)) {
     throw new ForbiddenError();
   }
-  const functionFilter = productivityFunctionFilter(user);
+  const collaboratorScope = productivityCollaboratorScopeWhere(user);
   const date = params.date ?? new Date();
   const dayStart = startOfDay(date);
   const monthStart = startOfMonth(date);
   const monthEndInclusive = addDays(startOfMonth(addMonths(date, 1)), -1);
 
   const [today, month] = await Promise.all([
-    computePeriodStats(dayStart, dayStart, functionFilter),
-    computePeriodStats(monthStart, monthEndInclusive, functionFilter),
+    computePeriodStats(dayStart, dayStart, collaboratorScope),
+    computePeriodStats(monthStart, monthEndInclusive, collaboratorScope),
   ]);
 
   return { date: dayStart, today, month };
@@ -340,14 +350,14 @@ export async function getAllProductivityGoalsProgress(user: CurrentUser, params:
   if (!hasPermission(user, PERMISSIONS.PRODUCTIVITY_MANAGE) && !hasPermission(user, PERMISSIONS.PRODUCTIVITY_MANAGE_TEAM)) {
     throw new ForbiddenError();
   }
-  const functionFilter = productivityFunctionFilter(user);
+  const collaboratorScope = productivityCollaboratorScopeWhere(user);
 
   const [goals, achievedByKey] = await Promise.all([
     db.productivityGoal.findMany({
       where: {
         month: params.month,
         year: params.year,
-        collaborator: functionFilter ? { functionId: functionFilter } : undefined,
+        collaborator: collaboratorScope ? collaboratorScope : undefined,
       },
       include: { activity: true, collaborator: true },
       orderBy: [{ collaborator: { name: "asc" } }, { activity: { name: "asc" } }],

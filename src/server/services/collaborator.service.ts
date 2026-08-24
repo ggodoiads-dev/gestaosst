@@ -4,6 +4,7 @@ import { recordAudit } from "@/server/services/audit";
 import * as userService from "@/server/services/user.service";
 import { applyJobFunctionKit } from "@/server/services/epi.service";
 import { generateLoginEmail, generatePassword, DEFAULT_INITIAL_PASSWORD } from "@/domain/shared/credentials";
+import { rollCallCollaboratorWhere } from "@/server/services/attendance-rollcall.service";
 import type { CurrentUser } from "@/server/auth/current-user";
 import { requirePermission, hasPermission, ForbiddenError } from "@/server/auth/current-user";
 import { PERMISSIONS, ROLE_KEYS } from "@/domain/shared/permissions";
@@ -116,7 +117,9 @@ export async function setCollaboratorRequiresChecklist(user: CurrentUser, id: st
  * de checklist exige, porque o mesmo seletor também alimenta a aba de Produtividade, que não
  * depende de acesso ao sistema (lançamento pode ser feito por quem gerencia, em nome do
  * colaborador). Cobre qualquer colaborador cadastrado em RH, não só o subconjunto técnico
- * habilitado pra checklist. */
+ * habilitado pra checklist. Quem só tem `PRODUCTIVITY_MANAGE_TEAM` fica restrito às MESMAS
+ * áreas/turnos configurados pra ele em "Faz chamada?" — decisão do negócio: quem lança
+ * produtividade da equipe é sempre quem também faz a chamada dela. */
 export function listActiveCollaboratorsForSupervision(user: CurrentUser) {
   const canSeeAll =
     hasPermission(user, PERMISSIONS.CHECKLIST_COMPLIANCE_VIEW) || hasPermission(user, PERMISSIONS.PRODUCTIVITY_MANAGE);
@@ -124,8 +127,9 @@ export function listActiveCollaboratorsForSupervision(user: CurrentUser) {
   if (!canSeeAll && !canSeeTeam) {
     throw new ForbiddenError();
   }
+  const teamScope = canSeeAll ? undefined : (rollCallCollaboratorWhere(user) ?? { areaId: { in: [] } });
   return db.collaborator.findMany({
-    where: { active: true, functionId: canSeeAll ? undefined : { in: Array.from(user.functionIds) } },
+    where: { active: true, ...(teamScope ?? {}) },
     orderBy: { name: "asc" },
   });
 }
