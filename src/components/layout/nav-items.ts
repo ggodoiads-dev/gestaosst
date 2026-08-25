@@ -32,6 +32,7 @@ import {
   FileCheck,
   Truck,
   CircleDollarSign,
+  IdCard,
   type LucideIcon,
 } from "lucide-react";
 import { PERMISSIONS } from "@/domain/shared/permissions";
@@ -78,7 +79,9 @@ export type NavIconKey =
   | "rollCall"
   | "warningPending"
   | "fleet"
-  | "finance";
+  | "finance"
+  | "guardian"
+  | "myProfile";
 
 export type NavItem = {
   href: string;
@@ -130,6 +133,8 @@ export const NAV_ICONS: Record<NavIconKey, LucideIcon> = {
   warningPending: ShieldAlert,
   fleet: Truck,
   finance: CircleDollarSign,
+  guardian: ShieldCheck,
+  myProfile: IdCard,
 };
 
 /**
@@ -146,6 +151,7 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
   const geral: NavItem[] = [
     { href: "/inicio", label: "Início", icon: "dashboard" },
     { href: "/rico", label: "Rico", icon: "rico" },
+    { href: "/meu-perfil", label: "Meu Perfil", icon: "myProfile" },
     { href: "/meu-historico", label: "Meu Histórico", icon: "history" },
   ];
   groups.push({ key: "geral", items: geral });
@@ -185,6 +191,10 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
   if (p.has(PERMISSIONS.QUALIFICATION_MANAGE)) {
     sst.push({ href: "/qualificacoes", label: "Qualificações", icon: "qualifications" });
     sst.push({ href: "/qualificacoes/importar", label: "Importar ASOs/NRs", icon: "qualificationImport" });
+  }
+  if (p.has(PERMISSIONS.GUARDIAN_MANAGE)) {
+    sst.push({ href: "/guardian", label: "Guardian", icon: "guardian" });
+    sst.push({ href: "/guardian/importar", label: "Importar Guardian", icon: "qualificationImport" });
   }
   if (sst.length > 0) groups.push({ key: "sst", title: "Segurança", items: sst });
 

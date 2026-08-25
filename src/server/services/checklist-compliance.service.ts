@@ -3,7 +3,7 @@ import { addDays, addMonths, startOfDay, startOfMonth } from "date-fns";
 import { db } from "@/server/db";
 import { getCollaboratorDayStatus } from "@/domain/schedule/schedule-calendar";
 import type { CurrentUser } from "@/server/auth/current-user";
-import { requirePermission } from "@/server/auth/current-user";
+import { requirePermission, hasPermission, ForbiddenError } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
 
 /**
@@ -149,7 +149,10 @@ export async function getChecklistComplianceRange(
   user: CurrentUser,
   params: { collaboratorId: string; from: Date; to: Date },
 ) {
-  requirePermission(user, PERMISSIONS.CHECKLIST_COMPLIANCE_VIEW);
+  if (!hasPermission(user, PERMISSIONS.CHECKLIST_COMPLIANCE_VIEW)) {
+    const own = await db.collaborator.findUnique({ where: { userId: user.id }, select: { id: true } });
+    if (own?.id !== params.collaboratorId) throw new ForbiddenError();
+  }
   const { collaborator, days } = await buildCollaboratorChecklistDays(params.collaboratorId, params.from, params.to);
 
   const workDays = days.filter((d) => d.status === "TRABALHO" && d.required.length > 0 && !d.future);

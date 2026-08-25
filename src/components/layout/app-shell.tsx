@@ -43,6 +43,7 @@ import {
   FileCheck,
   Truck,
   CircleDollarSign,
+  IdCard,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -100,6 +101,8 @@ const ICONS: Record<NavIconKey, LucideIcon> = {
   warningPending: ShieldAlert,
   fleet: Truck,
   finance: CircleDollarSign,
+  guardian: ShieldCheck,
+  myProfile: IdCard,
 };
 
 /**

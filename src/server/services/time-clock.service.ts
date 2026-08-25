@@ -521,7 +521,10 @@ export async function getCollaboratorTimeClockAdherence(
   user: CurrentUser,
   params: { collaboratorId: string; from: Date; to: Date },
 ): Promise<TimeClockAdherenceReport> {
-  requirePermission(user, PERMISSIONS.HR_MANAGE);
+  if (!hasPermission(user, PERMISSIONS.HR_MANAGE)) {
+    const own = await db.collaborator.findUnique({ where: { userId: user.id }, select: { id: true } });
+    if (own?.id !== params.collaboratorId) throw new ForbiddenError();
+  }
 
   const collaborator = await db.collaborator.findUnique({
     where: { id: params.collaboratorId },

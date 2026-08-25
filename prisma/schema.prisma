@@ -103,6 +103,7 @@ model User {
   collaboratorEquipmentsGranted CollaboratorEquipment[]  @relation("CollaboratorEquipmentCreatedBy")
   warningsCreated               Warning[]                @relation("WarningCreatedBy")
   equipmentDamagesReported      EquipmentDamage[]        @relation("EquipmentDamageReportedBy")
+  guardianReportsImported       GuardianReport[]         @relation("GuardianReportImportedBy")
   collaboratorProfile           Collaborator?
 
   @@index([roleId])
@@ -861,6 +862,7 @@ model Collaborator {
   warnings                Warning[]
   attachments             Attachment[]
   equipmentDamagesResponsible EquipmentDamage[]
+  guardianReports         GuardianReport[]
 
   @@index([areaId])
   @@index([functionId])
@@ -1094,6 +1096,52 @@ model EquipmentDamage {
   @@index([equipmentId])
   @@index([status])
   @@index([date])
+}
+
+// =========================================================================
+// Guardian — importação de relatos de segurança (plataforma externa Ambev)
+// =========================================================================
+
+enum GuardianReportType {
+  COMPORTAMENTO_RISCO
+  CONDICAO
+  INCIDENTE
+  RECONHECIMENTO
+}
+
+/// Relato importado do Guardian (planilha externa da Ambev) — só entra aqui quem foi casado
+/// (por CPF, com fallback por nome) a um Collaborator da LOG20; gente de outra empresa terceira
+/// que aparece na mesma exportação nunca é gravada. `guardianId` é o "ID da ocorrência" da
+/// planilha — chave de negócio que permite reimportar o arquivo do dia seguinte sem duplicar.
+model GuardianReport {
+  id                 String             @id @default(uuid())
+  guardianId         String             @unique
+  type               GuardianReportType
+  categoryName       String?
+  description        String?
+  occurredAt         DateTime?
+  reportedAt         DateTime?
+  unit               String?
+  area               String?
+  subArea            String?
+  location           String?
+  equipment          String?
+  reporterName       String?
+  reporterExternalId String?
+  reporterEmail      String?
+  reporterCompany    String?
+  reporterCollaboratorId String?
+  isAnonymous        Boolean            @default(false)
+  raw                String? // linha original inteira (JSON), pra nunca perder um campo que não foi modelado
+  importedAt         DateTime           @default(now())
+  importedById       String
+
+  reporterCollaborator Collaborator? @relation(fields: [reporterCollaboratorId], references: [id])
+  importedBy           User          @relation("GuardianReportImportedBy", fields: [importedById], references: [id])
+
+  @@index([type])
+  @@index([occurredAt])
+  @@index([reporterCollaboratorId])
 }
 
 // =========================================================================

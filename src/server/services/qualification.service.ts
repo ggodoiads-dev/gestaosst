@@ -171,6 +171,26 @@ export async function deleteQualificationRecord(user: CurrentUser, id: string) {
   });
 }
 
+/** Qualificações do próprio colaborador logado — pro Meu Perfil. Um registro por tipo (o mais
+ * recente), mesma lógica de dedup usada no perfil administrativo. */
+export async function listMyQualifications(user: CurrentUser) {
+  const collaborator = await db.collaborator.findUnique({ where: { userId: user.id }, select: { id: true } });
+  if (!collaborator) return [];
+
+  const records = await db.qualificationRecord.findMany({
+    where: { collaboratorId: collaborator.id },
+    include: { qualificationType: true },
+    orderBy: { completedDate: "desc" },
+  });
+
+  const seenTypeIds = new Set<string>();
+  return records.filter((r) => {
+    if (seenTypeIds.has(r.qualificationTypeId)) return false;
+    seenTypeIds.add(r.qualificationTypeId);
+    return true;
+  });
+}
+
 export type CollaboratorQualificationSummary = {
   aso: { typeName: string; expiresAt: Date | null } | null;
   nrs: { typeName: string; expiresAt: Date | null }[];
