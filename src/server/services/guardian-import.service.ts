@@ -1,5 +1,5 @@
 import "server-only";
-import ExcelJS from "exceljs";
+import * as XLSX from "xlsx";
 import { db } from "@/server/db";
 import { recordAudit } from "@/server/services/audit";
 import type { CurrentUser } from "@/server/auth/current-user";
@@ -17,25 +17,6 @@ const SHEET_TYPES: Record<string, GuardianReportType> = {
   incidente: "INCIDENTE",
   reconhecimento: "RECONHECIMENTO",
 };
-
-function cellToString(v: ExcelJS.CellValue): string {
-  if (v === null || v === undefined) return "";
-  if (v instanceof Date) {
-    const yyyy = v.getFullYear();
-    const mm = String(v.getMonth() + 1).padStart(2, "0");
-    const dd = String(v.getDate()).padStart(2, "0");
-    const hh = String(v.getHours()).padStart(2, "0");
-    const min = String(v.getMinutes()).padStart(2, "0");
-    const secs = String(v.getSeconds()).padStart(2, "0");
-    return hh === "00" && min === "00" && secs === "00" ? `${dd}/${mm}/${yyyy}` : `${dd}/${mm}/${yyyy} ${hh}:${min}:${secs}`;
-  }
-  if (typeof v === "object") {
-    if ("text" in v && typeof v.text === "string") return v.text;
-    if ("result" in v && v.result !== undefined) return String(v.result);
-    return "";
-  }
-  return String(v).trim();
-}
 
 /** Acha a coluna certa por comparação exata OU por "começa com" do cabeçalho normalizado — a
  * planilha do Guardian repete "Nome do X"/"Descrição..." em outras colunas mais adiante (ex:
@@ -139,23 +120,24 @@ export type GuardianRawRow = {
 
 /** Lê as 4 abas conhecidas do export do Guardian. Abas ausentes ou com nome diferente são
  * simplesmente ignoradas (não é erro — algumas exportações podem vir sem alguma aba se não
- * houve relato daquele tipo no período). */
+ * houve relato daquele tipo no período).
+ *
+ * Usa `xlsx` (SheetJS) em vez do `exceljs` já usado no resto do SIGO — o export do Guardian
+ * grava todo o XML interno com prefixo de namespace (`<x:worksheet>`, `<x:sheet>` etc., em vez
+ * do namespace padrão sem prefixo que o Excel de verdade usa), e o exceljs não reconhece esses
+ * elementos prefixados: `workbook.xlsx.load` retorna um workbook vazio/undefined sem erro claro.
+ * O SheetJS lida bem com essa variação. */
 export async function parseGuardianWorkbook(buffer: Buffer): Promise<GuardianRawRow[]> {
-  const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.load(buffer as unknown as ArrayBuffer);
+  const workbook = XLSX.read(buffer, { type: "buffer" });
 
   const allRows: GuardianRawRow[] = [];
 
-  for (const sheet of workbook.worksheets) {
-    const type = SHEET_TYPES[sheet.name.trim().toLowerCase()];
+  for (const sheetName of workbook.SheetNames) {
+    const type = SHEET_TYPES[sheetName.trim().toLowerCase()];
     if (!type) continue;
 
-    const grid: string[][] = [];
-    sheet.eachRow((row) => {
-      const values: string[] = [];
-      row.eachCell({ includeEmpty: true }, (c) => values.push(cellToString(c.value)));
-      grid.push(values);
-    });
+    const sheet = workbook.Sheets[sheetName];
+    const grid: string[][] = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1, raw: false, defval: "" });
     const [headers, ...dataRows] = grid;
     if (!headers) continue;
     const cols = resolveColumns(headers);
