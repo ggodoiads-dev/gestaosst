@@ -51,15 +51,26 @@ const collaboratorWithFunctionInclude = {
 /** O que é exigido do colaborador num dia: se a função dele tiver checklist(s) obrigatório(s)
  * configurado(s) (JobFunctionRequiredChecklist), é isso especificamente — o mesmo critério já
  * usado em evaluateRange (time-clock.service.ts) pro relatório de pendência. Sem função
- * configurada, cai no comportamento antigo (todo equipamento ativo da própria área). O "id" de
- * cada item, nos dois modos, é a chave usada pra bater contra as execuções concluídas do dia. */
+ * configurada, só cai no comportamento antigo (todo equipamento ativo da própria área) se
+ * `Collaborator.requiresChecklist` estiver marcado — mesma flag que já era respeitada em
+ * evaluateRange, mas que esta função ignorava até aqui (por isso um colaborador desmarcado como
+ * "precisa de checklist", tipo Conferente, ainda aparecia cobrado pelo equipamento da área
+ * inteira). O "id" de cada item, nos dois modos, é a chave usada pra bater contra as execuções
+ * concluídas do dia. */
 function getRequiredItemsForCollaborator(
-  collaborator: { areaId: string | null; function: { requiredChecklists: { templateId: string; template: { name: string } }[] } | null },
+  collaborator: {
+    areaId: string | null;
+    requiresChecklist: boolean;
+    function: { requiredChecklists: { templateId: string; template: { name: string } }[] } | null;
+  },
   requiredByArea: Map<string, RequiredEquipment[]>,
-): { mode: "function" | "area"; items: RequiredEquipment[] } {
+): { mode: "function" | "area" | "none"; items: RequiredEquipment[] } {
   const functionTemplates = collaborator.function?.requiredChecklists ?? [];
   if (functionTemplates.length > 0) {
     return { mode: "function", items: functionTemplates.map((r) => ({ id: r.templateId, code: r.template.name, name: r.template.name })) };
+  }
+  if (!collaborator.requiresChecklist) {
+    return { mode: "none", items: [] };
   }
   return { mode: "area", items: collaborator.areaId ? (requiredByArea.get(collaborator.areaId) ?? []) : [] };
 }
