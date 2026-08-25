@@ -505,9 +505,13 @@ export type TimeClockAdherenceReport = {
   /** false quando o turno do colaborador está marcado como "não bate ponto" (ex: ADM) —
    * nesse caso não há o que acompanhar aqui, e o resto dos campos vem zerado. */
   usesTimeClock: boolean;
+  workDays: number;
   daysWithFalta: number;
   daysWithAtraso: number;
   daysWithBatidaImpar: number;
+  /** % de dias de trabalho no período sem nenhuma ocorrência (falta/atraso/batida ímpar) — `null`
+   * sem nenhum dia de trabalho no período (nada pra calcular ainda). */
+  adherencePercent: number | null;
   /** Só as ocorrências de ponto (falta/atraso/batida ímpar) — checklist já tem seu próprio
    * card no perfil, alimentado por `getChecklistComplianceRange`. */
   anomalies: TimeClockAnomaly[];
@@ -528,24 +532,39 @@ export async function getCollaboratorTimeClockAdherence(
 
   const collaborator = await db.collaborator.findUnique({
     where: { id: params.collaboratorId },
-    select: { turno: { select: { usesTimeClock: true } } },
+    include: { turno: { include: { scheduleType: true } } },
   });
   const usesTimeClock = collaborator?.turno?.usesTimeClock !== false;
   if (!usesTimeClock) {
-    return { usesTimeClock: false, daysWithFalta: 0, daysWithAtraso: 0, daysWithBatidaImpar: 0, anomalies: [] };
+    return { usesTimeClock: false, workDays: 0, daysWithFalta: 0, daysWithAtraso: 0, daysWithBatidaImpar: 0, adherencePercent: null, anomalies: [] };
   }
 
-  const { anomalies: allAnomalies } = await evaluateRange(
-    { from: params.from, to: params.to },
-    { collaboratorIds: [params.collaboratorId] },
-  );
+  const [{ anomalies: allAnomalies }, notes] = await Promise.all([
+    evaluateRange({ from: params.from, to: params.to }, { collaboratorIds: [params.collaboratorId] }),
+    db.scheduleDayNote.findMany({ where: { collaboratorId: params.collaboratorId, date: { gte: params.from, lte: params.to } } }),
+  ]);
   const anomalies = allAnomalies.filter((a) => a.type !== "CHECKLIST_PENDENTE");
+
+  let workDays = 0;
+  if (collaborator?.turno) {
+    const notesByKey = new Map(notes.map((n) => [dayKeyFromLocalDate(n.date), n]));
+    for (let date = new Date(params.from); date <= params.to; date.setDate(date.getDate() + 1)) {
+      const note = notesByKey.get(dayKeyFromLocalDate(date));
+      const status = note ? note.overrideStatus : getCollaboratorDayStatus(date, collaborator);
+      if (status === "TRABALHO") workDays++;
+    }
+  }
+
+  const problemDays = new Set(anomalies.map((a) => a.date));
+  const adherencePercent = workDays > 0 ? Math.max(0, Math.round(((workDays - problemDays.size) / workDays) * 100)) : null;
 
   return {
     usesTimeClock: true,
+    workDays,
     daysWithFalta: anomalies.filter((a) => a.type === "FALTA").length,
     daysWithAtraso: anomalies.filter((a) => a.type === "ATRASO").length,
     daysWithBatidaImpar: anomalies.filter((a) => a.type === "BATIDA_IMPAR").length,
+    adherencePercent,
     anomalies,
   };
 }

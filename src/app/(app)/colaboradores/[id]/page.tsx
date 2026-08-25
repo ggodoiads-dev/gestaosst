@@ -316,7 +316,13 @@ export default async function ColaboradorDetailPage({
             <Card>
               <CardHeader>
                 <CardTitle>
-                  <span className="flex items-center gap-2"><ClipboardCheck className="size-4" /> Checklist — aderência (30 dias)</span>
+                  <span className="flex items-center gap-2">
+                    <ClipboardCheck className="size-4" /> Checklist — aderência (30 dias)
+                    {checklistCompliance.summary.workDays > 0 && (() => {
+                      const pct = Math.round((checklistCompliance.summary.completeDays / checklistCompliance.summary.workDays) * 100);
+                      return <Badge tone={pct >= 90 ? "success" : pct >= 70 ? "warning" : "danger"}>{pct}%</Badge>;
+                    })()}
+                  </span>
                 </CardTitle>
               </CardHeader>
               <CardContent className="flex flex-col gap-3">
@@ -364,7 +370,14 @@ export default async function ColaboradorDetailPage({
             <Card>
               <CardHeader>
                 <CardTitle>
-                  <span className="flex items-center gap-2"><Clock className="size-4" /> Ponto — aderência (30 dias)</span>
+                  <span className="flex items-center gap-2">
+                    <Clock className="size-4" /> Ponto — aderência (30 dias)
+                    {timeClockAdherence.adherencePercent !== null && (
+                      <Badge tone={timeClockAdherence.adherencePercent >= 90 ? "success" : timeClockAdherence.adherencePercent >= 70 ? "warning" : "danger"}>
+                        {timeClockAdherence.adherencePercent}%
+                      </Badge>
+                    )}
+                  </span>
                 </CardTitle>
               </CardHeader>
               <CardContent className="flex flex-col gap-3">

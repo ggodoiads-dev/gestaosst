@@ -4,7 +4,8 @@ import { getMyCollaboratorProfile } from "@/server/services/productivity.service
 import { listMyQualifications } from "@/server/services/qualification.service";
 import { getCollaboratorTimeClockAdherence } from "@/server/services/time-clock.service";
 import { getChecklistComplianceRange } from "@/server/services/checklist-compliance.service";
-import { listMyGuardianReports, GUARDIAN_TYPE_LABELS } from "@/server/services/guardian.service";
+import { listMyGuardianReports } from "@/server/services/guardian.service";
+import { GuardianReportRow } from "./guardian-report-row";
 import { PageHeader, PageBody } from "@/components/domain/page-header";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -96,7 +97,14 @@ export default async function MeuPerfilPage() {
           <Card>
             <CardHeader>
               <CardTitle>
-                <span className="flex items-center gap-2"><Clock className="size-4" /> Ponto — aderência (30 dias)</span>
+                <span className="flex items-center gap-2">
+                  <Clock className="size-4" /> Ponto — aderência (30 dias)
+                  {timeClockAdherence.adherencePercent !== null && (
+                    <Badge tone={timeClockAdherence.adherencePercent >= 90 ? "success" : timeClockAdherence.adherencePercent >= 70 ? "warning" : "danger"}>
+                      {timeClockAdherence.adherencePercent}%
+                    </Badge>
+                  )}
+                </span>
               </CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-3">
@@ -150,7 +158,13 @@ export default async function MeuPerfilPage() {
             <Card>
               <CardHeader>
                 <CardTitle>
-                  <span className="flex items-center gap-2"><ClipboardCheck className="size-4" /> Checklist — aderência (30 dias)</span>
+                  <span className="flex items-center gap-2">
+                    <ClipboardCheck className="size-4" /> Checklist — aderência (30 dias)
+                    {checklistCompliance.summary.workDays > 0 && (() => {
+                      const pct = Math.round((checklistCompliance.summary.completeDays / checklistCompliance.summary.workDays) * 100);
+                      return <Badge tone={pct >= 90 ? "success" : pct >= 70 ? "warning" : "danger"}>{pct}%</Badge>;
+                    })()}
+                  </span>
                 </CardTitle>
               </CardHeader>
               <CardContent className="flex flex-col gap-3">
@@ -203,13 +217,7 @@ export default async function MeuPerfilPage() {
                 <p className="text-sm text-foreground-subtle">Nenhum relato seu importado ainda.</p>
               )}
               {guardianReports.map((r) => (
-                <div key={r.id} className="flex items-start justify-between gap-3 rounded-md border border-border px-3 py-2.5 text-sm">
-                  <div className="min-w-0">
-                    <p>{r.categoryName ?? GUARDIAN_TYPE_LABELS[r.type]}</p>
-                    <p className="text-xs text-foreground-subtle">{r.occurredAt ? formatDate(r.occurredAt) : "—"}</p>
-                  </div>
-                  <Badge tone="info">{GUARDIAN_TYPE_LABELS[r.type]}</Badge>
-                </div>
+                <GuardianReportRow key={r.id} report={r} />
               ))}
             </CardContent>
           </Card>
