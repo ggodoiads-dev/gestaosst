@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Printer } from "lucide-react";
 import { requireUser, requirePermission } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
-import { listUnits, listAreas } from "@/server/services/masterdata.service";
+import { listUnits, listAreas, listAreaDocuments } from "@/server/services/masterdata.service";
 import { PageHeader, PageBody } from "@/components/domain/page-header";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -12,12 +12,16 @@ import { SoftDeleteButton, ReactivateButton } from "@/components/domain/soft-del
 import { setUnitActiveAction, setAreaActiveAction } from "@/server/actions/masterdata.actions";
 import { CreateUnitDialog, EditUnitDialog } from "./unit-form-dialog";
 import { CreateAreaDialog, EditAreaDialog } from "./area-form-dialog";
+import { AreaDocumentsDialog } from "./area-documents-dialog";
 
 export default async function AreasPage() {
   const user = await requireUser();
   requirePermission(user, PERMISSIONS.MASTERDATA_MANAGE);
 
   const [units, areas] = await Promise.all([listUnits(), listAreas()]);
+  const areaDocuments = new Map(
+    await Promise.all(areas.map(async (a) => [a.id, await listAreaDocuments(a.id)] as const)),
+  );
 
   return (
     <>
@@ -114,6 +118,12 @@ export default async function AreasPage() {
                             <Printer className="size-3.5" /> QR
                           </Link>
                         </Button>
+                        <AreaDocumentsDialog
+                          areaId={area.id}
+                          areaName={area.name}
+                          pop={areaDocuments.get(area.id)?.pop ?? []}
+                          arVr={areaDocuments.get(area.id)?.arVr ?? []}
+                        />
                         <EditAreaDialog area={area} units={units} />
                         {area.active ? (
                           <SoftDeleteButton

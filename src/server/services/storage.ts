@@ -105,15 +105,17 @@ const DOCUMENT_MIME_EXT: Record<string, string> = {
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
   "application/vnd.ms-powerpoint": "ppt",
   "application/vnd.openxmlformats-officedocument.presentationml.presentation": "pptx",
+  "application/vnd.ms-excel": "xls",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
 };
 const MAX_DOCUMENT_SIZE_BYTES = 20 * 1024 * 1024; // 20MB
 
-/** Salva documentos (POP, AR/VR, certificados) — PDF, DOC/DOCX ou PPT/PPTX. */
+/** Salva documentos (POP, AR/VR, certificados) — PDF, Word, PowerPoint ou Excel. */
 export function saveDocumentUpload(file: File): Promise<UploadResult> {
   return saveFileUpload(file, {
     allowedMimeTypes: DOCUMENT_MIME_EXT,
     maxSizeBytes: MAX_DOCUMENT_SIZE_BYTES,
-    invalidTypeMessage: "Formato de documento não suportado. Envie PDF, Word ou PowerPoint.",
+    invalidTypeMessage: "Formato de documento não suportado. Envie PDF, Word, PowerPoint ou Excel.",
     invalidSizeMessage: "Arquivo maior que o limite de 20MB.",
   });
 }

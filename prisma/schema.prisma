@@ -191,6 +191,7 @@ model Area {
   collaborators   Collaborator[]
   accidents       Accident[]
   checklistTemplates ChecklistTemplate[]
+  attachments     Attachment[]
 
   createdAt DateTime @default(now())
 
@@ -558,6 +559,7 @@ enum AttachmentContext {
   ESCALA
   COLABORADOR
   AVARIA
+  AREA
 }
 
 enum AttachmentDocType {
@@ -573,7 +575,7 @@ model Attachment {
   mimeType              String
   size                  Int
   context               AttachmentContext
-  docType               AttachmentDocType? // usado apenas quando context = ATIVIDADE
+  docType               AttachmentDocType? // usado quando context = ATIVIDADE ou AREA
   equipmentId           String?
   checklistAnswerId     String?
   nonconformityId       String?
@@ -584,6 +586,7 @@ model Attachment {
   scheduleDayNoteId     String?
   collaboratorId        String?
   equipmentDamageId     String?
+  areaId                String?
   uploadedById          String
   uploadedAt            DateTime           @default(now())
 
@@ -597,6 +600,7 @@ model Attachment {
   scheduleDayNote     ScheduleDayNote?     @relation(fields: [scheduleDayNoteId], references: [id])
   collaborator        Collaborator?        @relation(fields: [collaboratorId], references: [id])
   equipmentDamage     EquipmentDamage?     @relation(fields: [equipmentDamageId], references: [id])
+  area                Area?                @relation(fields: [areaId], references: [id])
   uploadedBy          User                 @relation(fields: [uploadedById], references: [id])
 
   aiFinding AiInspectionFinding?
@@ -608,6 +612,8 @@ model Attachment {
   @@index([scheduleDayNoteId])
   @@index([accidentId])
   @@index([collaboratorId])
+  @@index([equipmentDamageId])
+  @@index([areaId])
 }
 
 /// Achado de visão computacional sobre uma foto de resposta crítica de checklist —

@@ -5,6 +5,7 @@ import { db } from "@/server/db";
 import { getEquipmentPhoto } from "@/server/services/equipment.service";
 import { getCollaboratorPhoto } from "@/server/services/collaborator.service";
 import { getCollaboratorQualificationSummary, type CollaboratorQualificationSummary } from "@/server/services/qualification.service";
+import { listAreaDocuments } from "@/server/services/masterdata.service";
 import { readFileBuffer } from "@/server/services/storage";
 import { qualificationStatus } from "@/lib/qualification-status";
 import { formatDate } from "@/lib/dates";
@@ -96,10 +97,10 @@ export default async function QrResolverPage({
 
   const area = await db.area.findUnique({ where: { qrToken: token } });
   if (area) {
-    const collaborators = await db.collaborator.findMany({
-      where: { areaId: area.id, active: true },
-      orderBy: { name: "asc" },
-    });
+    const [collaborators, documents] = await Promise.all([
+      db.collaborator.findMany({ where: { areaId: area.id, active: true }, orderBy: { name: "asc" } }),
+      listAreaDocuments(area.id),
+    ]);
     const summaries = await Promise.all(
       collaborators.map(async (c) => {
         const [summary, photo] = await Promise.all([getCollaboratorQualificationSummary(c.id), getCollaboratorPhoto(c.id)]);
@@ -108,7 +109,12 @@ export default async function QrResolverPage({
     );
     return (
       <PublicPageShell wide>
-        <PublicAreaView area={area} entries={summaries} />
+        <PublicAreaView
+          area={area}
+          entries={summaries}
+          pop={documents.pop[0] ?? null}
+          arVr={documents.arVr[0] ?? null}
+        />
       </PublicPageShell>
     );
   }
@@ -168,15 +174,15 @@ function PublicEquipmentView({
   );
 }
 
-function CertificateLink({ attachmentId }: { attachmentId: string }) {
+function PublicAttachmentLink({ attachmentId, label = "Ver certificado" }: { attachmentId: string; label?: string }) {
   return (
     <a
-      href={`/api/certificado/${attachmentId}`}
+      href={`/api/anexo-qr/${attachmentId}`}
       target="_blank"
       rel="noopener noreferrer"
       className="text-xs text-accent hover:underline shrink-0"
     >
-      Ver certificado
+      {label}
     </a>
   );
 }
@@ -190,7 +196,7 @@ function QualificationList({ summary }: { summary: QualificationSummary }) {
           <div className="mt-1 flex items-center justify-between gap-2 text-sm">
             <span>{summary.aso.typeName}</span>
             <div className="flex items-center gap-2">
-              {summary.aso.certificate && <CertificateLink attachmentId={summary.aso.certificate.attachmentId} />}
+              {summary.aso.certificate && <PublicAttachmentLink attachmentId={summary.aso.certificate.attachmentId} />}
               <Badge tone={qualificationStatus(summary.aso.expiresAt).tone}>
                 {qualificationStatus(summary.aso.expiresAt).label}
               </Badge>
@@ -208,7 +214,7 @@ function QualificationList({ summary }: { summary: QualificationSummary }) {
             <div key={nr.typeName} className="flex items-center justify-between gap-2 text-sm">
               <span>{nr.typeName}</span>
               <div className="flex items-center gap-2">
-                {nr.certificate && <CertificateLink attachmentId={nr.certificate.attachmentId} />}
+                {nr.certificate && <PublicAttachmentLink attachmentId={nr.certificate.attachmentId} />}
                 <Badge tone={qualificationStatus(nr.expiresAt).tone}>{qualificationStatus(nr.expiresAt).label}</Badge>
               </div>
             </div>
@@ -291,9 +297,13 @@ function PublicCollaboratorView({
 function PublicAreaView({
   area,
   entries,
+  pop,
+  arVr,
 }: {
   area: Area;
   entries: { collaborator: Collaborator; summary: QualificationSummary; photoUrl: string | null }[];
+  pop: { id: string } | null;
+  arVr: { id: string } | null;
 }) {
   const aptos = entries.filter((e) => e.summary.apt);
 
@@ -305,6 +315,12 @@ function PublicAreaView({
         <p className="text-sm text-foreground-subtle">
           {entries.length} cadastrado(s) · {aptos.length} apto(s)
         </p>
+        {(pop || arVr) && (
+          <div className="mt-2 flex flex-wrap items-center justify-center gap-3">
+            {pop && <PublicAttachmentLink attachmentId={pop.id} label="Ver Procedimento (POP)" />}
+            {arVr && <PublicAttachmentLink attachmentId={arVr.id} label="Ver Avaliação de Risco" />}
+          </div>
+        )}
       </div>
 
       <div className="flex flex-col gap-3">

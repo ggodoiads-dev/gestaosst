@@ -115,6 +115,47 @@ export async function setAreaActive(user: CurrentUser, id: string, active: boole
   return area;
 }
 
+export type AreaDocType = "POP" | "AR_VR";
+
+/** Documentos gerais da área (procedimento/POP e avaliação de risco) — aparecem no QR Code
+ * público da área, pra quem trabalha ou fiscaliza ali conseguir consultar sem precisar logar.
+ * Nunca sobrescreve: cada envio soma ao histórico (mesmo padrão de `attachActivityDocument`),
+ * e o QR mostra sempre o mais recente de cada tipo. */
+export async function attachAreaDocument(
+  user: CurrentUser,
+  areaId: string,
+  docType: AreaDocType,
+  file: { filename: string; path: string; mimeType: string; size: number },
+) {
+  requirePermission(user, PERMISSIONS.MASTERDATA_MANAGE);
+  await db.area.findUniqueOrThrow({ where: { id: areaId } });
+
+  return db.attachment.create({
+    data: {
+      filename: file.filename,
+      path: file.path,
+      mimeType: file.mimeType,
+      size: file.size,
+      context: "AREA",
+      docType,
+      areaId,
+      uploadedById: user.id,
+    },
+  });
+}
+
+export async function listAreaDocuments(areaId: string) {
+  const docs = await db.attachment.findMany({
+    where: { areaId, context: "AREA" },
+    include: { uploadedBy: { select: { name: true } } },
+    orderBy: { uploadedAt: "desc" },
+  });
+  return {
+    pop: docs.filter((d) => d.docType === "POP"),
+    arVr: docs.filter((d) => d.docType === "AR_VR"),
+  };
+}
+
 export async function createEquipmentType(
   user: CurrentUser,
   data: { name: string; code: string; description?: string | null },

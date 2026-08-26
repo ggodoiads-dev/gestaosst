@@ -2,15 +2,18 @@ import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/server/db";
 import { readFileBuffer } from "@/server/services/storage";
 
-/** Rota pública (sem login) só pra servir certificado de qualificação (PDF/foto) — usada nas
- * fichas de QR Code em `/q/[token]`, que também são vistas sem sessão (quem escaneia o QR físico
- * da área não tem como logar antes de conferir a NR de alguém). Só serve anexo com
- * `context = "QUALIFICACAO"`, mesmo que alguém tente adivinhar o ID de um anexo de outro tipo
- * (acidente, avaria etc.) — o resto do sistema de anexos continua exigindo login normalmente. */
+/** Público (sem login), tirando o nome da rota antiga `certificado` — passou a servir tanto
+ * certificado de qualificação quanto documento de área (POP/AR-VR), então generalizei em vez de
+ * duplicar a rota. Usada nas fichas de QR Code em `/q/[token]`, vistas sem sessão (quem escaneia
+ * o QR físico não tem como logar antes). Só serve anexo com contexto QUALIFICACAO ou AREA, mesmo
+ * que alguém tente adivinhar o ID de um anexo de outro tipo (acidente, avaria etc.) — o resto do
+ * sistema de anexos continua exigindo login normalmente. */
+const PUBLIC_CONTEXTS = ["QUALIFICACAO", "AREA"] as const;
+
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const attachment = await db.attachment.findUnique({ where: { id } });
-  if (!attachment || attachment.context !== "QUALIFICACAO") {
+  if (!attachment || !PUBLIC_CONTEXTS.includes(attachment.context as (typeof PUBLIC_CONTEXTS)[number])) {
     return NextResponse.json({ error: "Arquivo não encontrado." }, { status: 404 });
   }
 

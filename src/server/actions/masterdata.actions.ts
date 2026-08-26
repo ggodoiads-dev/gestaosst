@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/server/auth/current-user";
 import * as masterdata from "@/server/services/masterdata.service";
 import { ForbiddenError } from "@/server/auth/current-user";
+import { saveDocumentUpload, InvalidUploadError } from "@/server/services/storage";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -91,6 +92,29 @@ export async function setAreaActiveAction(id: string, active: boolean) {
   const user = await requireUser();
   await masterdata.setAreaActive(user, id, active);
   revalidatePath("/cadastros/areas");
+}
+
+export async function uploadAreaDocumentAction(
+  areaId: string,
+  docType: masterdata.AreaDocType,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    const file = formData.get("file");
+    if (!(file instanceof File) || file.size === 0) {
+      return { ok: false, error: "Selecione um arquivo válido." };
+    }
+    const saved = await saveDocumentUpload(file);
+    await masterdata.attachAreaDocument(user, areaId, docType, saved);
+    revalidatePath("/cadastros/areas");
+    return { ok: true };
+  } catch (error) {
+    if (error instanceof InvalidUploadError) return { ok: false, error: error.message };
+    if (error instanceof ForbiddenError) return { ok: false, error: error.message };
+    console.error(error);
+    return { ok: false, error: "Não foi possível enviar o arquivo." };
+  }
 }
 
 const equipmentTypeSchema = z.object({
