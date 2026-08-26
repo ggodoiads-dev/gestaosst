@@ -115,7 +115,7 @@ export async function setAreaActive(user: CurrentUser, id: string, active: boole
   return area;
 }
 
-export type AreaDocType = "POP" | "AR_VR";
+export type AreaDocType = "POP" | "AR_VR" | "LISTA_TREINAMENTO";
 
 /** Documentos gerais da área (procedimento/POP e avaliação de risco) — aparecem no QR Code
  * público da área, pra quem trabalha ou fiscaliza ali conseguir consultar sem precisar logar.
@@ -153,6 +153,7 @@ export async function listAreaDocuments(areaId: string) {
   return {
     pop: docs.filter((d) => d.docType === "POP"),
     arVr: docs.filter((d) => d.docType === "AR_VR"),
+    listaTreinamento: docs.filter((d) => d.docType === "LISTA_TREINAMENTO"),
   };
 }
 

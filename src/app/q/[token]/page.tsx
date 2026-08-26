@@ -114,6 +114,7 @@ export default async function QrResolverPage({
           entries={summaries}
           pop={documents.pop[0] ?? null}
           arVr={documents.arVr[0] ?? null}
+          listaTreinamento={documents.listaTreinamento[0] ?? null}
         />
       </PublicPageShell>
     );
@@ -299,11 +300,13 @@ function PublicAreaView({
   entries,
   pop,
   arVr,
+  listaTreinamento,
 }: {
   area: Area;
   entries: { collaborator: Collaborator; summary: QualificationSummary; photoUrl: string | null }[];
   pop: { id: string } | null;
   arVr: { id: string } | null;
+  listaTreinamento: { id: string } | null;
 }) {
   const aptos = entries.filter((e) => e.summary.apt);
 
@@ -315,10 +318,11 @@ function PublicAreaView({
         <p className="text-sm text-foreground-subtle">
           {entries.length} cadastrado(s) · {aptos.length} apto(s)
         </p>
-        {(pop || arVr) && (
+        {(pop || arVr || listaTreinamento) && (
           <div className="mt-2 flex flex-wrap items-center justify-center gap-3">
             {pop && <PublicAttachmentLink attachmentId={pop.id} label="Ver Procedimento (POP)" />}
             {arVr && <PublicAttachmentLink attachmentId={arVr.id} label="Ver Avaliação de Risco" />}
+            {listaTreinamento && <PublicAttachmentLink attachmentId={listaTreinamento.id} label="Ver Lista de Treinamento" />}
           </div>
         )}
       </div>

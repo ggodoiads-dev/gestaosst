@@ -21,7 +21,7 @@ function AreaDocumentUpload({
   documents,
 }: {
   areaId: string;
-  docType: "POP" | "AR_VR";
+  docType: "POP" | "AR_VR" | "LISTA_TREINAMENTO";
   label: string;
   documents: Doc[];
 }) {
@@ -97,11 +97,13 @@ export function AreaDocumentsDialog({
   areaName,
   pop,
   arVr,
+  listaTreinamento,
 }: {
   areaId: string;
   areaName: string;
   pop: Doc[];
   arVr: Doc[];
+  listaTreinamento: Doc[];
 }) {
   const [open, setOpen] = useState(false);
 
@@ -120,6 +122,7 @@ export function AreaDocumentsDialog({
           </p>
           <AreaDocumentUpload areaId={areaId} docType="POP" label="Procedimento (POP)" documents={pop} />
           <AreaDocumentUpload areaId={areaId} docType="AR_VR" label="Avaliação de Risco" documents={arVr} />
+          <AreaDocumentUpload areaId={areaId} docType="LISTA_TREINAMENTO" label="Lista de Treinamento" documents={listaTreinamento} />
         </DialogBody>
         <DialogFooter>
           <DialogClose asChild>

@@ -123,6 +123,7 @@ export default async function AreasPage() {
                           areaName={area.name}
                           pop={areaDocuments.get(area.id)?.pop ?? []}
                           arVr={areaDocuments.get(area.id)?.arVr ?? []}
+                          listaTreinamento={areaDocuments.get(area.id)?.listaTreinamento ?? []}
                         />
                         <EditAreaDialog area={area} units={units} />
                         {area.active ? (
