@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { toast } from "sonner";
 import { Checkbox } from "@/components/ui/checkbox";
 import { setJobFunctionRequiresNrAction } from "@/server/actions/epi.actions";
 
@@ -12,7 +13,10 @@ export function RequiresNrToggle({ jobFunctionId, defaultChecked }: { jobFunctio
     setChecked(value);
     startTransition(async () => {
       const res = await setJobFunctionRequiresNrAction(jobFunctionId, value);
-      if (!res.ok) setChecked(!value);
+      if (!res.ok) {
+        setChecked(!value);
+        toast.error(res.error);
+      }
     });
   }
 
