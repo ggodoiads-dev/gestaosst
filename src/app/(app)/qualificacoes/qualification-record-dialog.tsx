@@ -1,12 +1,13 @@
 "use client";
 
 import { useActionState, useState, useTransition } from "react";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil, Trash2, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { FormField } from "@/components/ui/label";
+import { attachmentUrl } from "@/lib/attachment-url";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Dialog,
@@ -90,6 +91,9 @@ export function CreateQualificationRecordDialog({
             <FormField label="Observações" htmlFor="notes" hint="Opcional">
               <Textarea id="notes" name="notes" rows={2} />
             </FormField>
+            <FormField label="Certificado" htmlFor="file" hint="Opcional — PDF ou foto do certificado">
+              <Input id="file" name="file" type="file" accept="image/*,.pdf" />
+            </FormField>
             {!state.ok && <p className="text-sm text-danger">{state.error}</p>}
           </DialogBody>
           <DialogFooter>
@@ -110,7 +114,14 @@ export function EditQualificationRecordDialog({
   types,
   trigger,
 }: {
-  record: { id: string; collaboratorId: string; qualificationTypeId: string; completedDate: Date; notes: string | null };
+  record: {
+    id: string;
+    collaboratorId: string;
+    qualificationTypeId: string;
+    completedDate: Date;
+    notes: string | null;
+    attachments?: { id: string; filename: string; path: string }[];
+  };
   collaborators: Collaborator[];
   types: QualificationType[];
   trigger: React.ReactNode;
@@ -174,6 +185,27 @@ export function EditQualificationRecordDialog({
             </FormField>
             <FormField label="Observações" htmlFor="edit-notes" hint="Opcional">
               <Textarea id="edit-notes" name="notes" rows={2} defaultValue={record.notes ?? ""} />
+            </FormField>
+
+            {record.attachments && record.attachments.length > 0 && (
+              <div className="flex flex-col gap-1.5">
+                <p className="text-xs font-medium text-foreground-muted">Certificados anexados</p>
+                {record.attachments.map((a) => (
+                  <a
+                    key={a.id}
+                    href={attachmentUrl(a.path)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 text-sm text-accent hover:underline"
+                  >
+                    <FileText className="size-4 shrink-0" />
+                    <span className="truncate">{a.filename}</span>
+                  </a>
+                ))}
+              </div>
+            )}
+            <FormField label="Adicionar certificado" htmlFor="edit-file" hint="Opcional — PDF ou foto">
+              <Input id="edit-file" name="file" type="file" accept="image/*,.pdf" />
             </FormField>
             {!state.ok && <p className="text-sm text-danger">{state.error}</p>}
 

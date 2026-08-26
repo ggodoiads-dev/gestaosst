@@ -302,6 +302,7 @@ export default async function ColaboradorDetailPage({
                       qualificationTypeId: record.qualificationTypeId,
                       completedDate: record.completedDate,
                       notes: record.notes,
+                      attachments: record.attachments,
                     }}
                     collaborators={[collaborator]}
                     types={qualificationTypes}

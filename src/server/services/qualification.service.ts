@@ -153,6 +153,29 @@ export async function updateQualificationRecord(user: CurrentUser, id: string, d
   return record;
 }
 
+/** Anexa o arquivo do certificado (PDF/foto) a um registro — sempre adiciona, nunca substitui
+ * (mesmo padrão de `attachAccidentFile`); a mais recente é a exibida no QR público. */
+export async function attachQualificationFile(
+  user: CurrentUser,
+  qualificationRecordId: string,
+  file: { filename: string; path: string; mimeType: string; size: number },
+) {
+  requirePermission(user, PERMISSIONS.QUALIFICATION_MANAGE);
+  await db.qualificationRecord.findUniqueOrThrow({ where: { id: qualificationRecordId } });
+
+  return db.attachment.create({
+    data: {
+      filename: file.filename,
+      path: file.path,
+      mimeType: file.mimeType,
+      size: file.size,
+      context: "QUALIFICACAO",
+      qualificationRecordId,
+      uploadedById: user.id,
+    },
+  });
+}
+
 /** Remove um registro lançado por engano (não pra renovação — pra isso é só lançar um novo, o
  * histórico existe justamente pra guardar as renovações anteriores). Apaga de vez, não é
  * soft-delete: diferente de acidente/NC, um lançamento errado de qualificação não tem valor
@@ -179,7 +202,7 @@ export async function listMyQualifications(user: CurrentUser) {
 
   const records = await db.qualificationRecord.findMany({
     where: { collaboratorId: collaborator.id },
-    include: { qualificationType: true },
+    include: { qualificationType: true, attachments: true },
     orderBy: { completedDate: "desc" },
   });
 
@@ -191,9 +214,11 @@ export async function listMyQualifications(user: CurrentUser) {
   });
 }
 
+export type QualificationCertificateRef = { attachmentId: string; path: string; mimeType: string } | null;
+
 export type CollaboratorQualificationSummary = {
-  aso: { typeName: string; expiresAt: Date | null } | null;
-  nrs: { typeName: string; expiresAt: Date | null }[];
+  aso: { typeName: string; expiresAt: Date | null; certificate: QualificationCertificateRef } | null;
+  nrs: { typeName: string; expiresAt: Date | null; certificate: QualificationCertificateRef }[];
   hasAnyRecord: boolean;
   hasAnyExpired: boolean;
   /** "Apto" olha só NR (o que o usuário pediu: sem nenhuma NR cadastrada, ou com alguma vencida,
@@ -201,12 +226,17 @@ export type CollaboratorQualificationSummary = {
   apt: boolean;
 };
 
+function latestCertificate(record: { attachments: { id: string; path: string; mimeType: string; uploadedAt: Date }[] }): QualificationCertificateRef {
+  const latest = [...record.attachments].sort((a, b) => b.uploadedAt.getTime() - a.uploadedAt.getTime())[0];
+  return latest ? { attachmentId: latest.id, path: latest.path, mimeType: latest.mimeType } : null;
+}
+
 /** ASO/NR mais recente de cada tipo pro colaborador, e se ele está "apto" — usado no QR público
  * (individual e por área) e no perfil interno, pra manter a mesma regra nos dois lugares. */
 export async function getCollaboratorQualificationSummary(collaboratorId: string): Promise<CollaboratorQualificationSummary> {
   const records = await db.qualificationRecord.findMany({
     where: { collaboratorId },
-    include: { qualificationType: true },
+    include: { qualificationType: true, attachments: true },
     orderBy: { completedDate: "desc" },
   });
 
@@ -224,8 +254,8 @@ export async function getCollaboratorQualificationSummary(collaboratorId: string
   const hasAnyNrExpired = nrs.some((r) => r.expiresAt && r.expiresAt < now);
 
   return {
-    aso: aso ? { typeName: aso.qualificationType.name, expiresAt: aso.expiresAt } : null,
-    nrs: nrs.map((r) => ({ typeName: r.qualificationType.name, expiresAt: r.expiresAt })),
+    aso: aso ? { typeName: aso.qualificationType.name, expiresAt: aso.expiresAt, certificate: latestCertificate(aso) } : null,
+    nrs: nrs.map((r) => ({ typeName: r.qualificationType.name, expiresAt: r.expiresAt, certificate: latestCertificate(r) })),
     hasAnyRecord: current.length > 0,
     hasAnyExpired,
     apt: nrs.length > 0 && !hasAnyNrExpired,
@@ -317,7 +347,7 @@ export async function listQualificationRecords(user: CurrentUser, filters: Quali
       qualificationTypeId: filters.qualificationTypeId || undefined,
       qualificationType: filters.category ? { category: filters.category } : undefined,
     },
-    include: { qualificationType: true, collaborator: true },
+    include: { qualificationType: true, collaborator: true, attachments: true },
     orderBy: { completedDate: "desc" },
   });
 

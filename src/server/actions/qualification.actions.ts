@@ -2,9 +2,23 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { requireUser, ForbiddenError } from "@/server/auth/current-user";
+import { requireUser, ForbiddenError, type CurrentUser } from "@/server/auth/current-user";
 import * as qualificationService from "@/server/services/qualification.service";
+import { saveAttachmentUpload } from "@/server/services/storage";
 import { parseDateOnly } from "@/lib/dates";
+
+/** Anexo do certificado é opcional e não deve desfazer o salvamento do registro se falhar. */
+async function maybeAttachQualificationFile(user: CurrentUser, qualificationRecordId: string, formData: FormData) {
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) return;
+
+  try {
+    const saved = await saveAttachmentUpload(file);
+    await qualificationService.attachQualificationFile(user, qualificationRecordId, saved);
+  } catch (error) {
+    console.error("Falha ao anexar certificado de qualificação:", error);
+  }
+}
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -84,12 +98,13 @@ export async function createQualificationRecordAction(_prev: ActionResult, formD
       completedDate: formData.get("completedDate"),
       notes: formData.get("notes") || null,
     });
-    await qualificationService.createQualificationRecord(user, {
+    const record = await qualificationService.createQualificationRecord(user, {
       collaboratorId: parsed.collaboratorId,
       qualificationTypeId: parsed.qualificationTypeId,
       completedDate: parseDateOnly(parsed.completedDate),
       notes: parsed.notes,
     });
+    await maybeAttachQualificationFile(user, record.id, formData);
     revalidatePath("/qualificacoes");
     revalidatePath(`/colaboradores/${parsed.collaboratorId}`);
   });
@@ -111,6 +126,7 @@ export async function updateQualificationRecordAction(_prev: ActionResult, formD
       completedDate: parseDateOnly(parsed.completedDate),
       notes: parsed.notes,
     });
+    await maybeAttachQualificationFile(user, id, formData);
     revalidatePath("/qualificacoes");
     revalidatePath(`/colaboradores/${parsed.collaboratorId}`);
   });

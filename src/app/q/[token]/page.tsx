@@ -168,17 +168,33 @@ function PublicEquipmentView({
   );
 }
 
+function CertificateLink({ attachmentId }: { attachmentId: string }) {
+  return (
+    <a
+      href={`/api/certificado/${attachmentId}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-xs text-accent hover:underline shrink-0"
+    >
+      Ver certificado
+    </a>
+  );
+}
+
 function QualificationList({ summary }: { summary: QualificationSummary }) {
   return (
     <div className="w-full space-y-3 border-t border-border pt-3 text-left">
       <div>
         <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">ASO</p>
         {summary.aso ? (
-          <div className="mt-1 flex items-center justify-between text-sm">
+          <div className="mt-1 flex items-center justify-between gap-2 text-sm">
             <span>{summary.aso.typeName}</span>
-            <Badge tone={qualificationStatus(summary.aso.expiresAt).tone}>
-              {qualificationStatus(summary.aso.expiresAt).label}
-            </Badge>
+            <div className="flex items-center gap-2">
+              {summary.aso.certificate && <CertificateLink attachmentId={summary.aso.certificate.attachmentId} />}
+              <Badge tone={qualificationStatus(summary.aso.expiresAt).tone}>
+                {qualificationStatus(summary.aso.expiresAt).label}
+              </Badge>
+            </div>
           </div>
         ) : (
           <p className="mt-1 text-sm text-foreground-subtle">Nenhum ASO registrado.</p>
@@ -189,9 +205,12 @@ function QualificationList({ summary }: { summary: QualificationSummary }) {
         {summary.nrs.length === 0 && <p className="mt-1 text-sm text-foreground-subtle">Nenhuma NR registrada.</p>}
         <div className="mt-1 flex flex-col gap-1.5">
           {summary.nrs.map((nr) => (
-            <div key={nr.typeName} className="flex items-center justify-between text-sm">
+            <div key={nr.typeName} className="flex items-center justify-between gap-2 text-sm">
               <span>{nr.typeName}</span>
-              <Badge tone={qualificationStatus(nr.expiresAt).tone}>{qualificationStatus(nr.expiresAt).label}</Badge>
+              <div className="flex items-center gap-2">
+                {nr.certificate && <CertificateLink attachmentId={nr.certificate.attachmentId} />}
+                <Badge tone={qualificationStatus(nr.expiresAt).tone}>{qualificationStatus(nr.expiresAt).label}</Badge>
+              </div>
             </div>
           ))}
         </div>

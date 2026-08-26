@@ -185,7 +185,7 @@ export async function getCollaboratorProntuario(user: CurrentUser, id: string) {
     }),
     db.qualificationRecord.findMany({
       where: { collaboratorId: id },
-      include: { qualificationType: true },
+      include: { qualificationType: true, attachments: true },
       orderBy: { completedDate: "desc" },
     }),
   ]);
