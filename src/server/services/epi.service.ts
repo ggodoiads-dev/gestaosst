@@ -117,6 +117,21 @@ export async function setJobFunctionActive(user: CurrentUser, id: string, active
   return jobFunction;
 }
 
+export async function setJobFunctionRequiresNr(user: CurrentUser, id: string, requiresNr: boolean) {
+  requirePermission(user, PERMISSIONS.EPI_MANAGE);
+  const before = await db.jobFunction.findUniqueOrThrow({ where: { id } });
+  const jobFunction = await db.jobFunction.update({ where: { id }, data: { requiresNr } });
+  await recordAudit({
+    userId: user.id,
+    action: "UPDATE",
+    entityType: "JobFunction",
+    entityId: id,
+    previousValue: { requiresNr: before.requiresNr },
+    newValue: { requiresNr },
+  });
+  return jobFunction;
+}
+
 export function getJobFunctionKit(user: CurrentUser, jobFunctionId: string) {
   requirePermission(user, PERMISSIONS.EPI_MANAGE);
   return db.jobFunctionEpiKitItem.findMany({

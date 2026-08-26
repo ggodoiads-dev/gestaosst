@@ -93,6 +93,14 @@ export async function setJobFunctionActiveAction(id: string, active: boolean) {
   revalidatePath("/cadastros/funcoes");
 }
 
+export async function setJobFunctionRequiresNrAction(id: string, requiresNr: boolean): Promise<ActionResult> {
+  return toResult(async () => {
+    const user = await requireUser();
+    await epiService.setJobFunctionRequiresNr(user, id, requiresNr);
+    revalidatePath("/cadastros/funcoes");
+  });
+}
+
 const kitSchema = z.object({
   jobFunctionId: z.string().min(1),
   items: z.array(z.object({ epiTypeId: z.string().min(1), quantity: z.number().int().min(1) })),

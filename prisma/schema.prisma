@@ -882,6 +882,7 @@ model JobFunction {
   id        String   @id @default(uuid())
   name      String   @unique
   active    Boolean  @default(true)
+  requiresNr Boolean @default(true) // false pra função que não exige nenhuma NR — sem isso, "0 NR cadastrada" contava como inapto mesmo quando a função nunca exigiu nada
   createdAt DateTime @default(now())
 
   collaborators      Collaborator[]

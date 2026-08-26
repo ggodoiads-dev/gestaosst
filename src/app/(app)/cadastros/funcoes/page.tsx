@@ -10,6 +10,7 @@ import { setJobFunctionActiveAction } from "@/server/actions/epi.actions";
 import { CreateJobFunctionDialog } from "./job-function-form-dialog";
 import { EditJobFunctionKitDialog } from "./job-function-kit-dialog";
 import { EditJobFunctionChecklistsDialog } from "./job-function-checklist-dialog";
+import { RequiresNrToggle } from "./requires-nr-toggle";
 
 export default async function FuncoesCadastroPage() {
   const user = await requireUser();
@@ -41,12 +42,13 @@ export default async function FuncoesCadastroPage() {
                   <TableHead>Nome</TableHead>
                   <TableHead>Kit de EPI</TableHead>
                   <TableHead>Checklists obrigatórios</TableHead>
+                  <TableHead>Precisa de NR?</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="w-56" />
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {jobFunctions.length === 0 && <TableEmpty colSpan={5} />}
+                {jobFunctions.length === 0 && <TableEmpty colSpan={6} />}
                 {jobFunctions.map((jobFunction, index) => {
                   const kit = kits[index];
                   const required = requiredChecklists[index]!;
@@ -58,6 +60,9 @@ export default async function FuncoesCadastroPage() {
                       </TableCell>
                       <TableCell className="text-foreground-subtle">
                         {required.length === 0 ? "Nenhum" : required.map((r) => r.template.name).join(", ")}
+                      </TableCell>
+                      <TableCell>
+                        <RequiresNrToggle jobFunctionId={jobFunction.id} defaultChecked={jobFunction.requiresNr} />
                       </TableCell>
                       <TableCell>
                         <Badge tone={jobFunction.active ? "success" : "neutral"}>

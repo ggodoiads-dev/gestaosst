@@ -234,11 +234,14 @@ function latestCertificate(record: { attachments: { id: string; path: string; mi
 /** ASO/NR mais recente de cada tipo pro colaborador, e se ele está "apto" — usado no QR público
  * (individual e por área) e no perfil interno, pra manter a mesma regra nos dois lugares. */
 export async function getCollaboratorQualificationSummary(collaboratorId: string): Promise<CollaboratorQualificationSummary> {
-  const records = await db.qualificationRecord.findMany({
-    where: { collaboratorId },
-    include: { qualificationType: true, attachments: true },
-    orderBy: { completedDate: "desc" },
-  });
+  const [records, collaborator] = await Promise.all([
+    db.qualificationRecord.findMany({
+      where: { collaboratorId },
+      include: { qualificationType: true, attachments: true },
+      orderBy: { completedDate: "desc" },
+    }),
+    db.collaborator.findUnique({ where: { id: collaboratorId }, select: { function: { select: { requiresNr: true } } } }),
+  ]);
 
   const seenTypeIds = new Set<string>();
   const current = records.filter((r) => {
@@ -252,13 +255,16 @@ export async function getCollaboratorQualificationSummary(collaboratorId: string
   const aso = current.find((r) => r.qualificationType.category === "ASO");
   const nrs = current.filter((r) => r.qualificationType.category === "NR");
   const hasAnyNrExpired = nrs.some((r) => r.expiresAt && r.expiresAt < now);
+  // Sem função vinculada, assume que precisa (comportamento de sempre) — só desliga a cobrança
+  // quando a função está explicitamente marcada como "não precisa de NR".
+  const functionRequiresNr = collaborator?.function?.requiresNr !== false;
 
   return {
     aso: aso ? { typeName: aso.qualificationType.name, expiresAt: aso.expiresAt, certificate: latestCertificate(aso) } : null,
     nrs: nrs.map((r) => ({ typeName: r.qualificationType.name, expiresAt: r.expiresAt, certificate: latestCertificate(r) })),
     hasAnyRecord: current.length > 0,
     hasAnyExpired,
-    apt: nrs.length > 0 && !hasAnyNrExpired,
+    apt: !functionRequiresNr || (nrs.length > 0 && !hasAnyNrExpired),
   };
 }
 
