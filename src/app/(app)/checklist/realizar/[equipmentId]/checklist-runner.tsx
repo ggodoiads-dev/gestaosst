@@ -16,6 +16,7 @@ import {
 } from "@/server/actions/checklist-execution.actions";
 import { NOT_APPLICABLE_VALUE } from "@/domain/checklist/answer-values";
 import { compressImage } from "@/lib/compress-image";
+import { withTimeout, connectionErrorMessage } from "@/lib/with-timeout";
 import { useRico } from "@/components/rico/rico-context";
 import type { QuestionType, Criticality } from "@/generated/prisma/enums";
 
@@ -126,17 +127,22 @@ export function ChecklistRunner({
 
   async function handlePhotoSelected(file: File) {
     setSavingPhoto(true);
-    const compressed = await compressImage(file);
-    const formData = new FormData();
-    formData.append("file", compressed);
-    const result = await uploadAnswerPhotoAction(executionId, question.id, question.title, formData);
-    setSavingPhoto(false);
-    if (!result.ok) {
-      toast.error(result.error);
-      return;
+    try {
+      const compressed = await compressImage(file);
+      const formData = new FormData();
+      formData.append("file", compressed);
+      const result = await withTimeout(uploadAnswerPhotoAction(executionId, question.id, question.title, formData));
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      updateAnswer({ photoUrl: URL.createObjectURL(file), aiFinding: result.finding });
+      toast.success("Foto anexada.");
+    } catch (error) {
+      toast.error(connectionErrorMessage(error, "Não foi possível anexar a foto. Verifique sua conexão e tente novamente."));
+    } finally {
+      setSavingPhoto(false);
     }
-    updateAnswer({ photoUrl: URL.createObjectURL(file), aiFinding: result.finding });
-    toast.success("Foto anexada.");
   }
 
   function goNext() {
@@ -153,18 +159,28 @@ export function ChecklistRunner({
         value: answers[q.id]?.value ?? null,
         comment: answers[q.id]?.comment ?? null,
       }));
-      const result = await finalizeExecutionAction(equipmentId, executionId, answersPayload);
-      if (!result.ok) {
-        setIssues(result.issues);
-        const firstIssueIndex = questions.findIndex((q) => q.id === result.issues[0]?.questionId);
-        if (firstIssueIndex >= 0) setIndex(firstIssueIndex);
-        toast.error("Existem pendências antes de finalizar o checklist.");
-        return;
+      try {
+        const result = await withTimeout(finalizeExecutionAction(equipmentId, executionId, answersPayload));
+        if (!result.ok) {
+          if (result.kind === "error") {
+            toast.error(result.error);
+            return;
+          }
+          setIssues(result.issues);
+          const firstIssueIndex = questions.findIndex((q) => q.id === result.issues[0]?.questionId);
+          if (firstIssueIndex >= 0) setIndex(firstIssueIndex);
+          toast.error("Existem pendências antes de finalizar o checklist.");
+          return;
+        }
+        setIssues([]);
+        setBlockedMessage(result.blockedMessage);
+        setCompleted(true);
+        if (result.blockedMessage) toast.error(result.blockedMessage, { duration: 10000 });
+      } catch (error) {
+        toast.error(
+          connectionErrorMessage(error, "Não foi possível enviar o checklist. Verifique sua conexão e tente novamente."),
+        );
       }
-      setIssues([]);
-      setBlockedMessage(result.blockedMessage);
-      setCompleted(true);
-      if (result.blockedMessage) toast.error(result.blockedMessage, { duration: 10000 });
     });
   }
 

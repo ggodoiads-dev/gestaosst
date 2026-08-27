@@ -78,23 +78,42 @@ export async function uploadAnswerPhotoAction(
 
 export type FinalizeExecutionResult =
   | { ok: true; blockedMessage: string | null }
-  | { ok: false; issues: { questionId: string; questionTitle: string; reason: string }[] };
+  | { ok: false; kind: "issues"; issues: { questionId: string; questionTitle: string; reason: string }[] }
+  | { ok: false; kind: "error"; error: string };
 
+/**
+ * Sem esse try/catch, qualquer erro do serviço (ex: `ForbiddenError` de "já foi finalizado" —
+ * comum quando a resposta de uma tentativa anterior nunca chegou de volta numa conexão ruim e o
+ * colaborador tenta de novo) atravessava a Server Action sem tratamento: o Next.js devolve isso
+ * como uma rejeição genérica pro cliente, que o React 19 propaga pro Error Boundary da página em
+ * vez de deixar o `try/catch` do próprio formulário mostrar um toast — o checklist preenchido
+ * "sumia" atrás de uma tela de erro. Em dado móvel (mais latência, mais chance de retry) isso
+ * era muito mais visível do que no wifi.
+ */
 export async function finalizeExecutionAction(
   equipmentId: string,
   executionId: string,
   answers: { questionId: string; value: string | null; comment: string | null }[],
 ): Promise<FinalizeExecutionResult> {
   const user = await requireUser();
-  const result = await executionService.finalizeExecution(user, executionId, answers);
-  if (result.ok) {
+  try {
+    const result = await executionService.finalizeExecution(user, executionId, answers);
+    if (!result.ok) return { ok: false, kind: "issues", issues: result.issues };
     revalidatePath("/checklist/realizar");
     revalidatePath(`/equipamentos/${equipmentId}`);
     revalidatePath("/inicio");
     revalidatePath("/equipamentos/painel");
     revalidatePath("/meu-historico");
+    return result;
+  } catch (error) {
+    if (error instanceof ForbiddenError) return { ok: false, kind: "error", error: error.message };
+    console.error(error);
+    return {
+      ok: false,
+      kind: "error",
+      error: "Não foi possível finalizar o checklist. Verifique sua conexão e tente novamente.",
+    };
   }
-  return result;
 }
 
 export async function invalidateExecutionAction(executionId: string, reason: string) {

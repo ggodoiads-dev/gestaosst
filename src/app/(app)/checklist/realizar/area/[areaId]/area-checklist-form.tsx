@@ -17,6 +17,7 @@ import {
 } from "@/server/actions/checklist-execution.actions";
 import { FIXED_ANSWER_OPTIONS, NOT_APPLICABLE_VALUE } from "@/domain/checklist/answer-values";
 import { compressImage } from "@/lib/compress-image";
+import { withTimeout, connectionErrorMessage } from "@/lib/with-timeout";
 
 export type AreaChecklistItemData = {
   equipmentId: string;
@@ -89,18 +90,26 @@ export function AreaChecklistForm({
 
   async function handlePhotoSelected(item: AreaChecklistItemData, file: File) {
     if (!item.executionId) return;
+    const executionId = item.executionId;
     updateRow(item.equipmentId, { uploadingPhoto: true });
-    const compressed = await compressImage(file);
-    const formData = new FormData();
-    formData.append("file", compressed);
-    const result = await uploadAnswerPhotoAction(item.executionId, questionId, questionTitle, formData);
-    updateRow(item.equipmentId, { uploadingPhoto: false });
-    if (!result.ok) {
-      toast.error(result.error);
-      return;
+    try {
+      const compressed = await compressImage(file);
+      const formData = new FormData();
+      formData.append("file", compressed);
+      const result = await withTimeout(uploadAnswerPhotoAction(executionId, questionId, questionTitle, formData));
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      updateRow(item.equipmentId, { hasPhoto: true });
+      toast.success(`Foto anexada — ${item.code}.`);
+    } catch (error) {
+      toast.error(
+        connectionErrorMessage(error, `Não foi possível anexar a foto — ${item.code}. Verifique sua conexão.`),
+      );
+    } finally {
+      updateRow(item.equipmentId, { uploadingPhoto: false });
     }
-    updateRow(item.equipmentId, { hasPhoto: true });
-    toast.success(`Foto anexada — ${item.code}.`);
   }
 
   function handleFinalize() {
@@ -118,17 +127,28 @@ export function AreaChecklistForm({
       const blockedCodes: string[] = [];
       let okCount = 0;
 
+      // Cada item é isolado no seu próprio try/catch: numa conexão instável, uma requisição que
+      // falhar não pode derrubar o `Promise.all` inteiro e cancelar equipamentos que já teriam
+      // sido finalizados com sucesso.
       await Promise.all(
         toSubmit.map(async (item) => {
           const row = rows[item.equipmentId];
-          const result = await finalizeExecutionAction(item.equipmentId, item.executionId, [
-            { questionId, value: row.value, comment: row.comment },
-          ]);
-          if (result.ok) {
-            okCount++;
-            if (result.blockedMessage) blockedCodes.push(item.code);
-          } else {
-            nextIssues[item.equipmentId] = result.issues[0]?.reason ?? "Pendência não identificada.";
+          try {
+            const result = await withTimeout(
+              finalizeExecutionAction(item.equipmentId, item.executionId, [
+                { questionId, value: row.value, comment: row.comment },
+              ]),
+            );
+            if (result.ok) {
+              okCount++;
+              if (result.blockedMessage) blockedCodes.push(item.code);
+            } else if (result.kind === "error") {
+              nextIssues[item.equipmentId] = result.error;
+            } else {
+              nextIssues[item.equipmentId] = result.issues[0]?.reason ?? "Pendência não identificada.";
+            }
+          } catch (error) {
+            nextIssues[item.equipmentId] = connectionErrorMessage(error, "Não foi possível enviar. Verifique sua conexão.");
           }
         }),
       );
