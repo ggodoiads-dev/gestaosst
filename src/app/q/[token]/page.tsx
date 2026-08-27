@@ -1,5 +1,8 @@
 import Image from "next/image";
+import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
+import { FileText } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { getCurrentUser } from "@/server/auth/current-user";
 import { db } from "@/server/db";
 import { getEquipmentPhoto } from "@/server/services/equipment.service";
@@ -41,6 +44,10 @@ export default async function QrResolverPage({
 }) {
   const user = await getCurrentUser();
   const { token } = await params;
+  const headerList = await headers();
+  const protocol = headerList.get("x-forwarded-proto") ?? "https";
+  const host = headerList.get("x-forwarded-host") ?? headerList.get("host") ?? "localhost:3000";
+  const baseUrl = `${protocol}://${host}`;
 
   const equipment = await db.equipment.findUnique({ where: { qrToken: token }, include: { type: true, area: true } });
   if (equipment) {
@@ -90,6 +97,7 @@ export default async function QrResolverPage({
           summary={summary}
           equipmentAptitudes={equipmentAptitudes.map((a) => a.equipment)}
           lastExecution={lastExecution}
+          baseUrl={baseUrl}
         />
       </PublicPageShell>
     );
@@ -115,6 +123,7 @@ export default async function QrResolverPage({
           pop={documents.pop}
           arVr={documents.arVr}
           listaTreinamento={documents.listaTreinamento}
+          baseUrl={baseUrl}
         />
       </PublicPageShell>
     );
@@ -175,20 +184,56 @@ function PublicEquipmentView({
   );
 }
 
-function PublicAttachmentLink({ attachmentId, label = "Ver certificado" }: { attachmentId: string; label?: string }) {
+/** Word/Excel/PowerPoint não renderizam no navegador (celular baixa o arquivo sem abrir nada) —
+ * pra esses, o link passa pelo visualizador público do Google Docs em vez do arquivo direto, que
+ * sabe exibir o conteúdo inline. PDF e imagem continuam linkando pro arquivo puro, que já abre bem. */
+const VIEWER_REQUIRED_MIME_TYPES = new Set([
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-powerpoint",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+]);
+
+function attachmentViewUrl(baseUrl: string, attachmentId: string, mimeType: string) {
+  const fileUrl = `${baseUrl}/api/anexo-qr/${attachmentId}`;
+  if (VIEWER_REQUIRED_MIME_TYPES.has(mimeType)) {
+    return `https://docs.google.com/viewer?url=${encodeURIComponent(fileUrl)}&embedded=true`;
+  }
+  return fileUrl;
+}
+
+function PublicAttachmentLink({
+  baseUrl,
+  attachmentId,
+  mimeType,
+  label = "Ver certificado",
+  size = "sm",
+}: {
+  baseUrl: string;
+  attachmentId: string;
+  mimeType: string;
+  label?: string;
+  size?: "sm" | "md";
+}) {
   return (
     <a
-      href={`/api/anexo-qr/${attachmentId}`}
+      href={attachmentViewUrl(baseUrl, attachmentId, mimeType)}
       target="_blank"
       rel="noopener noreferrer"
-      className="text-xs text-accent hover:underline shrink-0"
+      className={cn(
+        "inline-flex shrink-0 items-center gap-1 rounded-full border border-border-strong bg-surface-muted font-medium text-accent transition-colors hover:bg-accent-soft",
+        size === "sm" ? "px-2 py-0.5 text-[11px]" : "px-3 py-1.5 text-xs",
+      )}
     >
+      <FileText className={size === "sm" ? "size-3" : "size-3.5"} />
       {label}
     </a>
   );
 }
 
-function QualificationList({ summary }: { summary: QualificationSummary }) {
+function QualificationList({ summary, baseUrl }: { summary: QualificationSummary; baseUrl: string }) {
   return (
     <div className="w-full space-y-3 border-t border-border pt-3 text-left">
       <div>
@@ -197,7 +242,13 @@ function QualificationList({ summary }: { summary: QualificationSummary }) {
           <div className="mt-1 flex items-center justify-between gap-2 text-sm">
             <span>{summary.aso.typeName}</span>
             <div className="flex items-center gap-2">
-              {summary.aso.certificate && <PublicAttachmentLink attachmentId={summary.aso.certificate.attachmentId} />}
+              {summary.aso.certificate && (
+                <PublicAttachmentLink
+                  baseUrl={baseUrl}
+                  attachmentId={summary.aso.certificate.attachmentId}
+                  mimeType={summary.aso.certificate.mimeType}
+                />
+              )}
               <Badge tone={qualificationStatus(summary.aso.expiresAt).tone}>
                 {qualificationStatus(summary.aso.expiresAt).label}
               </Badge>
@@ -215,7 +266,13 @@ function QualificationList({ summary }: { summary: QualificationSummary }) {
             <div key={nr.typeName} className="flex items-center justify-between gap-2 text-sm">
               <span>{nr.typeName}</span>
               <div className="flex items-center gap-2">
-                {nr.certificate && <PublicAttachmentLink attachmentId={nr.certificate.attachmentId} />}
+                {nr.certificate && (
+                  <PublicAttachmentLink
+                    baseUrl={baseUrl}
+                    attachmentId={nr.certificate.attachmentId}
+                    mimeType={nr.certificate.mimeType}
+                  />
+                )}
                 <Badge tone={qualificationStatus(nr.expiresAt).tone}>{qualificationStatus(nr.expiresAt).label}</Badge>
               </div>
             </div>
@@ -232,12 +289,14 @@ function PublicCollaboratorView({
   summary,
   equipmentAptitudes,
   lastExecution,
+  baseUrl,
 }: {
   collaborator: Collaborator;
   photoUrl: string | null;
   summary: QualificationSummary;
   equipmentAptitudes: Equipment[];
   lastExecution: { startedAt: Date; equipment: Equipment } | null;
+  baseUrl: string;
 }) {
   return (
     <div className="flex flex-col items-center gap-3 text-center">
@@ -264,7 +323,7 @@ function PublicCollaboratorView({
         </div>
       </div>
 
-      <QualificationList summary={summary} />
+      <QualificationList summary={summary} baseUrl={baseUrl} />
 
       <div className="w-full border-t border-border pt-3 text-left">
         <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
@@ -301,12 +360,14 @@ function PublicAreaView({
   pop,
   arVr,
   listaTreinamento,
+  baseUrl,
 }: {
   area: Area;
   entries: { collaborator: Collaborator; summary: QualificationSummary; photoUrl: string | null }[];
-  pop: { id: string } | null;
-  arVr: { id: string } | null;
-  listaTreinamento: { id: string } | null;
+  pop: { id: string; mimeType: string } | null;
+  arVr: { id: string; mimeType: string } | null;
+  listaTreinamento: { id: string; mimeType: string } | null;
+  baseUrl: string;
 }) {
   const aptos = entries.filter((e) => e.summary.apt);
 
@@ -319,10 +380,34 @@ function PublicAreaView({
           {entries.length} cadastrado(s) · {aptos.length} apto(s)
         </p>
         {(pop || arVr || listaTreinamento) && (
-          <div className="mt-2 flex flex-wrap items-center justify-center gap-3">
-            {pop && <PublicAttachmentLink attachmentId={pop.id} label="Ver Procedimento (POP)" />}
-            {arVr && <PublicAttachmentLink attachmentId={arVr.id} label="Ver Avaliação de Risco" />}
-            {listaTreinamento && <PublicAttachmentLink attachmentId={listaTreinamento.id} label="Ver Lista de Treinamento" />}
+          <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
+            {pop && (
+              <PublicAttachmentLink
+                baseUrl={baseUrl}
+                attachmentId={pop.id}
+                mimeType={pop.mimeType}
+                label="Ver Procedimento (POP)"
+                size="md"
+              />
+            )}
+            {arVr && (
+              <PublicAttachmentLink
+                baseUrl={baseUrl}
+                attachmentId={arVr.id}
+                mimeType={arVr.mimeType}
+                label="Ver Avaliação de Risco"
+                size="md"
+              />
+            )}
+            {listaTreinamento && (
+              <PublicAttachmentLink
+                baseUrl={baseUrl}
+                attachmentId={listaTreinamento.id}
+                mimeType={listaTreinamento.mimeType}
+                label="Ver Lista de Treinamento"
+                size="md"
+              />
+            )}
           </div>
         )}
       </div>
@@ -347,7 +432,7 @@ function PublicAreaView({
               </div>
               <Badge tone={summary.apt ? "success" : "neutral"}>{summary.apt ? "Apto" : "Não apto"}</Badge>
             </div>
-            <QualificationList summary={summary} />
+            <QualificationList summary={summary} baseUrl={baseUrl} />
           </div>
         ))}
       </div>

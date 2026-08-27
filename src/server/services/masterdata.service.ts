@@ -176,7 +176,7 @@ export async function getAreaDocumentsForPublicView(area: { id: string; name: st
       })
     : [];
 
-  function latestOfType(docType: AreaDocType, ownOfType: { id: string; uploadedAt: Date }[]) {
+  function latestOfType(docType: AreaDocType, ownOfType: { id: string; mimeType: string; uploadedAt: Date }[]) {
     const candidates = [...ownOfType, ...activityDocs.filter((d) => d.docType === docType)];
     return candidates.sort((a, b) => b.uploadedAt.getTime() - a.uploadedAt.getTime())[0] ?? null;
   }
