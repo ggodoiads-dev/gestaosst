@@ -185,8 +185,10 @@ function PublicEquipmentView({
 }
 
 /** Word/Excel/PowerPoint não renderizam no navegador (celular baixa o arquivo sem abrir nada) —
- * pra esses, o link passa pelo visualizador público do Google Docs em vez do arquivo direto, que
- * sabe exibir o conteúdo inline. PDF e imagem continuam linkando pro arquivo puro, que já abre bem. */
+ * pra esses, o link passa pelo Office Online Viewer (view.officeapps.live.com) em vez do arquivo
+ * direto, que sabe exibir o conteúdo inline. Testado: o Google Docs viewer (`docs.google.com/viewer`)
+ * falha nesse mesmo arquivo com "Não foi possível visualizar o arquivo" — não usar. PDF e imagem
+ * continuam linkando pro arquivo puro, que já abre bem. */
 const VIEWER_REQUIRED_MIME_TYPES = new Set([
   "application/msword",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -199,7 +201,7 @@ const VIEWER_REQUIRED_MIME_TYPES = new Set([
 function attachmentViewUrl(baseUrl: string, attachmentId: string, mimeType: string) {
   const fileUrl = `${baseUrl}/api/anexo-qr/${attachmentId}`;
   if (VIEWER_REQUIRED_MIME_TYPES.has(mimeType)) {
-    return `https://docs.google.com/viewer?url=${encodeURIComponent(fileUrl)}&embedded=true`;
+    return `https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(fileUrl)}`;
   }
   return fileUrl;
 }
