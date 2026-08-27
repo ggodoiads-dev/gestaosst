@@ -1,8 +1,6 @@
 import Image from "next/image";
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
-import { FileText } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { getCurrentUser } from "@/server/auth/current-user";
 import { db } from "@/server/db";
 import { getEquipmentPhoto } from "@/server/services/equipment.service";
@@ -15,6 +13,7 @@ import { formatDate } from "@/lib/dates";
 import { EquipmentStatusBadge, CriticalityBadge } from "@/components/domain/status-badges";
 import { Badge } from "@/components/ui/badge";
 import { PublicPhoto } from "./public-photo";
+import { AttachmentViewerLink } from "./attachment-viewer-link";
 import type { Equipment, EquipmentType, Area, Collaborator } from "@/generated/prisma/client";
 
 /** `/api/uploads` exige login (fotos nunca têm URL pública direta), mas as fichas de `/q/[token]`
@@ -219,20 +218,7 @@ function PublicAttachmentLink({
   label?: string;
   size?: "sm" | "md";
 }) {
-  return (
-    <a
-      href={attachmentViewUrl(baseUrl, attachmentId, mimeType)}
-      target="_blank"
-      rel="noopener noreferrer"
-      className={cn(
-        "inline-flex shrink-0 items-center gap-1 rounded-full border border-border-strong bg-surface-muted font-medium text-accent transition-colors hover:bg-accent-soft",
-        size === "sm" ? "px-2 py-0.5 text-[11px]" : "px-3 py-1.5 text-xs",
-      )}
-    >
-      <FileText className={size === "sm" ? "size-3" : "size-3.5"} />
-      {label}
-    </a>
-  );
+  return <AttachmentViewerLink href={attachmentViewUrl(baseUrl, attachmentId, mimeType)} label={label} size={size} />;
 }
 
 function QualificationList({ summary, baseUrl }: { summary: QualificationSummary; baseUrl: string }) {
