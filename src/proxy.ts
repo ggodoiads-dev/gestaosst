@@ -10,11 +10,19 @@ const PUBLIC_PATHS = ["/login"];
  * precisa ser lido por qualquer pessoa que escaneie (visitante, prestador, fiscal), sem exigir
  * login. A própria página decide o que mostrar: quem já está autenticado é redirecionado pro
  * prontuário completo; quem não está vê uma ficha pública com informações limitadas.
+ *
+ * `/api/anexo-qr/` é a rota que serve os arquivos linkados nessa mesma ficha pública (certificado
+ * de qualificação, POP/AR-VR/Lista de Treinamento) — sem essa exceção aqui, esse proxy redireciona
+ * pro login antes mesmo da rota decidir o que fazer, quebrando o link pra qualquer visitante sem
+ * sessão (exatamente quem a ficha pública é feita pra atender). A própria rota já filtra por
+ * contexto de anexo (`PUBLIC_CONTEXTS`), então abrir esse prefixo aqui não expõe nada além do que
+ * já é intencionalmente público.
  */
 function isPublicPath(pathname: string) {
   return (
     PUBLIC_PATHS.includes(pathname) ||
     pathname.startsWith("/q/") ||
+    pathname.startsWith("/api/anexo-qr/") ||
     pathname.startsWith("/_next") ||
     pathname === "/favicon.ico"
   );
