@@ -2,6 +2,7 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
+import { Prisma } from "@/generated/prisma/client";
 import { requireUser, ForbiddenError } from "@/server/auth/current-user";
 import type { CurrentUser } from "@/server/auth/current-user";
 import * as collaboratorService from "@/server/services/collaborator.service";
@@ -10,6 +11,15 @@ import { parseDateOnly } from "@/lib/dates";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
+// Campos únicos de Collaborator que colidem com dados digitados no formulário (qrToken/userId
+// são gerados pelo sistema, nunca vêm do form). O adapter de driver do Prisma às vezes não
+// popula `error.meta.target` — por isso também procura o nome do campo na mensagem crua, que o
+// Prisma sempre inclui ("Unique constraint failed on the fields: (`matricula`)").
+const UNIQUE_FIELD_LABELS: Record<string, string> = {
+  matricula: "matrícula",
+  pis: "PIS",
+};
+
 function toResult(fn: () => Promise<unknown>): Promise<ActionResult> {
   return fn()
     .then(() => ({ ok: true as const }))
@@ -17,6 +27,13 @@ function toResult(fn: () => Promise<unknown>): Promise<ActionResult> {
       if (error instanceof ForbiddenError) return { ok: false as const, error: error.message };
       if (error instanceof z.ZodError) {
         return { ok: false as const, error: error.issues[0]?.message ?? "Dados inválidos." };
+      }
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        const target = error.meta?.target;
+        const haystack = `${Array.isArray(target) ? target.join(",") : String(target ?? "")} ${error.message}`;
+        const field = Object.keys(UNIQUE_FIELD_LABELS).find((key) => haystack.includes(key));
+        const label = field ? UNIQUE_FIELD_LABELS[field] : "um dos campos";
+        return { ok: false as const, error: `Já existe outro colaborador cadastrado com essa ${label}.` };
       }
       console.error(error);
       return { ok: false as const, error: "Não foi possível concluir a operação." };
