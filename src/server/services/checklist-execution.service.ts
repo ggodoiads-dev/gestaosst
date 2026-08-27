@@ -245,22 +245,24 @@ export async function getExecutionContext(user: CurrentUser, equipmentId: string
     throw new ForbiddenError("Este equipamento não possui um checklist ativo configurado.");
   }
 
+  /**
+   * Uma vez bloqueado por um checklist anterior (ver `finalizeExecution`), o equipamento
+   * fica assim até alguém com permissão liberar (validar a não conformidade ou concluir a
+   * manutenção) — ninguém mais lança checklist em cima, pra não empilhar mais não
+   * conformidades sobre um problema que já foi identificado e está sendo tratado. Checado
+   * ANTES de olhar se já existe uma execução em andamento de propósito: dado real de produção
+   * mostrou execuções em andamento deixadas em aberto num equipamento já bloqueado (criadas
+   * antes desse guard existir) — se checássemos só na ausência de execução, essas ficariam
+   * "furando" o bloqueio indefinidamente, já que sempre seriam retomadas em vez de recusadas.
+   */
+  if (equipment.status === "BLOQUEADO") {
+    return { equipment, template: assignment!.template, version, execution: null, blocked: true as const };
+  }
+
   let execution = await db.checklistExecution.findFirst({
     where: { equipmentId, checklistVersionId: version.id, status: "EM_ANDAMENTO" },
     include: { answers: { include: { attachments: true } } },
   });
-
-  /**
-   * Uma vez bloqueado por um checklist anterior (ver `finalizeExecution`), o equipamento
-   * fica assim até alguém com permissão liberar (validar a não conformidade ou concluir a
-   * manutenção) — ninguém mais inicia uma nova execução em cima, pra não empilhar mais não
-   * conformidades sobre um problema que já foi identificado e está sendo tratado. Se já
-   * existia uma execução em andamento (aberta antes do bloqueio), ela continua acessível
-   * normalmente — só uma execução NOVA fica impedida.
-   */
-  if (!execution && equipment.status === "BLOQUEADO") {
-    return { equipment, template: assignment!.template, version, execution: null, blocked: true as const };
-  }
 
   if (!execution) {
     const schedule = await db.checklistSchedule.findFirst({
@@ -348,9 +350,20 @@ export async function finalizeExecution(
   executionId: string,
   clientAnswers: { questionId: string; value: string | null; comment: string | null }[] = [],
 ): Promise<FinalizeResult> {
-  const executionCheck = await db.checklistExecution.findUniqueOrThrow({ where: { id: executionId } });
+  const executionCheck = await db.checklistExecution.findUniqueOrThrow({
+    where: { id: executionId },
+    include: { equipment: { select: { status: true } } },
+  });
   if (executionCheck.status !== "EM_ANDAMENTO") {
     throw new ForbiddenError("Este checklist já foi finalizado.");
+  }
+  // Segunda barreira, além da que já impede abrir/retomar em `getExecutionContext`: cobre
+  // quem já estava com a tela aberta antes do equipamento ser bloqueado (por essa mesma
+  // inspeção ou por outra via manutenção) e tenta enviar mesmo assim.
+  if (executionCheck.equipment.status === "BLOQUEADO") {
+    throw new ForbiddenError(
+      "Este equipamento foi bloqueado antes do envio deste checklist. Não é possível registrar novas respostas até a liberação.",
+    );
   }
 
   /**
