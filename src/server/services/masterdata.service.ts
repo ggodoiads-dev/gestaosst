@@ -157,6 +157,37 @@ export async function listAreaDocuments(areaId: string) {
   };
 }
 
+/** Documentos da área pro QR público, com fallback pra uma Atividade de MESMO NOME (normalizado,
+ * sem diferenciar maiúscula/acento) — na operação já é comum documentar POP/AR-VR/Lista de
+ * Treinamento em Atividades com o nome igual ao da área física (ex: "Reforma de Paletes"), então
+ * em vez de pedir pra recadastrar tudo de novo em Área, mostra o mais recente entre os dois
+ * lugares por tipo. Só casa por nome EXATO (não substring), pra nunca puxar documento de uma
+ * atividade sem relação nenhuma com a área. */
+export async function getAreaDocumentsForPublicView(area: { id: string; name: string }) {
+  const [ownDocs, matchedActivity] = await Promise.all([
+    listAreaDocuments(area.id),
+    db.activity.findFirst({ where: { name: { equals: area.name, mode: "insensitive" } }, select: { id: true } }),
+  ]);
+
+  const activityDocs = matchedActivity
+    ? await db.attachment.findMany({
+        where: { activityId: matchedActivity.id, context: "ATIVIDADE" },
+        orderBy: { uploadedAt: "desc" },
+      })
+    : [];
+
+  function latestOfType(docType: AreaDocType, ownOfType: { id: string; uploadedAt: Date }[]) {
+    const candidates = [...ownOfType, ...activityDocs.filter((d) => d.docType === docType)];
+    return candidates.sort((a, b) => b.uploadedAt.getTime() - a.uploadedAt.getTime())[0] ?? null;
+  }
+
+  return {
+    pop: latestOfType("POP", ownDocs.pop),
+    arVr: latestOfType("AR_VR", ownDocs.arVr),
+    listaTreinamento: latestOfType("LISTA_TREINAMENTO", ownDocs.listaTreinamento),
+  };
+}
+
 export async function createEquipmentType(
   user: CurrentUser,
   data: { name: string; code: string; description?: string | null },

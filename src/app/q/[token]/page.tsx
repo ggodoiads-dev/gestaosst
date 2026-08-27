@@ -5,7 +5,7 @@ import { db } from "@/server/db";
 import { getEquipmentPhoto } from "@/server/services/equipment.service";
 import { getCollaboratorPhoto } from "@/server/services/collaborator.service";
 import { getCollaboratorQualificationSummary, type CollaboratorQualificationSummary } from "@/server/services/qualification.service";
-import { listAreaDocuments } from "@/server/services/masterdata.service";
+import { getAreaDocumentsForPublicView } from "@/server/services/masterdata.service";
 import { readFileBuffer } from "@/server/services/storage";
 import { qualificationStatus } from "@/lib/qualification-status";
 import { formatDate } from "@/lib/dates";
@@ -99,7 +99,7 @@ export default async function QrResolverPage({
   if (area) {
     const [collaborators, documents] = await Promise.all([
       db.collaborator.findMany({ where: { areaId: area.id, active: true }, orderBy: { name: "asc" } }),
-      listAreaDocuments(area.id),
+      getAreaDocumentsForPublicView(area),
     ]);
     const summaries = await Promise.all(
       collaborators.map(async (c) => {
@@ -112,9 +112,9 @@ export default async function QrResolverPage({
         <PublicAreaView
           area={area}
           entries={summaries}
-          pop={documents.pop[0] ?? null}
-          arVr={documents.arVr[0] ?? null}
-          listaTreinamento={documents.listaTreinamento[0] ?? null}
+          pop={documents.pop}
+          arVr={documents.arVr}
+          listaTreinamento={documents.listaTreinamento}
         />
       </PublicPageShell>
     );
