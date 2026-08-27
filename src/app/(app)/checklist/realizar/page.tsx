@@ -15,6 +15,7 @@ const SITUATION_CONFIG = {
   EM_ANDAMENTO: { label: "Em andamento", tone: "info" as const },
   ATRASADO: { label: "Atrasado", tone: "danger" as const },
   PENDENTE: { label: "Pendente", tone: "neutral" as const },
+  BLOQUEADO: { label: "Bloqueado", tone: "danger" as const },
 };
 
 function isEquipmentItem(item: { type: string }): item is ChecklistBoardEquipmentItem {
@@ -178,30 +179,56 @@ export default async function RealizarChecklistPage({
           )}
           {currentArea.items.map((item) => {
             const cfg = SITUATION_CONFIG[item.situation];
-            return (
-              <Link
-                key={item.equipment.id}
-                href={`/checklist/realizar/${item.equipment.id}`}
-                className="flex items-center justify-between gap-3 px-4 py-3.5 hover:bg-surface-muted transition-colors"
-              >
+            const blocked = item.situation === "BLOQUEADO";
+            const content = (
+              <>
                 <div className="flex flex-col gap-0.5">
                   <span className="text-sm font-medium text-foreground">
                     {item.equipment.code} — {item.equipment.name}
                   </span>
                   <span className="text-xs text-foreground-subtle flex items-center gap-1">
-                    {item.templateName}
-                    {item.scheduledFor && (
+                    {blocked ? (
+                      "Aguardando liberação — não é possível iniciar uma nova inspeção"
+                    ) : (
                       <>
-                        <span className="mx-1">·</span>
-                        <Clock className="size-3" /> previsto {formatTime(item.scheduledFor)}
+                        {item.templateName}
+                        {item.scheduledFor && (
+                          <>
+                            <span className="mx-1">·</span>
+                            <Clock className="size-3" /> previsto {formatTime(item.scheduledFor)}
+                          </>
+                        )}
                       </>
                     )}
                   </span>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <Badge tone={cfg.tone} dot>{cfg.label}</Badge>
-                  <ChevronRight className="size-4 text-foreground-subtle" />
+                  {!blocked && <ChevronRight className="size-4 text-foreground-subtle" />}
                 </div>
+              </>
+            );
+
+            // Bloqueado não é clicável — iniciar uma nova execução é recusado no servidor de
+            // qualquer forma (`getExecutionContext`), mas nem vale deixar a pessoa tentar.
+            if (blocked) {
+              return (
+                <div
+                  key={item.equipment.id}
+                  className="flex items-center justify-between gap-3 px-4 py-3.5 opacity-80"
+                >
+                  {content}
+                </div>
+              );
+            }
+
+            return (
+              <Link
+                key={item.equipment.id}
+                href={`/checklist/realizar/${item.equipment.id}`}
+                className="flex items-center justify-between gap-3 px-4 py-3.5 hover:bg-surface-muted transition-colors"
+              >
+                {content}
               </Link>
             );
           })}

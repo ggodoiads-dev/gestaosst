@@ -22,7 +22,8 @@ export type AreaChecklistItemData = {
   equipmentId: string;
   code: string;
   name: string;
-  executionId: string;
+  executionId: string | null;
+  blocked: boolean;
   finished: boolean;
   initialValue: string | null;
   initialComment: string | null;
@@ -71,19 +72,23 @@ export function AreaChecklistForm({
   }
 
   function handleValueChange(item: AreaChecklistItemData, value: string) {
+    if (!item.executionId) return;
     updateRow(item.equipmentId, { value });
     void saveAnswerAction(item.executionId, questionId, value, rows[item.equipmentId]?.comment ?? null);
   }
 
   function handleCommentChange(item: AreaChecklistItemData, comment: string) {
+    if (!item.executionId) return;
+    const executionId = item.executionId;
     updateRow(item.equipmentId, { comment });
     if (commentTimers.current[item.equipmentId]) clearTimeout(commentTimers.current[item.equipmentId]);
     commentTimers.current[item.equipmentId] = setTimeout(() => {
-      void saveAnswerAction(item.executionId, questionId, rows[item.equipmentId]?.value ?? null, comment);
+      void saveAnswerAction(executionId, questionId, rows[item.equipmentId]?.value ?? null, comment);
     }, 500);
   }
 
   async function handlePhotoSelected(item: AreaChecklistItemData, file: File) {
+    if (!item.executionId) return;
     updateRow(item.equipmentId, { uploadingPhoto: true });
     const compressed = await compressImage(file);
     const formData = new FormData();
@@ -100,7 +105,10 @@ export function AreaChecklistForm({
 
   function handleFinalize() {
     startFinalize(async () => {
-      const toSubmit = items.filter((item) => !item.finished && rows[item.equipmentId]?.value);
+      const toSubmit = items.filter(
+        (item): item is AreaChecklistItemData & { executionId: string } =>
+          !item.finished && !item.blocked && !!rows[item.equipmentId]?.value,
+      );
       if (toSubmit.length === 0) {
         toast.error("Marque pelo menos um equipamento antes de finalizar.");
         return;
@@ -167,9 +175,17 @@ export function AreaChecklistForm({
                     <p className="text-sm font-medium text-foreground">{item.code} — {item.name}</p>
                   </div>
                   {item.finished && <Badge tone="success" dot>Concluído</Badge>}
+                  {item.blocked && <Badge tone="danger" dot>Bloqueado</Badge>}
                 </div>
 
-                {!item.finished && (
+                {item.blocked && (
+                  <p className="text-xs text-foreground-subtle">
+                    Bloqueado por uma não conformidade crítica — aguardando liberação, não é possível iniciar uma nova
+                    inspeção.
+                  </p>
+                )}
+
+                {!item.finished && !item.blocked && (
                   <div className="flex flex-col gap-3">
                     <RadioGroup
                       value={row.value ?? undefined}

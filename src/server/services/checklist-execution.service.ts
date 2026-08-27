@@ -17,7 +17,7 @@ export type ChecklistBoardEquipmentItem = {
   templateName: string;
   versionId: string;
   scheduledFor: Date | null;
-  situation: "REALIZADO" | "EM_ANDAMENTO" | "ATRASADO" | "PENDENTE";
+  situation: "REALIZADO" | "EM_ANDAMENTO" | "ATRASADO" | "PENDENTE" | "BLOQUEADO";
   completedAt: Date | null;
   inProgressExecutionId: string | null;
 };
@@ -129,8 +129,12 @@ export async function listChecklistBoardForUser(
       continue;
     }
 
-    let situation: "REALIZADO" | "EM_ANDAMENTO" | "ATRASADO" | "PENDENTE" = "PENDENTE";
-    if (completedToday) situation = "REALIZADO";
+    // Bloqueado tem prioridade sobre qualquer outra situação: mesmo que já tenha sido
+    // realizado hoje (foi exatamente essa execução que bloqueou), ninguém deve iniciar
+    // uma nova enquanto o equipamento não for liberado.
+    let situation: "REALIZADO" | "EM_ANDAMENTO" | "ATRASADO" | "PENDENTE" | "BLOQUEADO" = "PENDENTE";
+    if (equipment.status === "BLOQUEADO") situation = "BLOQUEADO";
+    else if (completedToday) situation = "REALIZADO";
     else if (inProgress) situation = "EM_ANDAMENTO";
     else if (isLate(scheduledFor, now)) situation = "ATRASADO";
 
@@ -187,12 +191,16 @@ export async function getAreaChecklistContext(user: CurrentUser, areaId: string)
 
   const items = await Promise.all(
     equipments.map(async (equipment) => {
-      const { execution } = await getExecutionContext(user, equipment.id);
-      const existingAnswer = execution.answers.find((a) => a.questionId === question.id) ?? null;
+      const ctx = await getExecutionContext(user, equipment.id);
+      if (ctx.blocked) {
+        return { equipment, executionId: null, blocked: true as const, finished: false, existingAnswer: null };
+      }
+      const existingAnswer = ctx.execution.answers.find((a) => a.questionId === question.id) ?? null;
       return {
         equipment,
-        executionId: execution.id,
-        status: execution.status,
+        executionId: ctx.execution.id,
+        blocked: false as const,
+        finished: ctx.execution.status === "CONCLUIDO",
         existingAnswer: existingAnswer
           ? { value: existingAnswer.value, comment: existingAnswer.comment, hasPhoto: existingAnswer.attachments.length > 0 }
           : null,
@@ -242,6 +250,18 @@ export async function getExecutionContext(user: CurrentUser, equipmentId: string
     include: { answers: { include: { attachments: true } } },
   });
 
+  /**
+   * Uma vez bloqueado por um checklist anterior (ver `finalizeExecution`), o equipamento
+   * fica assim até alguém com permissão liberar (validar a não conformidade ou concluir a
+   * manutenção) — ninguém mais inicia uma nova execução em cima, pra não empilhar mais não
+   * conformidades sobre um problema que já foi identificado e está sendo tratado. Se já
+   * existia uma execução em andamento (aberta antes do bloqueio), ela continua acessível
+   * normalmente — só uma execução NOVA fica impedida.
+   */
+  if (!execution && equipment.status === "BLOQUEADO") {
+    return { equipment, template: assignment!.template, version, execution: null, blocked: true as const };
+  }
+
   if (!execution) {
     const schedule = await db.checklistSchedule.findFirst({
       where: { equipmentId, templateId: assignment!.templateId, active: true },
@@ -261,7 +281,7 @@ export async function getExecutionContext(user: CurrentUser, equipmentId: string
     });
   }
 
-  return { equipment, template: assignment!.template, version, execution };
+  return { equipment, template: assignment!.template, version, execution, blocked: false as const };
 }
 
 export async function saveAnswer(
