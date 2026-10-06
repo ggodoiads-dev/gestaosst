@@ -32,7 +32,7 @@ export function CreateAccidentActionDialog({
   collaborators,
 }: {
   accidentId: string;
-  collaborators: Collaborator[];
+  collaborators: Pick<Collaborator, "id" | "name">[];
 }) {
   const [open, setOpen] = useState(false);
   const [state, formAction, pending] = useActionState(createAccidentActionItemAction, initialState);

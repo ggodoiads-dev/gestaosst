@@ -130,6 +130,7 @@ export function listActiveCollaboratorsForSupervision(user: CurrentUser) {
   const teamScope = canSeeAll ? undefined : (rollCallCollaboratorWhere(user) ?? { areaId: { in: [] } });
   return db.collaborator.findMany({
     where: { active: true, ...(teamScope ?? {}) },
+    omit: { salary: true },
     orderBy: { name: "asc" },
   });
 }
@@ -151,7 +152,15 @@ export function listCollaboratorsForUser(
           ]
         : undefined,
     },
-    include: { area: { include: { unit: true } }, turno: true, user: true },
+    // Várias telas repassam essas linhas inteiras pra Client Components: `salary` (Decimal) não é
+    // serializável — a página quebra assim que algum colaborador tem salário cadastrado — e `user`
+    // inteiro levaria `passwordHash` junto no payload. Salário só sai pelas telas de RH.
+    omit: { salary: true },
+    include: {
+      area: { include: { unit: true } },
+      turno: true,
+      user: { select: { id: true, name: true, email: true, active: true } },
+    },
     orderBy: { name: "asc" },
   });
 }

@@ -60,7 +60,7 @@ export function CreateAccidentDialog({
   mode = "acidente",
 }: {
   areas: (Area & { unit: Unit })[];
-  collaborators: Collaborator[];
+  collaborators: Pick<Collaborator, "id" | "name">[];
   mode?: "acidente" | "incidente";
 }) {
   const [open, setOpen] = useState(false);
@@ -226,7 +226,7 @@ export function EditAccidentDialog({
 }: {
   accident: AccidentWithInvolvements;
   areas: (Area & { unit: Unit })[];
-  collaborators: Collaborator[];
+  collaborators: Pick<Collaborator, "id" | "name">[];
 }) {
   const [open, setOpen] = useState(false);
   const [state, formAction, pending] = useActionState(updateAccidentAction, initialState);

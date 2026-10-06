@@ -42,7 +42,7 @@ export function CreateQualificationRecordDialog({
   types,
   defaultCollaboratorId,
 }: {
-  collaborators: Collaborator[];
+  collaborators: Pick<Collaborator, "id" | "name">[];
   types: QualificationType[];
   defaultCollaboratorId?: string;
 }) {
@@ -122,7 +122,7 @@ export function EditQualificationRecordDialog({
     notes: string | null;
     attachments?: { id: string; filename: string; path: string }[];
   };
-  collaborators: Collaborator[];
+  collaborators: Pick<Collaborator, "id" | "name">[];
   types: QualificationType[];
   trigger: React.ReactNode;
 }) {
