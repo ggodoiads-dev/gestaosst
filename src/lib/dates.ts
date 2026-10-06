@@ -10,24 +10,34 @@ import { formatInTimeZone } from "date-fns-tz";
  */
 export const APP_TIMEZONE = "America/Sao_Paulo";
 
+/** Uma data corrompida no banco (ex: ano 20226 por erro de digitação) não pode derrubar a tela
+ * inteira com `RangeError: Invalid time value` — mostra o valor como inválido e segue. */
+function safeFormat(date: Date | string, format: () => string): string {
+  try {
+    return format();
+  } catch {
+    return "Data inválida";
+  }
+}
+
 export function formatDateTime(date: Date | string | null | undefined): string {
   if (!date) return "—";
-  return formatInTimeZone(new Date(date), APP_TIMEZONE, "dd/MM/yyyy HH:mm", { locale: ptBR });
+  return safeFormat(date, () => formatInTimeZone(new Date(date), APP_TIMEZONE, "dd/MM/yyyy HH:mm", { locale: ptBR }));
 }
 
 export function formatDate(date: Date | string | null | undefined): string {
   if (!date) return "—";
-  return formatInTimeZone(new Date(date), APP_TIMEZONE, "dd/MM/yyyy", { locale: ptBR });
+  return safeFormat(date, () => formatInTimeZone(new Date(date), APP_TIMEZONE, "dd/MM/yyyy", { locale: ptBR }));
 }
 
 export function formatTime(date: Date | string | null | undefined): string {
   if (!date) return "—";
-  return formatInTimeZone(new Date(date), APP_TIMEZONE, "HH:mm", { locale: ptBR });
+  return safeFormat(date, () => formatInTimeZone(new Date(date), APP_TIMEZONE, "HH:mm", { locale: ptBR }));
 }
 
 export function formatRelative(date: Date | string | null | undefined): string {
   if (!date) return "—";
-  return formatDistanceToNow(new Date(date), { locale: ptBR, addSuffix: true });
+  return safeFormat(date, () => formatDistanceToNow(new Date(date), { locale: ptBR, addSuffix: true }));
 }
 
 export function formatLongDate(date: Date | string = new Date()): string {

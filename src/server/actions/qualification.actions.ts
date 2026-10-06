@@ -85,7 +85,10 @@ export async function setQualificationTypeActiveAction(id: string, active: boole
 const qualificationRecordSchema = z.object({
   collaboratorId: z.string().min(1, "Selecione o colaborador."),
   qualificationTypeId: z.string().min(1, "Selecione o tipo de qualificação."),
-  completedDate: z.string().min(1, "Informe a data de conclusão."),
+  completedDate: z
+    .string()
+    .min(1, "Informe a data de conclusão.")
+    .regex(/^(19|20)\d{2}-\d{2}-\d{2}$/, "Data de conclusão inválida — confira o ano."),
   notes: z.string().trim().optional().nullable(),
 });
 
