@@ -10,7 +10,7 @@ export function ChecklistComplianceCollaboratorPicker({
   selectedId,
   basePath = "/indicadores",
 }: {
-  collaborators: Collaborator[];
+  collaborators: Pick<Collaborator, "id" | "name">[];
   selectedId?: string;
   basePath?: string;
 }) {

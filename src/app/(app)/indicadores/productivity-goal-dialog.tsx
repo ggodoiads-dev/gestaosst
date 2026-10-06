@@ -41,7 +41,7 @@ export function ProductivityGoalDialog({
   goal,
   defaultCollaboratorId,
 }: {
-  collaborators: Collaborator[];
+  collaborators: Pick<Collaborator, "id" | "name">[];
   activities: Activity[];
   month: number;
   year: number;
