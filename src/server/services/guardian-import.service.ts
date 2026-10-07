@@ -118,9 +118,96 @@ export type GuardianRawRow = {
   raw: Record<string, string>;
 };
 
-/** Lê as 4 abas conhecidas do export do Guardian. Abas ausentes ou com nome diferente são
- * simplesmente ignoradas (não é erro — algumas exportações podem vir sem alguma aba se não
- * houve relato daquele tipo no período).
+/** Valor da coluna "Tipo do Registro" do formato novo (aba única "Report") -> tipo interno. */
+const NEW_FORMAT_TYPES: Record<string, GuardianReportType> = {
+  comportamentoderisco: "COMPORTAMENTO_RISCO",
+  condicaoderisco: "CONDICAO",
+  incidente: "INCIDENTE",
+  reconhecimento: "RECONHECIMENTO",
+};
+
+/** Formato novo do export do Guardian: UMA aba ("Report") com todos os tipos misturados e dois
+ * cabeçalhos empilhados — a 1ª linha só agrupa ("Registro", "Ocorrência", "Reportador"...) e a
+ * 2ª tem o nome real de cada coluna ("ID do Registro", "Nome do Reportador"...). Por isso o
+ * cabeçalho é procurado nas primeiras linhas pela coluna "ID do Registro". Não há coluna de
+ * relato anônimo (reportador sem nome = anônimo) e o "ID do Reportador" costuma vir vazio, então
+ * quem casa o colaborador é o nome (ver `buildGuardianImportPreview`). */
+function findNewFormatHeaderRow(grid: string[][]): number {
+  for (let i = 0; i < Math.min(grid.length, 4); i++) {
+    if (grid[i].some((c) => normalize(c ?? "") === "iddoregistro")) return i;
+  }
+  return -1;
+}
+
+function parseNewFormatSheet(grid: string[][], headerRowIdx: number): GuardianRawRow[] {
+  const headers = grid[headerRowIdx];
+  const col = (name: string) => headers.findIndex((h) => normalize(h ?? "") === normalize(name));
+  const idx = {
+    guardianId: col("ID do Registro"),
+    type: col("Tipo do Registro"),
+    registeredDate: col("Data do Registro"),
+    registeredTime: col("Hora do Registro"),
+    occurredDate: col("Data de Ocorrência"),
+    occurredTime: col("Hora de Ocorrência"),
+    unit: col("Instalação de Ocorrência"),
+    area: col("Área de Ocorrência"),
+    subArea: col("Sub Área de Ocorrência"),
+    equipment: col("Equipamento de Ocorrência"),
+    description: col("Descrição da Ocorrência"),
+    reporterName: col("Nome do Reportador"),
+    reporterExternalId: col("ID do Reportador"),
+    reporterEmail: col("E-mail do Reportador"),
+    reporterCompany: col("Empresa do Reportador"),
+    safetyCategory: col("Categoria de segurança"),
+    safetySubCategory: col("Sub Categoria de segurança"),
+    environmentCategory: col("Categoria de ambiente"),
+    environmentSubCategory: col("Sub Categoria de ambiente"),
+  };
+  if (idx.guardianId < 0 || idx.type < 0) return [];
+
+  const rows: GuardianRawRow[] = [];
+  for (const row of grid.slice(headerRowIdx + 1)) {
+    if (row.every((c) => !c || c.trim() === "")) continue;
+    const guardianId = cell(row, idx.guardianId);
+    const type = NEW_FORMAT_TYPES[normalize(cell(row, idx.type) ?? "")];
+    if (!guardianId || !type) continue;
+
+    const category = [cell(row, idx.safetyCategory), cell(row, idx.safetySubCategory)].filter(Boolean).join(" — ");
+    const environment = [cell(row, idx.environmentCategory), cell(row, idx.environmentSubCategory)].filter(Boolean).join(" — ");
+
+    const raw: Record<string, string> = {};
+    headers.forEach((h, i) => {
+      if (h && row[i]) raw[h] = row[i];
+    });
+
+    const reporterName = cell(row, idx.reporterName);
+    rows.push({
+      type,
+      guardianId,
+      categoryName: category || environment || null,
+      description: cell(row, idx.description),
+      occurredAt: combineDateTime(cell(row, idx.occurredDate), cell(row, idx.occurredTime)),
+      reportedAt: combineDateTime(cell(row, idx.registeredDate), cell(row, idx.registeredTime)),
+      unit: cell(row, idx.unit),
+      area: cell(row, idx.area),
+      subArea: cell(row, idx.subArea),
+      location: null,
+      equipment: cell(row, idx.equipment),
+      reporterName,
+      reporterExternalId: cell(row, idx.reporterExternalId),
+      reporterEmail: cell(row, idx.reporterEmail),
+      reporterCompany: cell(row, idx.reporterCompany),
+      isAnonymous: !reporterName,
+      raw,
+    });
+  }
+  return rows;
+}
+
+/** Lê o export do Guardian nos dois formatos: o novo (aba única "Report", ver acima) e o antigo
+ * (4 abas, uma por tipo). Abas ausentes ou com nome diferente são simplesmente ignoradas (não é
+ * erro — algumas exportações podem vir sem alguma aba se não houve relato daquele tipo no
+ * período).
  *
  * Usa `xlsx` (SheetJS) em vez do `exceljs` já usado no resto do SIGO — o export do Guardian
  * grava todo o XML interno com prefixo de namespace (`<x:worksheet>`, `<x:sheet>` etc., em vez
@@ -133,11 +220,18 @@ export async function parseGuardianWorkbook(buffer: Buffer): Promise<GuardianRaw
   const allRows: GuardianRawRow[] = [];
 
   for (const sheetName of workbook.SheetNames) {
+    const sheet = workbook.Sheets[sheetName];
+    const grid: string[][] = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1, raw: false, defval: "" });
+
+    const newFormatHeaderRow = findNewFormatHeaderRow(grid);
+    if (newFormatHeaderRow >= 0) {
+      allRows.push(...parseNewFormatSheet(grid, newFormatHeaderRow));
+      continue;
+    }
+
     const type = SHEET_TYPES[sheetName.trim().toLowerCase()];
     if (!type) continue;
 
-    const sheet = workbook.Sheets[sheetName];
-    const grid: string[][] = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1, raw: false, defval: "" });
     const [headers, ...dataRows] = grid;
     if (!headers) continue;
     const cols = resolveColumns(headers);
