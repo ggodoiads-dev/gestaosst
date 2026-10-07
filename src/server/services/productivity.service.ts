@@ -55,6 +55,13 @@ async function assertProductivityAccess(
   throw new ForbiddenError();
 }
 
+/** Só LEITURA: quem tem `PRODUCTIVITY_VIEW` (Auditor) vê a produtividade de todos, mas nunca lança
+ * nem edita meta — as escritas seguem em `assertProductivityAccess` sem essa exceção. */
+async function assertProductivityViewAccess(user: CurrentUser, collaboratorId: string) {
+  if (user.permissions.has(PERMISSIONS.PRODUCTIVITY_VIEW)) return;
+  await assertProductivityAccess(user, collaboratorId, VIEW_SELF_PERMISSIONS);
+}
+
 const VIEW_SELF_PERMISSIONS = [PERMISSIONS.PRODUCTIVITY_SELF_LOG, PERMISSIONS.PRODUCTIVITY_SELF_VIEW];
 const LOG_SELF_PERMISSIONS = [PERMISSIONS.PRODUCTIVITY_SELF_LOG];
 
@@ -64,7 +71,7 @@ const LOG_SELF_PERMISSIONS = [PERMISSIONS.PRODUCTIVITY_SELF_LOG];
  * chamada — sem nada configurado, o filtro não bate com ninguém (lista vazia, não um erro, já
  * que essas funções alimentam telas de visão geral). */
 function productivityCollaboratorScopeWhere(user: CurrentUser): RollCallCollaboratorWhere | undefined {
-  if (user.permissions.has(PERMISSIONS.PRODUCTIVITY_MANAGE)) return undefined;
+  if (user.permissions.has(PERMISSIONS.PRODUCTIVITY_MANAGE) || user.permissions.has(PERMISSIONS.PRODUCTIVITY_VIEW)) return undefined;
   if (!user.permissions.has(PERMISSIONS.PRODUCTIVITY_MANAGE_TEAM) && !user.canRollCall) return { areaId: { in: [] } };
   return rollCallCollaboratorWhere(user) ?? { areaId: { in: [] } };
 }
@@ -146,7 +153,7 @@ export async function getProductivityRange(
   user: CurrentUser,
   params: { collaboratorId: string; from: Date; to: Date },
 ) {
-  await assertProductivityAccess(user, params.collaboratorId, VIEW_SELF_PERMISSIONS);
+  await assertProductivityViewAccess(user, params.collaboratorId);
   const { collaborator, days } = await buildCollaboratorDays(params.collaboratorId, params.from, params.to);
 
   const workDays = days.filter((d) => d.status === "TRABALHO");
@@ -244,7 +251,7 @@ async function computePeriodStats(
  * quantos estavam escalados pra trabalhar, quantos lançaram alguma produção, e o total por
  * atividade. Base dos cartões e da tabela no topo da tela de Produtividade. */
 export async function getProductivityDashboard(user: CurrentUser, params: { date?: Date } = {}) {
-  if (!hasPermission(user, PERMISSIONS.PRODUCTIVITY_MANAGE) && !hasPermission(user, PERMISSIONS.PRODUCTIVITY_MANAGE_TEAM) && !user.canRollCall) {
+  if (!hasPermission(user, PERMISSIONS.PRODUCTIVITY_MANAGE) && !hasPermission(user, PERMISSIONS.PRODUCTIVITY_VIEW) && !hasPermission(user, PERMISSIONS.PRODUCTIVITY_MANAGE_TEAM) && !user.canRollCall) {
     throw new ForbiddenError();
   }
   const collaboratorScope = productivityCollaboratorScopeWhere(user);
@@ -325,7 +332,7 @@ export async function getProductivityGoalsProgress(
   user: CurrentUser,
   params: { collaboratorId: string; month: number; year: number },
 ) {
-  await assertProductivityAccess(user, params.collaboratorId, VIEW_SELF_PERMISSIONS);
+  await assertProductivityViewAccess(user, params.collaboratorId);
 
   const [goals, achievedByKey] = await Promise.all([
     db.productivityGoal.findMany({
@@ -349,7 +356,7 @@ export async function getProductivityGoalsProgress(
 /** Metas do mês de todos os colaboradores, com progresso — base da tabela "Metas do mês" no
  * topo da tela de Produtividade (visão consolidada, sem precisar escolher um colaborador). */
 export async function getAllProductivityGoalsProgress(user: CurrentUser, params: { month: number; year: number }) {
-  if (!hasPermission(user, PERMISSIONS.PRODUCTIVITY_MANAGE) && !hasPermission(user, PERMISSIONS.PRODUCTIVITY_MANAGE_TEAM) && !user.canRollCall) {
+  if (!hasPermission(user, PERMISSIONS.PRODUCTIVITY_MANAGE) && !hasPermission(user, PERMISSIONS.PRODUCTIVITY_VIEW) && !hasPermission(user, PERMISSIONS.PRODUCTIVITY_MANAGE_TEAM) && !user.canRollCall) {
     throw new ForbiddenError();
   }
   const collaboratorScope = productivityCollaboratorScopeWhere(user);

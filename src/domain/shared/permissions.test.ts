@@ -43,6 +43,7 @@ describe("perfil Auditor (só leitura)", () => {
       PERMISSIONS.GUARDIAN_VIEW,
       PERMISSIONS.CHECKLIST_COMPLIANCE_VIEW,
       PERMISSIONS.ATTENDANCE_VIEW,
+      PERMISSIONS.PRODUCTIVITY_VIEW,
     ]) {
       expect(auditor).toContain(key);
     }

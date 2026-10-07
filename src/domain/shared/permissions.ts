@@ -45,6 +45,7 @@ export const PERMISSIONS = {
   ACTIVITY_MANAGE: "activity.manage",
   SCHEDULE_MANAGE: "schedule.manage",
   SCHEDULE_SELF_VIEW: "schedule.self_view",
+  PRODUCTIVITY_VIEW: "productivity.view",
   PRODUCTIVITY_MANAGE: "productivity.manage",
   PRODUCTIVITY_MANAGE_TEAM: "productivity.manage_team",
   PRODUCTIVITY_SELF_LOG: "productivity.self_log",
@@ -100,6 +101,7 @@ export const PERMISSION_DESCRIPTIONS: Record<PermissionKey, string> = {
   [PERMISSIONS.ACTIVITY_MANAGE]: "Gerenciar atividades e documentos (POP/AR-VR)",
   [PERMISSIONS.SCHEDULE_MANAGE]: "Gerenciar escalas de trabalho dos colaboradores",
   [PERMISSIONS.SCHEDULE_SELF_VIEW]: "Ver a própria escala de trabalho",
+  [PERMISSIONS.PRODUCTIVITY_VIEW]: "Apenas visualizar a produtividade de todos os colaboradores (sem lançar nem editar metas)",
   [PERMISSIONS.PRODUCTIVITY_MANAGE]: "Lançar e consultar produtividade de todos os colaboradores",
   [PERMISSIONS.PRODUCTIVITY_MANAGE_TEAM]: "Lançar e consultar produtividade dos colaboradores das áreas/turnos em que faz chamada",
   [PERMISSIONS.PRODUCTIVITY_SELF_LOG]: "Lançar a própria produtividade",
@@ -197,5 +199,6 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<RoleKeyValue, PermissionKey[]> = {
     PERMISSIONS.CHECKLIST_COMPLIANCE_VIEW,
     PERMISSIONS.GUARDIAN_VIEW,
     PERMISSIONS.ATTENDANCE_VIEW,
+    PERMISSIONS.PRODUCTIVITY_VIEW,
   ],
 };

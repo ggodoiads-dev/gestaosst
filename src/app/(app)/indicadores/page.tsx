@@ -114,7 +114,8 @@ export default async function IndicadoresPage({
   const user = await requireUser();
   requirePermission(user, PERMISSIONS.INDICATORS_VIEW_AREA);
   const canSeeChecklistCompliance = hasPermission(user, PERMISSIONS.CHECKLIST_COMPLIANCE_VIEW);
-  const canSeeProductivity = hasPermission(user, PERMISSIONS.PRODUCTIVITY_MANAGE);
+  const canManageProductivity = hasPermission(user, PERMISSIONS.PRODUCTIVITY_MANAGE);
+  const canSeeProductivity = canManageProductivity || hasPermission(user, PERMISSIONS.PRODUCTIVITY_VIEW);
   const canSeeCollaboratorReport = canSeeChecklistCompliance || canSeeProductivity;
 
   const [summary, desempenho, topEquipamentos, topFalhas, riskRanking] = await Promise.all([
@@ -146,7 +147,8 @@ export default async function IndicadoresPage({
   if (canSeeProductivity) {
     [productivityDashboard, activities, currentMonthGoals] = await Promise.all([
       getProductivityDashboard(user),
-      listActivitiesForUser(user),
+      // A lista de atividades só alimenta os formulários de lançar/meta — quem só visualiza não precisa (nem tem acesso).
+      canManageProductivity ? listActivitiesForUser(user) : Promise.resolve([]),
       getAllProductivityGoalsProgress(user, { month: now.getMonth() + 1, year: now.getFullYear() }),
     ]);
     if (collaboratorId) {
@@ -484,12 +486,14 @@ export default async function IndicadoresPage({
 
                   <div className="flex items-center justify-between">
                     <h3 className="text-sm font-semibold text-foreground">Metas de {MONTH_LABELS[now.getMonth()]}</h3>
-                    <ProductivityGoalDialog
-                      collaborators={collaborators}
-                      activities={activities}
-                      month={now.getMonth() + 1}
-                      year={now.getFullYear()}
-                    />
+                    {canManageProductivity && (
+                      <ProductivityGoalDialog
+                        collaborators={collaborators}
+                        activities={activities}
+                        month={now.getMonth() + 1}
+                        year={now.getFullYear()}
+                      />
+                    )}
                   </div>
                   <Card>
                     <CardContent className="p-0">
@@ -517,16 +521,18 @@ export default async function IndicadoresPage({
                                 </div>
                               </TableCell>
                               <TableCell>
-                                <div className="flex items-center justify-end gap-1">
-                                  <ProductivityGoalDialog
-                                    collaborators={collaborators}
-                                    activities={activities}
-                                    month={now.getMonth() + 1}
-                                    year={now.getFullYear()}
-                                    goal={goal}
-                                  />
-                                  <DeleteProductivityGoalButton id={goal.id} />
-                                </div>
+                                {canManageProductivity && (
+                                  <div className="flex items-center justify-end gap-1">
+                                    <ProductivityGoalDialog
+                                      collaborators={collaborators}
+                                      activities={activities}
+                                      month={now.getMonth() + 1}
+                                      year={now.getFullYear()}
+                                      goal={goal}
+                                    />
+                                    <DeleteProductivityGoalButton id={goal.id} />
+                                  </div>
+                                )}
                               </TableCell>
                             </TableRow>
                           ))}
@@ -591,13 +597,15 @@ export default async function IndicadoresPage({
                               ? ` · Turno ${productivityRangeReport.collaborator.turno.name}`
                               : " · Sem turno definido"}
                           </p>
-                          <ProductivityGoalDialog
-                            collaborators={collaborators}
-                            activities={activities}
-                            month={refDate.getMonth() + 1}
-                            year={refDate.getFullYear()}
-                            defaultCollaboratorId={collaboratorId}
-                          />
+                          {canManageProductivity && (
+                            <ProductivityGoalDialog
+                              collaborators={collaborators}
+                              activities={activities}
+                              month={refDate.getMonth() + 1}
+                              year={refDate.getFullYear()}
+                              defaultCollaboratorId={collaboratorId}
+                            />
+                          )}
                         </div>
 
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -635,6 +643,7 @@ export default async function IndicadoresPage({
                           collaboratorName={productivityRangeReport.collaborator.name}
                           activities={activities}
                           layout={period === "mes" ? "grid" : "list"}
+                          canEdit={canManageProductivity}
                           days={productivityRangeReport.days.map((d) => ({
                             date: localDateKey(d.date),
                             day: d.date.getDate(),
