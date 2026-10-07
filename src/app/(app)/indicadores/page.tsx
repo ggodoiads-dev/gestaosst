@@ -21,7 +21,6 @@ import {
 } from "@/server/services/productivity.service";
 import { listActivitiesForUser } from "@/server/services/activity.service";
 import { getEquipmentRiskRanking } from "@/server/services/risk-score.service";
-import { getChecklistAdherence } from "@/server/services/time-clock.service";
 import { listActiveCollaboratorsForSupervision } from "@/server/services/collaborator.service";
 import { PageHeader, PageBody } from "@/components/domain/page-header";
 import { StatCard } from "@/components/domain/stat-card";
@@ -35,7 +34,6 @@ import { HorizontalBarChart } from "@/components/domain/charts/horizontal-bar-ch
 import { cn } from "@/lib/utils";
 import { formatDate, parseDateOnly } from "@/lib/dates";
 import { ChecklistComplianceCollaboratorPicker } from "./checklist-compliance-collaborator-picker";
-import { ChecklistAdherenceCard } from "./checklist-adherence-card";
 import { ProductivityGoalDialog, DeleteProductivityGoalButton } from "./productivity-goal-dialog";
 import { ProductivityCalendarClient } from "./productivity-calendar-client";
 
@@ -53,10 +51,6 @@ function localDateKey(date: Date): string {
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
-}
-
-function toInputValue(date: Date): string {
-  return localDateKey(date);
 }
 
 function buildHref(params: { collaboratorId: string; period: Period; ref: string }) {
@@ -123,17 +117,12 @@ export default async function IndicadoresPage({
   const canSeeProductivity = hasPermission(user, PERMISSIONS.PRODUCTIVITY_MANAGE);
   const canSeeCollaboratorReport = canSeeChecklistCompliance || canSeeProductivity;
 
-  const adherenceTo = new Date();
-  const adherenceFrom = new Date();
-  adherenceFrom.setDate(adherenceFrom.getDate() - 13);
-
-  const [summary, desempenho, topEquipamentos, topFalhas, riskRanking, checklistAdherence] = await Promise.all([
+  const [summary, desempenho, topEquipamentos, topFalhas, riskRanking] = await Promise.all([
     getGestaoSummary(user),
     getDesempenhoPorArea(user),
     getTopProblemEquipments(user),
     getTopFaultCategories(user),
     getEquipmentRiskRanking(user),
-    getChecklistAdherence(user, { from: adherenceFrom, to: adherenceTo }),
   ]);
 
   let collaborators: Awaited<ReturnType<typeof listActiveCollaboratorsForSupervision>> = [];
@@ -662,13 +651,6 @@ export default async function IndicadoresPage({
             </Tabs>
           </section>
         )}
-
-        <ChecklistAdherenceCard
-          initialFrom={toInputValue(adherenceFrom)}
-          initialTo={toInputValue(adherenceTo)}
-          initialReport={checklistAdherence}
-          canJustify={hasPermission(user, PERMISSIONS.HR_MANAGE) || hasPermission(user, PERMISSIONS.ACTIONPLAN_MANAGE)}
-        />
 
         <Card>
           <CardHeader>

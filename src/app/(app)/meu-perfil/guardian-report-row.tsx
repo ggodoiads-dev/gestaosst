@@ -7,7 +7,7 @@ import { formatDate, formatDateTime } from "@/lib/dates";
 import { GUARDIAN_TYPE_LABELS } from "@/domain/guardian/labels";
 import type { GuardianReportType } from "@/generated/prisma/enums";
 
-type GuardianReportItem = {
+export type GuardianReportItem = {
   id: string;
   guardianId: string;
   type: GuardianReportType;
@@ -22,6 +22,83 @@ type GuardianReportItem = {
   equipment: string | null;
   isAnonymous: boolean;
 };
+
+/** Detalhe completo de um relato (descrição, datas, local) — o mesmo que o colaborador vê nos dele,
+ * reaproveitado na tela do Guardian pra gestão/auditor. */
+export function GuardianReportDialog({
+  report,
+  open,
+  onOpenChange,
+  reporterName,
+}: {
+  report: GuardianReportItem;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  reporterName?: string | null;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{report.categoryName ?? GUARDIAN_TYPE_LABELS[report.type]}</DialogTitle>
+        </DialogHeader>
+        <DialogBody className="flex flex-col gap-4 text-sm">
+          <div className="flex items-center gap-2">
+            <Badge tone="info">{GUARDIAN_TYPE_LABELS[report.type]}</Badge>
+            {report.isAnonymous && <Badge tone="neutral">Relatado anônimo</Badge>}
+          </div>
+
+          {reporterName && (
+            <div>
+              <p className="text-xs text-foreground-subtle">Relatado por</p>
+              <p>{reporterName}</p>
+            </div>
+          )}
+
+          {report.description && (
+            <div>
+              <p className="text-xs text-foreground-subtle">Descrição</p>
+              <p className="whitespace-pre-wrap text-foreground-muted">{report.description}</p>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <p className="text-xs text-foreground-subtle">Ocorreu em</p>
+              <p>{report.occurredAt ? formatDateTime(report.occurredAt) : "—"}</p>
+            </div>
+            <div>
+              <p className="text-xs text-foreground-subtle">Relatado em</p>
+              <p>{report.reportedAt ? formatDateTime(report.reportedAt) : "—"}</p>
+            </div>
+            <div>
+              <p className="text-xs text-foreground-subtle">Unidade</p>
+              <p>{report.unit ?? "—"}</p>
+            </div>
+            <div>
+              <p className="text-xs text-foreground-subtle">Área</p>
+              <p>{report.area ?? "—"}{report.subArea ? ` — ${report.subArea}` : ""}</p>
+            </div>
+            {report.location && (
+              <div>
+                <p className="text-xs text-foreground-subtle">Local</p>
+                <p>{report.location}</p>
+              </div>
+            )}
+            {report.equipment && (
+              <div>
+                <p className="text-xs text-foreground-subtle">Equipamento</p>
+                <p>{report.equipment}</p>
+              </div>
+            )}
+          </div>
+
+          <p className="font-mono text-xs text-foreground-subtle">Guardian: {report.guardianId}</p>
+        </DialogBody>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 export function GuardianReportRow({ report }: { report: GuardianReportItem }) {
   const [open, setOpen] = useState(false);
@@ -40,59 +117,7 @@ export function GuardianReportRow({ report }: { report: GuardianReportItem }) {
         <Badge tone="info">{GUARDIAN_TYPE_LABELS[report.type]}</Badge>
       </button>
 
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>{report.categoryName ?? GUARDIAN_TYPE_LABELS[report.type]}</DialogTitle>
-          </DialogHeader>
-          <DialogBody className="flex flex-col gap-4 text-sm">
-            <div className="flex items-center gap-2">
-              <Badge tone="info">{GUARDIAN_TYPE_LABELS[report.type]}</Badge>
-              {report.isAnonymous && <Badge tone="neutral">Relatado anônimo</Badge>}
-            </div>
-
-            {report.description && (
-              <div>
-                <p className="text-xs text-foreground-subtle">Descrição</p>
-                <p className="whitespace-pre-wrap text-foreground-muted">{report.description}</p>
-              </div>
-            )}
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <p className="text-xs text-foreground-subtle">Ocorreu em</p>
-                <p>{report.occurredAt ? formatDateTime(report.occurredAt) : "—"}</p>
-              </div>
-              <div>
-                <p className="text-xs text-foreground-subtle">Relatado em</p>
-                <p>{report.reportedAt ? formatDateTime(report.reportedAt) : "—"}</p>
-              </div>
-              <div>
-                <p className="text-xs text-foreground-subtle">Unidade</p>
-                <p>{report.unit ?? "—"}</p>
-              </div>
-              <div>
-                <p className="text-xs text-foreground-subtle">Área</p>
-                <p>{report.area ?? "—"}{report.subArea ? ` — ${report.subArea}` : ""}</p>
-              </div>
-              {report.location && (
-                <div>
-                  <p className="text-xs text-foreground-subtle">Local</p>
-                  <p>{report.location}</p>
-                </div>
-              )}
-              {report.equipment && (
-                <div>
-                  <p className="text-xs text-foreground-subtle">Equipamento</p>
-                  <p>{report.equipment}</p>
-                </div>
-              )}
-            </div>
-
-            <p className="font-mono text-xs text-foreground-subtle">Guardian: {report.guardianId}</p>
-          </DialogBody>
-        </DialogContent>
-      </Dialog>
+      <GuardianReportDialog report={report} open={open} onOpenChange={setOpen} />
     </>
   );
 }

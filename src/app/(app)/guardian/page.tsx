@@ -14,7 +14,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, TableEmpty } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { formatDate } from "@/lib/dates";
+import { GuardianReportTableRow } from "./guardian-report-table-row";
 
 function monthLabel(month: string): string {
   const [y, m] = month.split("-").map(Number);
@@ -221,25 +221,26 @@ export default async function GuardianPage({ searchParams }: { searchParams: Pro
               <TableBody>
                 {reports.length === 0 && <TableEmpty colSpan={5} />}
                 {reports.map((r) => (
-                  <TableRow key={r.id}>
-                    <TableCell><Badge tone="info">{GUARDIAN_TYPE_LABELS[r.type]}</Badge></TableCell>
-                    <TableCell>
-                      {r.reporterCollaborator ? (
-                        canOpenProfiles ? (
-                          <Link href={`/colaboradores/${r.reporterCollaborator.id}`} className="text-accent hover:underline">
-                            {r.reporterCollaborator.name}
-                          </Link>
-                        ) : (
-                          r.reporterCollaborator.name
-                        )
-                      ) : (
-                        "—"
-                      )}
-                    </TableCell>
-                    <TableCell className="text-foreground-subtle">{r.occurredAt ? formatDate(r.occurredAt) : "—"}</TableCell>
-                    <TableCell className="text-foreground-subtle">{r.area ?? "—"}</TableCell>
-                    <TableCell className="text-foreground-subtle truncate max-w-xs">{r.categoryName ?? "—"}</TableCell>
-                  </TableRow>
+                  <GuardianReportTableRow
+                    key={r.id}
+                    report={{
+                      id: r.id,
+                      guardianId: r.guardianId,
+                      type: r.type,
+                      categoryName: r.categoryName,
+                      description: r.description,
+                      occurredAt: r.occurredAt,
+                      reportedAt: r.reportedAt,
+                      unit: r.unit,
+                      area: r.area,
+                      subArea: r.subArea,
+                      location: r.location,
+                      equipment: r.equipment,
+                      isAnonymous: r.isAnonymous,
+                    }}
+                    reporter={r.reporterCollaborator ? { id: r.reporterCollaborator.id, name: r.reporterCollaborator.name } : null}
+                    canOpenProfile={canOpenProfiles}
+                  />
                 ))}
               </TableBody>
             </Table>

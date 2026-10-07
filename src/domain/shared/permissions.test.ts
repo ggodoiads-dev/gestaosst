@@ -29,6 +29,7 @@ describe("perfil Auditor (só leitura)", () => {
       PERMISSIONS.EPI_MANAGE,
       PERMISSIONS.ACTIVITY_MANAGE,
       PERMISSIONS.AUDIT_VIEW,
+      PERMISSIONS.HISTORY_VIEW,
     ];
     for (const key of forbidden) expect(auditor).not.toContain(key);
   });
