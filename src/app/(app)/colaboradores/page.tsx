@@ -17,17 +17,36 @@ import { EditSalaryDialog } from "./salary-dialog";
 import { RequiresChecklistToggle } from "./requires-checklist-toggle";
 import { BulkAccessButton } from "./bulk-access-button";
 
-export default async function ColaboradoresPage() {
+const STATUS_FILTERS = [
+  { key: "ativos", label: "Ativos" },
+  { key: "desligados", label: "Desligados" },
+  { key: "todos", label: "Todos" },
+] as const;
+
+type StatusFilter = (typeof STATUS_FILTERS)[number]["key"];
+
+export default async function ColaboradoresPage({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
+  const { status } = await searchParams;
+  const filter: StatusFilter = STATUS_FILTERS.some((f) => f.key === status) ? (status as StatusFilter) : "ativos";
   const user = await requireUser();
   const canManage = hasPermission(user, PERMISSIONS.COLLABORATOR_MANAGE);
   const canSeeHr = hasPermission(user, PERMISSIONS.HR_MANAGE);
 
-  const [collaborators, areas, turnos, jobFunctions] = await Promise.all([
+  const [allCollaborators, areas, turnos, jobFunctions] = await Promise.all([
     listCollaboratorsUnified(user),
     listAreas(),
     listTurnos(user),
     listJobFunctionsForCollaboratorForm(user),
   ]);
+
+  const counts: Record<StatusFilter, number> = {
+    ativos: allCollaborators.filter((c) => c.active).length,
+    desligados: allCollaborators.filter((c) => !c.active).length,
+    todos: allCollaborators.length,
+  };
+  const collaborators = allCollaborators.filter((c) =>
+    filter === "todos" ? true : filter === "ativos" ? c.active : !c.active,
+  );
 
   const hasActionsColumn = canManage || canSeeHr;
   const columnCount = 8 + (canSeeHr ? 2 : 0) + (hasActionsColumn ? 1 : 0);
@@ -45,7 +64,24 @@ export default async function ColaboradoresPage() {
       <PageBody>
         <Card>
           <CardHeader>
-            <CardTitle>Colaboradores ({collaborators.length})</CardTitle>
+            <div className="flex flex-wrap items-center gap-3">
+              <CardTitle>Colaboradores ({collaborators.length})</CardTitle>
+              <div className="flex items-center gap-1 rounded-md border border-border bg-surface-muted p-0.5 text-xs">
+                {STATUS_FILTERS.map((f) => (
+                  <Link
+                    key={f.key}
+                    href={f.key === "ativos" ? "/colaboradores" : `/colaboradores?status=${f.key}`}
+                    className={
+                      f.key === filter
+                        ? "rounded bg-surface px-2.5 py-1 font-semibold text-foreground shadow-sm"
+                        : "rounded px-2.5 py-1 text-foreground-subtle hover:text-foreground"
+                    }
+                  >
+                    {f.label} ({counts[f.key]})
+                  </Link>
+                ))}
+              </div>
+            </div>
             {canManage && (
               <div className="flex items-center gap-2">
                 <BulkAccessButton />
