@@ -8,6 +8,9 @@ import { PERMISSIONS } from "@/domain/shared/permissions";
 
 export function listUsers() {
   return db.user.findMany({
+    // A tela de usuários repassa a linha inteira pro dialog de edição (Client Component) — sem o
+    // omit, o `passwordHash` de todo mundo ia junto no payload da página.
+    omit: { passwordHash: true },
     include: {
       role: true,
       unit: true,

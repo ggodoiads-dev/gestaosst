@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requireUser, requirePermission } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
 import { listUsers, listRoles } from "@/server/services/user.service";
@@ -13,11 +14,21 @@ import { SoftDeleteButton, ReactivateButton } from "@/components/domain/soft-del
 import { setUserActiveAction } from "@/server/actions/user.actions";
 import { CreateUserDialog, EditUserDialog, ResetPasswordDialog } from "./user-form-dialog";
 
-export default async function UsuariosPage() {
+const STATUS_FILTERS = [
+  { key: "ativos", label: "Ativos" },
+  { key: "excluidos", label: "Excluídos" },
+  { key: "todos", label: "Todos" },
+] as const;
+
+type StatusFilter = (typeof STATUS_FILTERS)[number]["key"];
+
+export default async function UsuariosPage({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
+  const { status } = await searchParams;
+  const filter: StatusFilter = STATUS_FILTERS.some((f) => f.key === status) ? (status as StatusFilter) : "ativos";
   const user = await requireUser();
   requirePermission(user, PERMISSIONS.USER_MANAGE);
 
-  const [users, roles, units, areas, functions, turnos] = await Promise.all([
+  const [allUsers, roles, units, areas, functions, turnos] = await Promise.all([
     listUsers(),
     listRoles(),
     listUnits(),
@@ -25,6 +36,13 @@ export default async function UsuariosPage() {
     listActiveJobFunctions(),
     listTurnosForSelect(),
   ]);
+
+  const counts: Record<StatusFilter, number> = {
+    ativos: allUsers.filter((u) => u.active).length,
+    excluidos: allUsers.filter((u) => !u.active).length,
+    todos: allUsers.length,
+  };
+  const users = allUsers.filter((u) => (filter === "todos" ? true : filter === "ativos" ? u.active : !u.active));
 
   return (
     <>
@@ -35,7 +53,24 @@ export default async function UsuariosPage() {
       <PageBody>
         <Card>
           <CardHeader>
-            <CardTitle>Usuários ({users.length})</CardTitle>
+            <div className="flex flex-wrap items-center gap-3">
+              <CardTitle>Usuários ({users.length})</CardTitle>
+              <div className="flex items-center gap-1 rounded-md border border-border bg-surface-muted p-0.5 text-xs">
+                {STATUS_FILTERS.map((f) => (
+                  <Link
+                    key={f.key}
+                    href={f.key === "ativos" ? "/usuarios" : `/usuarios?status=${f.key}`}
+                    className={
+                      f.key === filter
+                        ? "rounded bg-surface px-2.5 py-1 font-semibold text-foreground shadow-sm"
+                        : "rounded px-2.5 py-1 text-foreground-subtle hover:text-foreground"
+                    }
+                  >
+                    {f.label} ({counts[f.key]})
+                  </Link>
+                ))}
+              </div>
+            </div>
             <CreateUserDialog roles={roles} units={units} areas={areas} functions={functions} turnos={turnos} />
           </CardHeader>
           <CardContent className="p-0">

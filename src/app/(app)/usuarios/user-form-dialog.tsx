@@ -292,7 +292,7 @@ export function CreateUserDialog({ roles, units, areas, functions, turnos }: For
   );
 }
 
-type UserWithAreas = User & { userAreas: { areaId: string }[] } & { userFunctions: { functionId: string }[] } & {
+type UserWithAreas = Omit<User, "passwordHash"> & { userAreas: { areaId: string }[] } & { userFunctions: { functionId: string }[] } & {
   userRollCallAreas: { areaId: string }[];
   userRollCallTurnos: { turnoId: string }[];
 };
