@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, ShieldCheck, Upload } from "lucide-react";
-import { requireUser, requirePermission } from "@/server/auth/current-user";
+import { requireUser, hasPermission, ForbiddenError } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
 import {
   currentMonthKey,
@@ -32,7 +32,10 @@ function shiftMonth(month: string, delta: number): string {
 
 export default async function GuardianPage({ searchParams }: { searchParams: Promise<{ mes?: string }> }) {
   const user = await requireUser();
-  requirePermission(user, PERMISSIONS.GUARDIAN_MANAGE);
+  const canImport = hasPermission(user, PERMISSIONS.GUARDIAN_MANAGE);
+  if (!canImport && !hasPermission(user, PERMISSIONS.GUARDIAN_VIEW)) throw new ForbiddenError();
+  // A ficha do colaborador exige acesso de gestão/RH — pra quem só visualiza (Auditor) o nome vira texto.
+  const canOpenProfiles = canImport || hasPermission(user, PERMISSIONS.COLLABORATOR_MANAGE) || hasPermission(user, PERMISSIONS.HR_MANAGE);
 
   const { mes } = await searchParams;
   const nowMonth = currentMonthKey();
@@ -51,11 +54,13 @@ export default async function GuardianPage({ searchParams }: { searchParams: Pro
         title="Guardian"
         description="Relatos de segurança importados do Guardian — comportamento de risco, condição insegura, incidente e reconhecimento."
         actions={
-          <Button asChild size="sm">
-            <Link href="/guardian/importar">
-              <Upload className="size-4" /> Importar planilha
-            </Link>
-          </Button>
+          canImport ? (
+            <Button asChild size="sm">
+              <Link href="/guardian/importar">
+                <Upload className="size-4" /> Importar planilha
+              </Link>
+            </Button>
+          ) : undefined
         }
       />
       <PageBody>
@@ -131,7 +136,7 @@ export default async function GuardianPage({ searchParams }: { searchParams: Pro
                 <p className="text-xs font-medium text-foreground-subtle">Quem mais relatou no mês</p>
                 {adherence.topReporters.map((r) => (
                   <div key={r.collaboratorId} className="flex items-center justify-between rounded-md border border-border px-3 py-2 text-sm">
-                    <Link href={`/colaboradores/${r.collaboratorId}`} className="text-accent hover:underline">{r.name}</Link>
+                    {canOpenProfiles ? <Link href={`/colaboradores/${r.collaboratorId}`} className="text-accent hover:underline">{r.name}</Link> : <span>{r.name}</span>}
                     <span className="tabular-nums text-foreground-subtle">{r.count} relato(s)</span>
                   </div>
                 ))}
@@ -145,9 +150,13 @@ export default async function GuardianPage({ searchParams }: { searchParams: Pro
                 </summary>
                 <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
                   {adherence.notReported.map((c) => (
-                    <Link key={c.collaboratorId} href={`/colaboradores/${c.collaboratorId}`} className="text-accent hover:underline">
-                      {c.name}
-                    </Link>
+                    canOpenProfiles ? (
+                      <Link key={c.collaboratorId} href={`/colaboradores/${c.collaboratorId}`} className="text-accent hover:underline">
+                        {c.name}
+                      </Link>
+                    ) : (
+                      <span key={c.collaboratorId}>{c.name}</span>
+                    )
                   ))}
                 </div>
               </details>
@@ -216,9 +225,13 @@ export default async function GuardianPage({ searchParams }: { searchParams: Pro
                     <TableCell><Badge tone="info">{GUARDIAN_TYPE_LABELS[r.type]}</Badge></TableCell>
                     <TableCell>
                       {r.reporterCollaborator ? (
-                        <Link href={`/colaboradores/${r.reporterCollaborator.id}`} className="text-accent hover:underline">
-                          {r.reporterCollaborator.name}
-                        </Link>
+                        canOpenProfiles ? (
+                          <Link href={`/colaboradores/${r.reporterCollaborator.id}`} className="text-accent hover:underline">
+                            {r.reporterCollaborator.name}
+                          </Link>
+                        ) : (
+                          r.reporterCollaborator.name
+                        )
                       ) : (
                         "—"
                       )}

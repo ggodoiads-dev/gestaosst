@@ -1,18 +1,26 @@
 import "server-only";
 import { db } from "@/server/db";
 import type { CurrentUser } from "@/server/auth/current-user";
-import { requirePermission } from "@/server/auth/current-user";
+import { hasPermission, ForbiddenError } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
 import type { GuardianReportType } from "@/generated/prisma/enums";
 import { GUARDIAN_TYPE_LABELS } from "@/domain/guardian/labels";
 
 export { GUARDIAN_TYPE_LABELS };
 
+/** Ver os relatos/indicadores: quem gerencia OU quem só pode visualizar (Auditor). Importar continua
+ * exigindo `GUARDIAN_MANAGE` em guardian-import.service. */
+function requireGuardianView(user: CurrentUser): void {
+  if (!hasPermission(user, PERMISSIONS.GUARDIAN_MANAGE) && !hasPermission(user, PERMISSIONS.GUARDIAN_VIEW)) {
+    throw new ForbiddenError();
+  }
+}
+
 export function listGuardianReportsForUser(
   user: CurrentUser,
   filters: { type?: GuardianReportType; collaboratorId?: string } = {},
 ) {
-  requirePermission(user, PERMISSIONS.GUARDIAN_MANAGE);
+  requireGuardianView(user);
   return db.guardianReport.findMany({
     where: { type: filters.type, reporterCollaboratorId: filters.collaboratorId },
     include: { reporterCollaborator: { select: { id: true, name: true } } },
@@ -106,7 +114,7 @@ export async function getGuardianAdherence(
   user: CurrentUser,
   month: string = currentMonthKey(),
 ): Promise<{ selected: GuardianAdherence; history: GuardianMonthSummary[] }> {
-  requirePermission(user, PERMISSIONS.GUARDIAN_MANAGE);
+  requireGuardianView(user);
 
   const [collaborators, rawReports] = await Promise.all([
     db.collaborator.findMany({
@@ -166,7 +174,7 @@ export async function getGuardianAdherence(
 
 /** Relatos de um mês (pela data da ocorrência), mais recentes primeiro. */
 export function listGuardianReportsOfMonth(user: CurrentUser, month: string) {
-  requirePermission(user, PERMISSIONS.GUARDIAN_MANAGE);
+  requireGuardianView(user);
   const { start, end } = monthRange(month);
   return db.guardianReport.findMany({
     where: { OR: [{ occurredAt: { gte: start, lt: end } }, { occurredAt: null, reportedAt: { gte: start, lt: end } }] },

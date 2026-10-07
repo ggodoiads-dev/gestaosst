@@ -22,10 +22,14 @@ export function listNonconformitiesForUser(
       severity: (filters.severity as never) || undefined,
       dueDate: filters.overdue ? { lt: new Date() } : undefined,
     },
-    include: { equipment: true, area: true, responsible: true, actionPlan: { include: { items: true } } },
+    include: { equipment: true, area: true, responsible: { select: PUBLIC_USER }, actionPlan: { include: { items: true } } },
     orderBy: { identifiedAt: "desc" },
   });
 }
+
+/** Só o que a tela mostra de uma pessoa. `include: true` num User serializava `passwordHash` e
+ * e-mail no payload da página pra qualquer um com permissão de ver não conformidades. */
+const PUBLIC_USER = { id: true, name: true } as const;
 
 export async function getNonconformityDetail(user: CurrentUser, id: string) {
   requirePermission(user, PERMISSIONS.NONCONFORMITY_VIEW);
@@ -34,15 +38,20 @@ export async function getNonconformityDetail(user: CurrentUser, id: string) {
     include: {
       equipment: true,
       area: true,
-      identifiedBy: true,
-      responsible: true,
+      identifiedBy: { select: PUBLIC_USER },
+      responsible: { select: PUBLIC_USER },
       faultCategory: true,
       originExecution: true,
       originAnswer: { include: { question: true, attachments: true } },
       actionPlan: {
         include: {
           items: {
-            include: { responsible: true, completedBy: true, validatedBy: true, attachments: true },
+            include: {
+              responsible: { select: PUBLIC_USER },
+              completedBy: { select: PUBLIC_USER },
+              validatedBy: { select: PUBLIC_USER },
+              attachments: true,
+            },
             orderBy: { createdAt: "asc" },
           },
         },

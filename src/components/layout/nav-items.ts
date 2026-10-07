@@ -150,12 +150,17 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
   const p = user.permissions;
   const groups: NavGroup[] = [];
 
-  const geral: NavItem[] = [
-    { href: "/inicio", label: "Início", icon: "dashboard" },
-    { href: "/rico", label: "Rico", icon: "rico" },
-    { href: "/meu-perfil", label: "Meu Perfil", icon: "myProfile" },
-    { href: "/meu-historico", label: "Meu Histórico", icon: "history" },
-  ];
+  // Rico, Meu Perfil e Meu Histórico são de quem trabalha no sistema (tem colaborador/checklist);
+  // o perfil só-leitura (Auditor) não executa checklist e não tem colaborador vinculado.
+  const worksInSystem = p.has(PERMISSIONS.CHECKLIST_EXECUTE);
+  const geral: NavItem[] = [{ href: "/inicio", label: "Início", icon: "dashboard" }];
+  if (worksInSystem) {
+    geral.push(
+      { href: "/rico", label: "Rico", icon: "rico" },
+      { href: "/meu-perfil", label: "Meu Perfil", icon: "myProfile" },
+      { href: "/meu-historico", label: "Meu Histórico", icon: "history" },
+    );
+  }
   groups.push({ key: "geral", items: geral });
 
   const equipamentos: NavItem[] = [];
@@ -168,7 +173,7 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
   if (p.has(PERMISSIONS.NONCONFORMITY_VIEW)) {
     equipamentos.push({ href: "/nao-conformidades", label: "Não Conformidades", icon: "alert" });
   }
-  if (p.has(PERMISSIONS.ACTIONPLAN_MANAGE)) {
+  if (p.has(PERMISSIONS.ACTIONPLAN_MANAGE) || p.has(PERMISSIONS.ACTIONPLAN_VIEW)) {
     equipamentos.push({ href: "/planos-de-acao", label: "Planos de Ação", icon: "actionPlan" });
   }
   if (p.has(PERMISSIONS.EQUIPMENT_DAMAGE_MANAGE)) {
@@ -194,8 +199,10 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
     sst.push({ href: "/qualificacoes", label: "Qualificações", icon: "qualifications" });
     sst.push({ href: "/qualificacoes/importar", label: "Importar ASOs/NRs", icon: "qualificationImport" });
   }
-  if (p.has(PERMISSIONS.GUARDIAN_MANAGE)) {
+  if (p.has(PERMISSIONS.GUARDIAN_MANAGE) || p.has(PERMISSIONS.GUARDIAN_VIEW)) {
     sst.push({ href: "/guardian", label: "Guardian", icon: "guardian" });
+  }
+  if (p.has(PERMISSIONS.GUARDIAN_MANAGE)) {
     sst.push({ href: "/guardian/importar", label: "Importar Guardian", icon: "qualificationImport" });
   }
   if (sst.length > 0) groups.push({ key: "sst", title: "Segurança", items: sst });
@@ -233,6 +240,9 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
   const indicadores: NavItem[] = [];
   if (p.has(PERMISSIONS.INDICATORS_VIEW_AREA) || p.has(PERMISSIONS.INDICATORS_VIEW_CONSOLIDATED)) {
     indicadores.push({ href: "/indicadores", label: "Indicadores", icon: "indicators" });
+  }
+  if (p.has(PERMISSIONS.ATTENDANCE_VIEW) || p.has(PERMISSIONS.SCHEDULE_MANAGE) || p.has(PERMISSIONS.HR_MANAGE)) {
+    indicadores.push({ href: "/presenca", label: "Presença e Faltas", icon: "schedules" });
   }
   if (p.has(PERMISSIONS.HISTORY_VIEW)) {
     indicadores.push({ href: "/historico", label: "Histórico Geral", icon: "historyAll" });

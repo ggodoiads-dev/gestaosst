@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireUser, requirePermission } from "@/server/auth/current-user";
+import { requireUser, hasPermission, ForbiddenError } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
 import { listActionItemsForUser } from "@/server/services/nonconformity.service";
 import { PageHeader, PageBody } from "@/components/domain/page-header";
@@ -15,7 +15,9 @@ export default async function PlanosDeAcaoPage({
   searchParams: Promise<{ overdue?: string }>;
 }) {
   const user = await requireUser();
-  requirePermission(user, PERMISSIONS.ACTIONPLAN_MANAGE);
+  if (!hasPermission(user, PERMISSIONS.ACTIONPLAN_MANAGE) && !hasPermission(user, PERMISSIONS.ACTIONPLAN_VIEW)) {
+    throw new ForbiddenError();
+  }
   const { overdue } = await searchParams;
 
   const items = await listActionItemsForUser(user, { overdue: overdue === "true" });

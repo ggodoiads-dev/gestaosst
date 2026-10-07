@@ -22,6 +22,7 @@ export const PERMISSIONS = {
   NONCONFORMITY_VIEW_ALL_AREAS: "nonconformity.view_all_areas",
   NONCONFORMITY_TREAT: "nonconformity.treat",
 
+  ACTIONPLAN_VIEW: "actionplan.view",
   ACTIONPLAN_MANAGE: "actionplan.manage",
   ACTIONITEM_VALIDATE: "actionitem.validate",
 
@@ -37,6 +38,7 @@ export const PERMISSIONS = {
   COLLABORATOR_MANAGE: "collaborator.manage",
   ACCIDENT_MANAGE: "accident.manage",
   EQUIPMENT_DAMAGE_MANAGE: "equipment_damage.manage",
+  GUARDIAN_VIEW: "guardian.view",
   GUARDIAN_MANAGE: "guardian.manage",
   QUALIFICATION_MANAGE: "qualification.manage",
   EPI_MANAGE: "epi.manage",
@@ -49,6 +51,7 @@ export const PERMISSIONS = {
   PRODUCTIVITY_SELF_VIEW: "productivity.self_view",
   SHIFT_CHECKIN_SELF: "shift.checkin_self",
   SHIFT_CHECKIN_MANAGE: "shift.checkin_manage",
+  ATTENDANCE_VIEW: "attendance.view",
   REPORTS_VIEW: "reports.view",
   WARNING_SELF_VIEW: "warning.self_view",
 
@@ -74,6 +77,7 @@ export const PERMISSION_DESCRIPTIONS: Record<PermissionKey, string> = {
   [PERMISSIONS.NONCONFORMITY_VIEW_ALL_AREAS]: "Visualizar não conformidades de todas as áreas",
   [PERMISSIONS.NONCONFORMITY_TREAT]: "Tratar não conformidades",
 
+  [PERMISSIONS.ACTIONPLAN_VIEW]: "Apenas visualizar os planos de ação (sem criar nem alterar)",
   [PERMISSIONS.ACTIONPLAN_MANAGE]: "Criar e acompanhar planos de ação",
   [PERMISSIONS.ACTIONITEM_VALIDATE]: "Validar correções e liberar equipamentos",
 
@@ -89,6 +93,7 @@ export const PERMISSION_DESCRIPTIONS: Record<PermissionKey, string> = {
   [PERMISSIONS.COLLABORATOR_MANAGE]: "Cadastrar e alterar colaboradores",
   [PERMISSIONS.ACCIDENT_MANAGE]: "Registrar e tratar acidentes/incidentes",
   [PERMISSIONS.EQUIPMENT_DAMAGE_MANAGE]: "Registrar e tratar avarias em equipamentos (frota)",
+  [PERMISSIONS.GUARDIAN_VIEW]: "Apenas visualizar os indicadores e relatos do Guardian (sem importar)",
   [PERMISSIONS.GUARDIAN_MANAGE]: "Importar e consultar relatos do Guardian",
   [PERMISSIONS.QUALIFICATION_MANAGE]: "Gerenciar treinamentos, NRs, ASOs e integrações",
   [PERMISSIONS.EPI_MANAGE]: "Gerenciar funções, tipos de EPI e fichas de entrega dos colaboradores",
@@ -101,6 +106,7 @@ export const PERMISSION_DESCRIPTIONS: Record<PermissionKey, string> = {
   [PERMISSIONS.PRODUCTIVITY_SELF_VIEW]: "Ver a própria produtividade",
   [PERMISSIONS.SHIFT_CHECKIN_SELF]: "Confirmar a própria presença no turno",
   [PERMISSIONS.SHIFT_CHECKIN_MANAGE]: "Confirmar presença de qualquer colaborador (quando ele esquece)",
+  [PERMISSIONS.ATTENDANCE_VIEW]: "Apenas visualizar presença, faltas e escala dos colaboradores (sem salário nem edição)",
   [PERMISSIONS.REPORTS_VIEW]: "Gerar e baixar relatórios",
   [PERMISSIONS.WARNING_SELF_VIEW]: "Ver as próprias advertências",
 
@@ -112,6 +118,7 @@ export const ROLE_KEYS = {
   LIDER_SUPERVISOR: "LIDER_SUPERVISOR",
   GESTOR: "GESTOR",
   ADMINISTRADOR: "ADMINISTRADOR",
+  AUDITOR: "AUDITOR",
 } as const;
 
 export type RoleKeyValue = (typeof ROLE_KEYS)[keyof typeof ROLE_KEYS];
@@ -121,6 +128,7 @@ export const ROLE_LABELS: Record<RoleKeyValue, string> = {
   LIDER_SUPERVISOR: "Líder / Supervisor",
   GESTOR: "Gestor",
   ADMINISTRADOR: "Administrador",
+  AUDITOR: "Auditor",
 };
 
 /** Permissões padrão de cada perfil ao criar a base (seções 6-9). */
@@ -174,4 +182,21 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<RoleKeyValue, PermissionKey[]> = {
     PERMISSIONS.REPORTS_VIEW,
   ],
   ADMINISTRADOR: Object.values(PERMISSIONS),
+  /** Perfil externo (cliente/auditor): SÓ VÊ. Nenhuma permissão de gerenciar, tratar, validar,
+   * executar, importar nem de RH (`HR_MANAGE` expõe salário) — qualquer permissão nova só entra
+   * aqui se for estritamente de leitura. */
+  AUDITOR: [
+    PERMISSIONS.EQUIPMENT_VIEW,
+    PERMISSIONS.EQUIPMENT_VIEW_ALL_AREAS,
+    PERMISSIONS.NONCONFORMITY_VIEW,
+    PERMISSIONS.NONCONFORMITY_VIEW_ALL_AREAS,
+    PERMISSIONS.ACTIONPLAN_VIEW,
+    PERMISSIONS.INDICATORS_VIEW_AREA,
+    PERMISSIONS.INDICATORS_VIEW_CONSOLIDATED,
+    PERMISSIONS.CHECKLIST_VIEW_TEAM,
+    PERMISSIONS.CHECKLIST_COMPLIANCE_VIEW,
+    PERMISSIONS.HISTORY_VIEW,
+    PERMISSIONS.GUARDIAN_VIEW,
+    PERMISSIONS.ATTENDANCE_VIEW,
+  ],
 };

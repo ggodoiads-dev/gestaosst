@@ -45,7 +45,16 @@ export async function listChecklistBoardForUser(
   user: CurrentUser,
   filters: { areaId?: string } = {},
 ): Promise<ChecklistBoardItem[]> {
-  requirePermission(user, PERMISSIONS.CHECKLIST_EXECUTE);
+  // Só lista a situação do dia — também alimenta os indicadores e o início, que perfis só-leitura
+  // (Auditor) precisam abrir. Iniciar/responder um checklist continua exigindo CHECKLIST_EXECUTE
+  // em `getExecutionContext`/`saveAnswer`/`finalizeExecution`.
+  if (
+    !user.permissions.has(PERMISSIONS.CHECKLIST_EXECUTE) &&
+    !user.permissions.has(PERMISSIONS.INDICATORS_VIEW_AREA) &&
+    !user.permissions.has(PERMISSIONS.INDICATORS_VIEW_CONSOLIDATED)
+  ) {
+    throw new ForbiddenError();
+  }
   if (filters.areaId) {
     requireAreaAccess(user, filters.areaId, PERMISSIONS.EQUIPMENT_VIEW_ALL_AREAS);
   }

@@ -29,11 +29,13 @@ export function ActionItemRow({
   nonconformityId,
   equipmentId,
   canValidate,
+  canComplete,
 }: {
   item: ActionItemData;
   nonconformityId: string;
   equipmentId: string;
   canValidate: boolean;
+  canComplete: boolean;
 }) {
   const [notes, setNotes] = useState("");
   const [isPending, startTransition] = useTransition();
@@ -66,7 +68,7 @@ export function ActionItemRow({
         <Badge tone="neutral">{item.priority}</Badge>
       </div>
 
-      {item.status === "PENDENTE" && (
+      {item.status === "PENDENTE" && canComplete && (
         <div className="flex flex-col gap-2 pt-1">
           <Textarea
             rows={2}

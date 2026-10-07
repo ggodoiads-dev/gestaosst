@@ -18,10 +18,12 @@ export function ChecklistAdherenceCard({
   initialFrom,
   initialTo,
   initialReport,
+  canJustify,
 }: {
   initialFrom: string;
   initialTo: string;
   initialReport: ChecklistAdherenceReport;
+  canJustify: boolean;
 }) {
   const [from, setFrom] = useState(initialFrom);
   const [to, setTo] = useState(initialTo);
@@ -113,15 +115,17 @@ export function ChecklistAdherenceCard({
                     )}
                   </TableCell>
                   <TableCell>
-                    <JustifyChecklistDialog
-                      collaboratorId={d.collaboratorId}
-                      collaboratorName={d.collaboratorName}
-                      date={d.date}
-                      dateLabel={formatDate(parseDateOnly(d.date))}
-                      currentReason={d.justification?.reason}
-                      currentNote={d.justification?.note}
-                      onSaved={fetchReport}
-                    />
+                    {canJustify && (
+                      <JustifyChecklistDialog
+                        collaboratorId={d.collaboratorId}
+                        collaboratorName={d.collaboratorName}
+                        date={d.date}
+                        dateLabel={formatDate(parseDateOnly(d.date))}
+                        currentReason={d.justification?.reason}
+                        currentNote={d.justification?.note}
+                        onSaved={fetchReport}
+                      />
+                    )}
                   </TableCell>
                 </TableRow>
               ))}

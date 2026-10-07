@@ -86,7 +86,8 @@ export async function getAlertsSummary(user: CurrentUser): Promise<AlertsSummary
         category: "CHECKLIST_PENDENTE",
         label: `${d.collaboratorName} — checklist pendente`,
         detail: d.detail,
-        href: "/rh/tratativa-ponto",
+        // A tratativa de ponto exige RH; quem só acompanha indicadores (gestor, auditor) vai pro painel.
+        href: hasPermission(user, PERMISSIONS.HR_MANAGE) ? "/rh/tratativa-ponto" : "/indicadores",
         date: parseDateOnly(d.date),
       });
     }

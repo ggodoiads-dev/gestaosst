@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ChevronRight, Clock, MapPin, ClipboardList } from "lucide-react";
-import { requireUser } from "@/server/auth/current-user";
+import { requireUser, requirePermission } from "@/server/auth/current-user";
+import { PERMISSIONS } from "@/domain/shared/permissions";
 import {
   listChecklistBoardForUser,
   type ChecklistBoardEquipmentItem,
@@ -39,6 +40,7 @@ export default async function RealizarChecklistPage({
   searchParams: Promise<{ area?: string }>;
 }) {
   const user = await requireUser();
+  requirePermission(user, PERMISSIONS.CHECKLIST_EXECUTE);
   const { area: selectedAreaId } = await searchParams;
   const board = await listChecklistBoardForUser(user);
 

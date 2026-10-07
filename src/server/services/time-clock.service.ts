@@ -21,6 +21,15 @@ function requireHrOrSupervisao(user: CurrentUser): void {
   }
 }
 
+/** Justificar um checklist não feito é ESCRITA — só RH ou um supervisor que gerencia plano de ação.
+ * Quem só tem `INDICATORS_VIEW_AREA` (ex: Auditor, perfil só-leitura) enxerga a aderência mas não
+ * escreve justificativa. */
+function requireCanJustify(user: CurrentUser): void {
+  if (!hasPermission(user, PERMISSIONS.HR_MANAGE) && !hasPermission(user, PERMISSIONS.ACTIONPLAN_MANAGE)) {
+    throw new ForbiddenError();
+  }
+}
+
 /** RH e quem tem visão consolidada enxergam todo mundo; um supervisor só com INDICATORS_VIEW_AREA
  * fica restrito às próprias áreas — mesmo critério de `areaScope` em indicators.service.ts. */
 function adherenceAreaScope(user: CurrentUser): string[] | undefined {
@@ -641,7 +650,7 @@ export async function justifyChecklistPending(
   user: CurrentUser,
   input: { collaboratorId: string; date: Date; reason: ChecklistJustificationReason; note: string | null },
 ) {
-  requireHrOrSupervisao(user);
+  requireCanJustify(user);
 
   const allowedAreaIds = adherenceAreaScope(user);
   if (allowedAreaIds) {

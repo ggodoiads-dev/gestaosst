@@ -667,6 +667,7 @@ export default async function IndicadoresPage({
           initialFrom={toInputValue(adherenceFrom)}
           initialTo={toInputValue(adherenceTo)}
           initialReport={checklistAdherence}
+          canJustify={hasPermission(user, PERMISSIONS.HR_MANAGE) || hasPermission(user, PERMISSIONS.ACTIONPLAN_MANAGE)}
         />
 
         <Card>

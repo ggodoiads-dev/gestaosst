@@ -101,6 +101,7 @@ export default async function NonconformidadeDetailPage({
                 nonconformityId={nc.id}
                 equipmentId={nc.equipmentId}
                 canValidate={canValidate}
+                canComplete={canManage}
               />
             ))}
           </CardContent>
