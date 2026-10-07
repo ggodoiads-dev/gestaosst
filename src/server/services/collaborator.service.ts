@@ -307,19 +307,48 @@ export async function updateCollaborator(user: CurrentUser, id: string, data: Co
 export async function setCollaboratorActive(user: CurrentUser, id: string, active: boolean) {
   requirePermission(user, PERMISSIONS.COLLABORATOR_MANAGE);
   const before = await db.collaborator.findUniqueOrThrow({ where: { id } });
-  const collaborator = await db.collaborator.update({
-    where: { id },
-    data: { active, inactivatedAt: active ? null : new Date() },
+
+  return db.$transaction(async (tx) => {
+    const collaborator = await tx.collaborator.update({
+      where: { id },
+      data: { active, inactivatedAt: active ? null : new Date() },
+    });
+    await recordAudit(
+      {
+        userId: user.id,
+        action: active ? "UPDATE" : "CANCEL",
+        entityType: "Collaborator",
+        entityId: id,
+        previousValue: { active: before.active },
+        newValue: { active },
+      },
+      tx,
+    );
+
+    // Desligou, perde o login junto — senão a pessoa continuaria entrando no sistema. A sessão
+    // morre na hora (`getCurrentUser` confere `active` a cada requisição). Religar o colaborador
+    // NÃO devolve o acesso sozinho: reativar o login é uma decisão à parte em Usuários. Nunca
+    // desativa o login de quem está executando o desligamento, pra ninguém se trancar pra fora.
+    if (!active && before.userId && before.userId !== user.id) {
+      const linkedUser = await tx.user.findUnique({ where: { id: before.userId }, select: { active: true } });
+      if (linkedUser?.active) {
+        await tx.user.update({ where: { id: before.userId }, data: { active: false } });
+        await recordAudit(
+          {
+            userId: user.id,
+            action: "CANCEL",
+            entityType: "User",
+            entityId: before.userId,
+            previousValue: { active: true },
+            newValue: { active: false, reason: "Colaborador desligado" },
+          },
+          tx,
+        );
+      }
+    }
+
+    return collaborator;
   });
-  await recordAudit({
-    userId: user.id,
-    action: active ? "UPDATE" : "CANCEL",
-    entityType: "Collaborator",
-    entityId: id,
-    previousValue: { active: before.active },
-    newValue: { active },
-  });
-  return collaborator;
 }
 
 /**
