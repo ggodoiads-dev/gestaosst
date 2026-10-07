@@ -230,7 +230,7 @@ export function AppShell({
       </aside>
 
       <div className="flex flex-1 flex-col min-w-0">
-        <header className="flex items-center gap-3 h-14 border-b border-border bg-surface px-4">
+        <header className="sticky top-0 z-30 flex items-center gap-3 h-14 border-b border-border bg-surface px-3 sm:px-4">
           <button
             className="lg:hidden text-foreground-subtle"
             onClick={() => setMobileOpen(true)}
@@ -270,7 +270,7 @@ export function AppShell({
           </div>
         </header>
 
-        <main className="flex-1 min-w-0">{children}</main>
+        <main className="flex-1 min-w-0 pb-24 lg:pb-0">{children}</main>
       </div>
 
       <RicoFloatingWidget />

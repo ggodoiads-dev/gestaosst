@@ -38,7 +38,7 @@ export function TableHead({ className, ...props }: React.ThHTMLAttributes<HTMLTa
   return (
     <th
       className={cn(
-        "text-left text-[11px] font-semibold uppercase tracking-wide text-foreground-subtle px-3 py-2.5 border-b border-border",
+        "text-left text-[11px] font-semibold uppercase tracking-wide text-foreground-subtle px-2 py-2.5 border-b border-border sm:px-3",
         className,
       )}
       {...props}
@@ -47,7 +47,7 @@ export function TableHead({ className, ...props }: React.ThHTMLAttributes<HTMLTa
 }
 
 export function TableCell({ className, ...props }: React.TdHTMLAttributes<HTMLTableCellElement>) {
-  return <td className={cn("px-3 py-2.5 text-foreground align-middle", className)} {...props} />;
+  return <td className={cn("px-2 py-2.5 text-foreground align-middle sm:px-3", className)} {...props} />;
 }
 
 export function TableEmpty({ colSpan, message = "Nenhum registro encontrado." }: { colSpan: number; message?: string }) {
