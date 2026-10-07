@@ -5,7 +5,7 @@ const config: CapacitorConfig = {
   appName: "SIGO",
   webDir: "www",
   server: {
-    url: "https://gestaosst.vercel.app",
+    url: "https://sigo.log.br",
     androidScheme: "https",
     cleartext: false,
   },
