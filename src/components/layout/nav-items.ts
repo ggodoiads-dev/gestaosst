@@ -81,7 +81,8 @@ export type NavIconKey =
   | "fleet"
   | "finance"
   | "guardian"
-  | "myProfile";
+  | "myProfile"
+  | "access";
 
 export type NavItem = {
   href: string;
@@ -135,6 +136,7 @@ export const NAV_ICONS: Record<NavIconKey, LucideIcon> = {
   finance: CircleDollarSign,
   guardian: ShieldCheck,
   myProfile: IdCard,
+  access: BarChart3,
 };
 
 /**
@@ -259,6 +261,9 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
   }
   if (p.has(PERMISSIONS.USER_MANAGE)) {
     admin.push({ href: "/usuarios", label: "Usuários e Permissões", icon: "users" });
+  }
+  if (p.has(PERMISSIONS.USER_MANAGE)) {
+    admin.push({ href: "/acessos", label: "Acessos", icon: "access" });
   }
   if (p.has(PERMISSIONS.AUDIT_VIEW)) {
     admin.push({ href: "/auditoria", label: "Auditoria", icon: "audit" });

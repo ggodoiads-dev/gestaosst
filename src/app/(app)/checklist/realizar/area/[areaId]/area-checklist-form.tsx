@@ -18,6 +18,7 @@ import {
 import { FIXED_ANSWER_OPTIONS, NOT_APPLICABLE_VALUE } from "@/domain/checklist/answer-values";
 import { compressImage } from "@/lib/compress-image";
 import { withTimeout, connectionErrorMessage } from "@/lib/with-timeout";
+import { useRico } from "@/components/rico/rico-context";
 
 export type AreaChecklistItemData = {
   equipmentId: string;
@@ -53,6 +54,7 @@ export function AreaChecklistForm({
   items: AreaChecklistItemData[];
 }) {
   const router = useRouter();
+  const { notifyContext } = useRico();
   const [rows, setRows] = useState<Record<string, RowState>>(() =>
     Object.fromEntries(
       items.map((item) => [
@@ -75,6 +77,17 @@ export function AreaChecklistForm({
   function handleValueChange(item: AreaChecklistItemData, value: string) {
     if (!item.executionId) return;
     updateRow(item.equipmentId, { value });
+    // Mesmo gatilho do checklist individual: resposta que cai numa regra com comentário/foto
+    // obrigatório é um desvio, e o Rico comenta na hora (best-effort, nunca atrapalha a tela).
+    const triggered = rules.find((r) => r.triggerValue === value);
+    if (triggered && value !== NOT_APPLICABLE_VALUE && (triggered.requiresComment || triggered.requiresPhoto)) {
+      notifyContext({
+        kind: "checklist_deviation",
+        equipmentCode: item.code,
+        questionTitle,
+        answerValue: CONFORME_OPTIONS.find((o) => o.value === value)?.label ?? value,
+      });
+    }
     void saveAnswerAction(item.executionId, questionId, value, rows[item.equipmentId]?.comment ?? null);
   }
 

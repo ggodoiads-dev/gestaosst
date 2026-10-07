@@ -103,6 +103,7 @@ const ICONS: Record<NavIconKey, LucideIcon> = {
   finance: CircleDollarSign,
   guardian: ShieldCheck,
   myProfile: IdCard,
+  access: BarChart3,
 };
 
 /**
