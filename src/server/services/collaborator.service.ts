@@ -248,6 +248,28 @@ export async function attachCollaboratorPhoto(
   });
 }
 
+/** O próprio colaborador troca a sua foto de perfil (escolhe a que quiser) — sem precisar de
+ * `COLLABORATOR_MANAGE`: só vale pro colaborador vinculado ao usuário logado. */
+export async function attachMyCollaboratorPhoto(
+  user: CurrentUser,
+  file: { filename: string; path: string; mimeType: string; size: number },
+) {
+  const own = await db.collaborator.findUnique({ where: { userId: user.id }, select: { id: true } });
+  if (!own) throw new ForbiddenError("Seu usuário não está vinculado a um colaborador.");
+
+  return db.attachment.create({
+    data: {
+      filename: file.filename,
+      path: file.path,
+      mimeType: file.mimeType,
+      size: file.size,
+      context: "COLABORADOR",
+      collaboratorId: own.id,
+      uploadedById: user.id,
+    },
+  });
+}
+
 export async function createCollaborator(user: CurrentUser, data: CollaboratorInput) {
   requirePermission(user, PERMISSIONS.COLLABORATOR_MANAGE);
 

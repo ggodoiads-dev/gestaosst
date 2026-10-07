@@ -21,7 +21,8 @@ export type ProductivityEntryInput = {
 export function getMyCollaboratorProfile(user: CurrentUser) {
   return db.collaborator.findUnique({
     where: { userId: user.id },
-    include: { turno: { include: { scheduleType: true } } },
+    omit: { salary: true },
+    include: { turno: { include: { scheduleType: true } }, area: true },
   });
 }
 
