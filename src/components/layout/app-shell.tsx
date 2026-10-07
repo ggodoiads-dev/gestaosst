@@ -139,13 +139,11 @@ export function AppShell({
   navGroups,
   user,
   alerts,
-  showRico,
   children,
 }: {
   navGroups: NavGroup[];
   user: { name: string; email: string; roleKey: string };
   alerts: AlertsSummary;
-  showRico: boolean;
   children: React.ReactNode;
 }) {
   const [mobileOpen, setMobileOpen] = React.useState(false);
@@ -275,7 +273,7 @@ export function AppShell({
         <main className="flex-1 min-w-0 pb-24 lg:pb-0">{children}</main>
       </div>
 
-      {showRico && <RicoFloatingWidget />}
+      <RicoFloatingWidget />
     </div>
     </RicoProvider>
   );

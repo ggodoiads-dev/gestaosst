@@ -1,6 +1,6 @@
 import "server-only";
 import OpenAI from "openai";
-import type { CurrentUser } from "@/server/auth/current-user";
+import { ForbiddenError, type CurrentUser } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
 import { parseDateOnly } from "@/lib/dates";
 import type { NonconformityStatus, EpiDeliveryReason } from "@/generated/prisma/enums";
@@ -569,7 +569,19 @@ export async function runRicoTurn(
     for (const call of toolCalls) {
       if (call.type !== "function") continue;
       const args = call.function.arguments ? (JSON.parse(call.function.arguments) as Record<string, unknown>) : {};
-      const result = await runReadTool(user, call.function.name, args);
+      // Perfis só-leitura (Auditor) usam o Rico, mas várias consultas exigem permissões que eles não têm.
+      // Em vez de a conversa inteira falhar, o Rico recebe o aviso e explica pro usuário.
+      let result: unknown;
+      try {
+        result = await runReadTool(user, call.function.name, args);
+      } catch (error) {
+        result = {
+          erro:
+            error instanceof ForbiddenError
+              ? "O usuário não tem permissão para consultar isso. Diga isso a ele com educação e sugira o que ele pode consultar."
+              : "Não foi possível consultar isso agora.",
+        };
+      }
       messages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(result) });
     }
   }

@@ -150,13 +150,15 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
   const p = user.permissions;
   const groups: NavGroup[] = [];
 
-  // Rico, Meu Perfil e Meu Histórico são de quem trabalha no sistema (tem colaborador/checklist);
-  // o perfil só-leitura (Auditor) não executa checklist e não tem colaborador vinculado.
+  // Meu Perfil e Meu Histórico são de quem trabalha no sistema (tem colaborador/checklist); o perfil
+  // só-leitura (Auditor) não executa checklist e não tem colaborador vinculado. O Rico é pra todos.
   const worksInSystem = p.has(PERMISSIONS.CHECKLIST_EXECUTE);
-  const geral: NavItem[] = [{ href: "/inicio", label: "Início", icon: "dashboard" }];
+  const geral: NavItem[] = [
+    { href: "/inicio", label: "Início", icon: "dashboard" },
+    { href: "/rico", label: "Rico", icon: "rico" },
+  ];
   if (worksInSystem) {
     geral.push(
-      { href: "/rico", label: "Rico", icon: "rico" },
       { href: "/meu-perfil", label: "Meu Perfil", icon: "myProfile" },
       { href: "/meu-historico", label: "Meu Histórico", icon: "history" },
     );
