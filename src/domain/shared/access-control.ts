@@ -21,6 +21,8 @@ export type CurrentUser = {
   canRollCall: boolean;
   rollCallAreaIds: Set<string>;
   rollCallTurnoIds: Set<string>;
+  /** Pessoas específicas de quem faz a chamada (além do escopo por área/turno). */
+  rollCallCollaboratorIds: Set<string>;
 };
 
 export class UnauthorizedError extends Error {

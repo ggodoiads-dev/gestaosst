@@ -30,7 +30,88 @@ const initialState: ActionResult = { ok: true };
 
 type TurnoOption = { id: string; name: string };
 
-type FormProps = { roles: Role[]; units: Unit[]; areas: Area[]; functions: JobFunction[]; turnos: TurnoOption[] };
+type CollaboratorOption = { id: string; name: string; areaName: string | null };
+
+type FormProps = {
+  roles: Role[];
+  units: Unit[];
+  areas: Area[];
+  functions: JobFunction[];
+  turnos: TurnoOption[];
+  collaborators: CollaboratorOption[];
+};
+
+/** Escolha, pessoa por pessoa, de quem o usuário faz a chamada (presença/falta). Guarda a própria
+ * seleção — fica dentro do <form>, então os hidden inputs vão junto no envio. */
+function CollaboratorPicker({
+  collaborators,
+  initialIds,
+}: {
+  collaborators: CollaboratorOption[];
+  initialIds: string[];
+}) {
+  const [selected, setSelected] = useState<Set<string>>(new Set(initialIds));
+  const [query, setQuery] = useState("");
+
+  const needle = query.trim().toLowerCase();
+  const visible = needle
+    ? collaborators.filter((c) => c.name.toLowerCase().includes(needle) || (c.areaName ?? "").toLowerCase().includes(needle))
+    : collaborators;
+
+  function toggle(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function selectVisible() {
+    setSelected((prev) => new Set([...prev, ...visible.map((c) => c.id)]));
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      {[...selected].map((id) => (
+        <input key={id} type="hidden" name="rollCallCollaboratorIds" value={id} />
+      ))}
+      <div className="flex items-center justify-between gap-2">
+        <Label>Pessoas da chamada</Label>
+        <span className="text-xs text-foreground-subtle">{selected.size} selecionada(s)</span>
+      </div>
+      <p className="text-xs text-foreground-subtle">
+        Marque exatamente de quem este usuário vai fazer a chamada (presente ou falta). Soma com as áreas/turnos acima.
+      </p>
+      <Input
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Buscar por nome ou área..."
+        onKeyDown={(e) => {
+          if (e.key === "Enter") e.preventDefault();
+        }}
+      />
+      <div className="flex flex-col gap-1.5 max-h-56 overflow-y-auto rounded-md border border-border p-2.5">
+        {visible.length === 0 && <p className="text-sm text-foreground-subtle">Nenhum colaborador encontrado.</p>}
+        {visible.map((c) => (
+          <label key={c.id} className="flex items-center gap-2 text-sm text-foreground-muted">
+            <Checkbox checked={selected.has(c.id)} onCheckedChange={() => toggle(c.id)} />
+            <span className="truncate">{c.name}</span>
+            {c.areaName && <span className="shrink-0 text-xs text-foreground-subtle">— {c.areaName}</span>}
+          </label>
+        ))}
+      </div>
+      <div className="flex gap-2">
+        <button type="button" onClick={selectVisible} className="text-xs text-accent hover:underline">
+          Marcar todos {needle ? "do filtro" : ""}
+        </button>
+        <button type="button" onClick={() => setSelected(new Set())} className="text-xs text-foreground-subtle hover:underline">
+          Limpar seleção
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function AreaChecklist({
   areas,
@@ -114,6 +195,8 @@ function TurnoChecklist({
 function RollCallFields({
   areas,
   turnos,
+  collaborators,
+  initialCollaboratorIds,
   canRollCall,
   onCanRollCallChange,
   selectedAreas,
@@ -123,6 +206,8 @@ function RollCallFields({
 }: {
   areas: Area[];
   turnos: TurnoOption[];
+  collaborators: CollaboratorOption[];
+  initialCollaboratorIds: string[];
   canRollCall: boolean;
   onCanRollCallChange: (value: boolean) => void;
   selectedAreas: Set<string>;
@@ -154,13 +239,14 @@ function RollCallFields({
             <p className="text-xs text-foreground-subtle">Nenhum marcado = todos os turnos das áreas acima.</p>
             <TurnoChecklist turnos={turnos} selected={selectedTurnos} onToggle={onToggleTurno} />
           </div>
+          <CollaboratorPicker collaborators={collaborators} initialIds={initialCollaboratorIds} />
         </>
       )}
     </div>
   );
 }
 
-export function CreateUserDialog({ roles, units, areas, functions, turnos }: FormProps) {
+export function CreateUserDialog({ roles, units, areas, functions, turnos, collaborators }: FormProps) {
   const [open, setOpen] = useState(false);
   const [state, formAction, pending] = useActionState(createUserAction, initialState);
   useCloseOnSuccess(pending, state, () => setOpen(false));
@@ -271,6 +357,8 @@ export function CreateUserDialog({ roles, units, areas, functions, turnos }: For
             <RollCallFields
               areas={areas}
               turnos={turnos}
+              collaborators={collaborators}
+              initialCollaboratorIds={[]}
               canRollCall={canRollCall}
               onCanRollCallChange={setCanRollCall}
               selectedAreas={selectedRollCallAreas}
@@ -295,9 +383,10 @@ export function CreateUserDialog({ roles, units, areas, functions, turnos }: For
 type UserWithAreas = Omit<User, "passwordHash"> & { userAreas: { areaId: string }[] } & { userFunctions: { functionId: string }[] } & {
   userRollCallAreas: { areaId: string }[];
   userRollCallTurnos: { turnoId: string }[];
+  userRollCallCollaborators: { collaboratorId: string }[];
 };
 
-export function EditUserDialog({ user, roles, units, areas, functions, turnos }: FormProps & { user: UserWithAreas }) {
+export function EditUserDialog({ user, roles, units, areas, functions, turnos, collaborators }: FormProps & { user: UserWithAreas }) {
   const [open, setOpen] = useState(false);
   const [state, formAction, pending] = useActionState(updateUserAction, initialState);
   useCloseOnSuccess(pending, state, () => setOpen(false));
@@ -414,6 +503,8 @@ export function EditUserDialog({ user, roles, units, areas, functions, turnos }:
             <RollCallFields
               areas={areas}
               turnos={turnos}
+              collaborators={collaborators}
+              initialCollaboratorIds={user.userRollCallCollaborators.map((c) => c.collaboratorId)}
               canRollCall={canRollCall}
               onCanRollCallChange={setCanRollCall}
               selectedAreas={selectedRollCallAreas}

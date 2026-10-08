@@ -41,12 +41,7 @@ async function assertProductivityAccess(
   if (user.permissions.has(PERMISSIONS.PRODUCTIVITY_MANAGE)) return;
   if (user.permissions.has(PERMISSIONS.PRODUCTIVITY_MANAGE_TEAM) || user.canRollCall) {
     const scope = rollCallCollaboratorWhere(user);
-    if (scope) {
-      const target = await db.collaborator.findUnique({ where: { id: collaboratorId }, select: { areaId: true, turnoId: true } });
-      const areaOk = Boolean(target?.areaId && scope.areaId.in.includes(target.areaId));
-      const turnoOk = !scope.turnoId || Boolean(target?.turnoId && scope.turnoId.in.includes(target.turnoId));
-      if (areaOk && turnoOk) return;
-    }
+    if (scope && (await db.collaborator.count({ where: { AND: [scope, { id: collaboratorId }] } })) > 0) return;
   }
   if (selfPermissions.some((p) => user.permissions.has(p))) {
     const own = await getMyCollaboratorProfile(user);

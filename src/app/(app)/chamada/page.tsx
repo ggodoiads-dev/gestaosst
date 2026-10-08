@@ -18,7 +18,7 @@ export default async function ChamadaPage() {
         <Card>
           <CardContent className="pt-5">
             {entries.length === 0 ? (
-              <p className="text-sm text-foreground-subtle">Ninguém escalado pra trabalhar hoje na sua equipe.</p>
+              <p className="text-sm text-foreground-subtle">Ninguém da sua chamada está escalado pra trabalhar hoje.</p>
             ) : (
               <RollCallForm entries={entries} />
             )}

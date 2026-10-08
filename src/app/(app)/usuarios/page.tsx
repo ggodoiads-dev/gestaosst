@@ -3,6 +3,7 @@ import { requireUser, requirePermission } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
 import { listUsers, listRoles } from "@/server/services/user.service";
 import { listUnits, listAreas, listActiveJobFunctions } from "@/server/services/masterdata.service";
+import { listCollaboratorsForUser } from "@/server/services/collaborator.service";
 import { listTurnosForSelect } from "@/server/services/schedule.service";
 import { PageHeader, PageBody } from "@/components/domain/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -28,14 +29,16 @@ export default async function UsuariosPage({ searchParams }: { searchParams: Pro
   const user = await requireUser();
   requirePermission(user, PERMISSIONS.USER_MANAGE);
 
-  const [allUsers, roles, units, areas, functions, turnos] = await Promise.all([
+  const [allUsers, roles, units, areas, functions, turnos, activeCollaborators] = await Promise.all([
     listUsers(),
     listRoles(),
     listUnits(),
     listAreas(),
     listActiveJobFunctions(),
     listTurnosForSelect(),
+    listCollaboratorsForUser(user, { onlyActive: true }),
   ]);
+  const collaboratorOptions = activeCollaborators.map((c) => ({ id: c.id, name: c.name, areaName: c.area?.name ?? null }));
 
   const counts: Record<StatusFilter, number> = {
     ativos: allUsers.filter((u) => u.active).length,
@@ -71,7 +74,7 @@ export default async function UsuariosPage({ searchParams }: { searchParams: Pro
                 ))}
               </div>
             </div>
-            <CreateUserDialog roles={roles} units={units} areas={areas} functions={functions} turnos={turnos} />
+            <CreateUserDialog roles={roles} units={units} areas={areas} functions={functions} turnos={turnos} collaborators={collaboratorOptions} />
           </CardHeader>
           <CardContent className="p-0">
             <Table>
@@ -107,7 +110,14 @@ export default async function UsuariosPage({ searchParams }: { searchParams: Pro
                     </TableCell>
                     <TableCell className="text-foreground-subtle">
                       {u.canRollCall
-                        ? u.userRollCallAreas.map((a) => a.area.name).join(", ") || "Sim (sem área)"
+                        ? [
+                            u.userRollCallAreas.map((a) => a.area.name).join(", "),
+                            u.userRollCallCollaborators.length > 0
+                              ? `${u.userRollCallCollaborators.length} pessoa(s)`
+                              : "",
+                          ]
+                            .filter(Boolean)
+                            .join(" + ") || "Sim (sem área)"
                         : "—"}
                     </TableCell>
                     <TableCell>
@@ -116,7 +126,7 @@ export default async function UsuariosPage({ searchParams }: { searchParams: Pro
                     <TableCell className="text-foreground-subtle">{formatDateTime(u.lastLoginAt)}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
-                        <EditUserDialog user={u} roles={roles} units={units} areas={areas} functions={functions} turnos={turnos} />
+                        <EditUserDialog user={u} roles={roles} units={units} areas={areas} functions={functions} turnos={turnos} collaborators={collaboratorOptions} />
                         <ResetPasswordDialog userId={u.id} userName={u.name} />
                         {u.active ? (
                           <SoftDeleteButton

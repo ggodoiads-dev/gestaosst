@@ -18,6 +18,7 @@ export function listUsers() {
       userFunctions: { include: { function: true } },
       userRollCallAreas: { include: { area: true } },
       userRollCallTurnos: { include: { turno: true } },
+      userRollCallCollaborators: { select: { collaboratorId: true } },
     },
     orderBy: { name: "asc" },
   });
@@ -46,6 +47,7 @@ export type CreateUserInput = {
   canRollCall?: boolean;
   rollCallAreaIds?: string[];
   rollCallTurnoIds?: string[];
+  rollCallCollaboratorIds?: string[];
 };
 
 /**
@@ -88,6 +90,11 @@ export async function createUserRecord(actorId: string, data: CreateUserInput) {
         data: data.rollCallTurnoIds.map((turnoId) => ({ userId: created.id, turnoId })),
       });
     }
+    if (data.rollCallCollaboratorIds && data.rollCallCollaboratorIds.length > 0) {
+      await tx.userRollCallCollaborator.createMany({
+        data: data.rollCallCollaboratorIds.map((collaboratorId) => ({ userId: created.id, collaboratorId })),
+      });
+    }
     return created;
   });
 
@@ -117,6 +124,7 @@ export type UpdateUserInput = {
   canRollCall?: boolean;
   rollCallAreaIds?: string[];
   rollCallTurnoIds?: string[];
+  rollCallCollaboratorIds?: string[];
 };
 
 export async function setUserActive(admin: CurrentUser, id: string, active: boolean) {
@@ -167,6 +175,12 @@ export async function updateUser(admin: CurrentUser, id: string, data: UpdateUse
     await tx.userRollCallTurno.deleteMany({ where: { userId: id } });
     if (data.rollCallTurnoIds && data.rollCallTurnoIds.length > 0) {
       await tx.userRollCallTurno.createMany({ data: data.rollCallTurnoIds.map((turnoId) => ({ userId: id, turnoId })) });
+    }
+    await tx.userRollCallCollaborator.deleteMany({ where: { userId: id } });
+    if (data.rollCallCollaboratorIds && data.rollCallCollaboratorIds.length > 0) {
+      await tx.userRollCallCollaborator.createMany({
+        data: data.rollCallCollaboratorIds.map((collaboratorId) => ({ userId: id, collaboratorId })),
+      });
     }
     return updated;
   });

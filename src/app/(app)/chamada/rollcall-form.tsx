@@ -72,6 +72,9 @@ export function RollCallForm({ entries }: { entries: RollCallEntry[] }) {
                   {entry.collaborator.functionName && (
                     <p className="text-xs text-foreground-subtle">{entry.collaborator.functionName}</p>
                   )}
+                  {entry.offToday && (
+                    <p className="mt-0.5 text-[11px] font-medium text-warning">Folga hoje pela escala</p>
+                  )}
                 </div>
                 <div className="flex shrink-0 overflow-hidden rounded-md border border-border-strong">
                   <button

@@ -44,6 +44,10 @@ function parseRollCallTurnoIds(formData: FormData) {
   return formData.getAll("rollCallTurnoIds").map(String).filter(Boolean);
 }
 
+function parseRollCallCollaboratorIds(formData: FormData) {
+  return formData.getAll("rollCallCollaboratorIds").map(String).filter(Boolean);
+}
+
 const createUserSchema = z.object({
   name: z.string().trim().min(2, "Informe o nome do usuário."),
   email: z.string().trim().email("Informe um e-mail válido."),
@@ -69,6 +73,7 @@ export async function createUserAction(_prev: ActionResult, formData: FormData) 
       canRollCall: parseCanRollCall(formData),
       rollCallAreaIds: parseRollCallAreaIds(formData),
       rollCallTurnoIds: parseRollCallTurnoIds(formData),
+      rollCallCollaboratorIds: parseRollCallCollaboratorIds(formData),
     });
     revalidatePath("/usuarios");
   });
@@ -98,6 +103,7 @@ export async function updateUserAction(_prev: ActionResult, formData: FormData) 
       canRollCall: parseCanRollCall(formData),
       rollCallAreaIds: parseRollCallAreaIds(formData),
       rollCallTurnoIds: parseRollCallTurnoIds(formData),
+      rollCallCollaboratorIds: parseRollCallCollaboratorIds(formData),
     });
     revalidatePath("/usuarios");
   });

@@ -28,6 +28,7 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
       userFunctions: true,
       userRollCallAreas: true,
       userRollCallTurnos: true,
+      userRollCallCollaborators: true,
     },
   });
 
@@ -48,6 +49,7 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
     canRollCall: user.canRollCall,
     rollCallAreaIds: new Set(user.userRollCallAreas.map((a) => a.areaId)),
     rollCallTurnoIds: new Set(user.userRollCallTurnos.map((t) => t.turnoId)),
+    rollCallCollaboratorIds: new Set(user.userRollCallCollaborators.map((c) => c.collaboratorId)),
   };
 });
 
