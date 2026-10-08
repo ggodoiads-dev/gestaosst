@@ -315,10 +315,25 @@ type Evaluation = {
  * `getTimeClockReport` (todas as ocorrências) e `getChecklistAdherence` (só a aderência de
  * checklist) — pra não recalcular a mesma coisa duas vezes com lógicas que podem divergir.
  */
+/**
+ * O ponto só é avaliado até ONTEM (D-1). O dia de hoje ainda está em andamento: quem trabalha agora só tem
+ * a batida de entrada (conta como "batida ímpar"), quem ainda não chegou ou ainda não teve o ponto importado
+ * viraria "falta" — o que derrubava a aderência sem ninguém ter errado. `date` é um Date cujos componentes
+ * locais representam o dia (mesma convenção do resto deste serviço).
+ */
+function clampToYesterday(date: Date): Date {
+  const [y, m, d] = formatInTimeZone(new Date(), APP_TIMEZONE, "yyyy-MM-dd").split("-").map(Number);
+  const yesterday = new Date(y, m - 1, d - 1, 12, 0, 0);
+  return dayKeyFromLocalDate(date) > dayKeyFromLocalDate(yesterday) ? yesterday : date;
+}
+
 async function evaluateRange(
-  range: { from: Date; to: Date },
+  rangeInput: { from: Date; to: Date },
   options?: { areaIds?: string[]; collaboratorIds?: string[] },
 ): Promise<Evaluation> {
+  const range = { from: rangeInput.from, to: clampToYesterday(rangeInput.to) };
+  if (dayKeyFromLocalDate(range.from) > dayKeyFromLocalDate(range.to)) return { anomalies: [], checklistLedger: [] };
+
   const rangeStartUtc = fromZonedTime(
     new Date(range.from.getFullYear(), range.from.getMonth(), range.from.getDate(), 0, 0, 0),
     APP_TIMEZONE,
@@ -548,16 +563,22 @@ export async function getCollaboratorTimeClockAdherence(
     return { usesTimeClock: false, workDays: 0, daysWithFalta: 0, daysWithAtraso: 0, daysWithBatidaImpar: 0, adherencePercent: null, anomalies: [] };
   }
 
+  // Aderência de ponto é sempre até D-1 (ver `clampToYesterday`).
+  const to = clampToYesterday(params.to);
+  if (dayKeyFromLocalDate(params.from) > dayKeyFromLocalDate(to)) {
+    return { usesTimeClock: true, workDays: 0, daysWithFalta: 0, daysWithAtraso: 0, daysWithBatidaImpar: 0, adherencePercent: null, anomalies: [] };
+  }
+
   const [{ anomalies: allAnomalies }, notes] = await Promise.all([
-    evaluateRange({ from: params.from, to: params.to }, { collaboratorIds: [params.collaboratorId] }),
-    db.scheduleDayNote.findMany({ where: { collaboratorId: params.collaboratorId, date: { gte: params.from, lte: params.to } } }),
+    evaluateRange({ from: params.from, to }, { collaboratorIds: [params.collaboratorId] }),
+    db.scheduleDayNote.findMany({ where: { collaboratorId: params.collaboratorId, date: { gte: params.from, lte: to } } }),
   ]);
   const anomalies = allAnomalies.filter((a) => a.type !== "CHECKLIST_PENDENTE");
 
   let workDays = 0;
   if (collaborator?.turno) {
     const notesByKey = new Map(notes.map((n) => [dayKeyFromLocalDate(n.date), n]));
-    for (let date = new Date(params.from); date <= params.to; date.setDate(date.getDate() + 1)) {
+    for (let date = new Date(params.from); date <= to; date.setDate(date.getDate() + 1)) {
       const note = notesByKey.get(dayKeyFromLocalDate(date));
       const status = note ? note.overrideStatus : getCollaboratorDayStatus(date, collaborator);
       if (status === "TRABALHO") workDays++;

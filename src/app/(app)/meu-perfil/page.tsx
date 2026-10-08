@@ -161,7 +161,7 @@ export default async function MeuPerfilPage({ searchParams }: { searchParams: Pr
               <CardTitle>
                 <span className="flex items-center gap-2"><Clock className="size-4" /> Ponto</span>
               </CardTitle>
-              <CardDescription>Dias sem falta, atraso ou batida ímpar, sobre os dias trabalhados.</CardDescription>
+              <CardDescription>Dias sem falta, atraso ou batida ímpar, sobre os dias trabalhados — contado até ontem (D-1), porque o dia de hoje ainda está em andamento.</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
               {!timeClock.usesTimeClock ? (
