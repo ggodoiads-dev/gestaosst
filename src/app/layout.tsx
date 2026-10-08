@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Sans } from "next/font/google";
 import { Toaster } from "sonner";
+import { GlobalActivityIndicator } from "@/components/layout/global-activity-indicator";
 import "./globals.css";
 
 const plexSans = IBM_Plex_Sans({
@@ -21,6 +22,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html lang="pt-BR" className={`${plexSans.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col bg-background text-foreground">
         {children}
+        <GlobalActivityIndicator />
         <Toaster position="top-right" richColors closeButton />
       </body>
     </html>

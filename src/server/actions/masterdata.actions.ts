@@ -94,6 +94,19 @@ export async function setAreaActiveAction(id: string, active: boolean) {
   revalidatePath("/cadastros/areas");
 }
 
+export async function deleteAreaDocumentAction(attachmentId: string): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    await masterdata.deleteAreaDocument(user, attachmentId);
+    revalidatePath("/cadastros/areas");
+    return { ok: true };
+  } catch (error) {
+    if (error instanceof ForbiddenError) return { ok: false, error: error.message };
+    console.error(error);
+    return { ok: false, error: "Não foi possível apagar o documento." };
+  }
+}
+
 export async function uploadAreaDocumentAction(
   areaId: string,
   docType: masterdata.AreaDocType,

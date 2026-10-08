@@ -53,6 +53,8 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
 
 export async function requireUser(): Promise<CurrentUser> {
   const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  // `?sessao=expirada` avisa o proxy que a sessão deixou de valer (ex: usuário desativado) mesmo que o
+  // cache de "usuário ativo" dele ainda diga o contrário — senão os dois se mandariam de um pro outro.
+  if (!user) redirect("/login?sessao=expirada");
   return user;
 }

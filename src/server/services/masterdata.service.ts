@@ -4,6 +4,7 @@ import { recordAudit } from "@/server/services/audit";
 import type { CurrentUser } from "@/server/auth/current-user";
 import { requirePermission } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
+import { deleteStoredFile } from "@/server/services/storage";
 
 export function listUnits() {
   return db.unit.findMany({ orderBy: { name: "asc" } });
@@ -142,6 +143,25 @@ export async function attachAreaDocument(
       uploadedById: user.id,
     },
   });
+}
+
+/** Apaga um documento da área (POP / AR-VR / Lista de Treinamento) — definitivo. Só mexe em anexo
+ * de contexto AREA, nunca em outro tipo de anexo. */
+export async function deleteAreaDocument(user: CurrentUser, attachmentId: string) {
+  requirePermission(user, PERMISSIONS.MASTERDATA_MANAGE);
+  const attachment = await db.attachment.findFirst({ where: { id: attachmentId, context: "AREA" } });
+  if (!attachment) throw new Error("Documento não encontrado.");
+
+  await db.attachment.delete({ where: { id: attachment.id } });
+  await recordAudit({
+    userId: user.id,
+    action: "DELETE",
+    entityType: "Attachment",
+    entityId: attachment.id,
+    previousValue: { filename: attachment.filename, docType: attachment.docType, areaId: attachment.areaId },
+  });
+  await deleteStoredFile(attachment.path);
+  return attachment.areaId;
 }
 
 export async function listAreaDocuments(areaId: string) {

@@ -77,6 +77,20 @@ export async function setCollaboratorActivityAptitudesAction(collaboratorId: str
   }
 }
 
+export async function deleteActivityDocumentAction(attachmentId: string): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    const activityId = await activityService.deleteActivityDocument(user, attachmentId);
+    if (activityId) revalidatePath(`/atividades/${activityId}`);
+    revalidatePath("/atividades");
+    return { ok: true };
+  } catch (error) {
+    if (error instanceof ForbiddenError) return { ok: false, error: error.message };
+    console.error(error);
+    return { ok: false, error: "Não foi possível apagar o documento." };
+  }
+}
+
 export async function uploadActivityDocumentAction(
   activityId: string,
   docType: "POP" | "AR_VR" | "LISTA_TREINAMENTO",

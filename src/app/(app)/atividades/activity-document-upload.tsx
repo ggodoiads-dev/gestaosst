@@ -4,7 +4,8 @@ import { useRef, useState } from "react";
 import { FileText, Upload, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { uploadActivityDocumentAction } from "@/server/actions/activity.actions";
+import { uploadActivityDocumentAction, deleteActivityDocumentAction } from "@/server/actions/activity.actions";
+import { SoftDeleteButton } from "@/components/domain/soft-delete-button";
 import { attachmentUrl } from "@/lib/attachment-url";
 import { formatDateTime } from "@/lib/dates";
 
@@ -73,15 +74,24 @@ export function ActivityDocumentUpload({
         <div className="flex flex-col gap-1.5">
           {documents.map((doc) => (
             <div key={doc.id} className="flex flex-col gap-0.5">
-              <a
-                href={attachmentUrl(doc.path)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2 text-sm text-accent hover:underline"
-              >
-                <FileText className="size-4 shrink-0" />
-                <span className="truncate">{doc.filename}</span>
-              </a>
+              <div className="flex items-center justify-between gap-2">
+                <a
+                  href={attachmentUrl(doc.path)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex min-w-0 items-center gap-2 text-sm text-accent hover:underline"
+                >
+                  <FileText className="size-4 shrink-0" />
+                  <span className="truncate">{doc.filename}</span>
+                </a>
+                <SoftDeleteButton
+                  title={`Apagar "${doc.filename}"?`}
+                  description="O arquivo some daqui e do QR Code público. Não dá pra desfazer — se precisar dele de novo, é só enviar outra vez."
+                  ariaLabel={`Apagar ${doc.filename}`}
+                  successMessage="Documento apagado."
+                  onConfirm={() => deleteActivityDocumentAction(doc.id)}
+                />
+              </div>
               <p className="pl-6 text-xs text-foreground-subtle">
                 Enviado em {formatDateTime(doc.uploadedAt)} por {doc.uploadedBy.name}
               </p>

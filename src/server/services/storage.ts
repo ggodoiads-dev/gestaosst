@@ -1,8 +1,8 @@
 import "server-only";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile, unlink } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { put, get } from "@vercel/blob";
+import { put, get, del } from "@vercel/blob";
 
 const STORAGE_DRIVER = process.env.STORAGE_DRIVER ?? "local";
 const STORAGE_DIR = process.env.STORAGE_DIR ?? "./storage/uploads";
@@ -80,6 +80,22 @@ export async function readFileBuffer(attachmentPath: string): Promise<Buffer> {
   // turbopackIgnore: caminho de storage local configurável em runtime (fora do bundle de build)
   const dir = path.resolve(/*turbopackIgnore: true*/ process.cwd(), STORAGE_DIR);
   return readFile(path.join(/*turbopackIgnore: true*/ dir, filename));
+}
+
+/** Remove o arquivo do storage depois que o registro do anexo foi apagado. Best-effort: se falhar, o
+ * registro já saiu do sistema e o arquivo órfão não é exibido em lugar nenhum — nunca bloqueia a exclusão. */
+export async function deleteStoredFile(attachmentPath: string): Promise<void> {
+  const filename = attachmentPath.replace(/^uploads\//, "");
+  try {
+    if (STORAGE_DRIVER === "blob") {
+      await del(filename);
+      return;
+    }
+    const dir = path.resolve(/*turbopackIgnore: true*/ process.cwd(), STORAGE_DIR);
+    await unlink(path.join(/*turbopackIgnore: true*/ dir, filename));
+  } catch (error) {
+    console.error("[storage] não foi possível remover o arquivo:", attachmentPath, error);
+  }
 }
 
 const IMAGE_MIME_EXT: Record<string, string> = {

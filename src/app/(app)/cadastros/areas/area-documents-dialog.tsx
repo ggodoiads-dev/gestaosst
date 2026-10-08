@@ -5,7 +5,8 @@ import { FileText, Upload, Loader2, FolderOpen } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter, DialogClose } from "@/components/ui/dialog";
-import { uploadAreaDocumentAction } from "@/server/actions/masterdata.actions";
+import { uploadAreaDocumentAction, deleteAreaDocumentAction } from "@/server/actions/masterdata.actions";
+import { SoftDeleteButton } from "@/components/domain/soft-delete-button";
 import { attachmentUrl } from "@/lib/attachment-url";
 import { formatDateTime } from "@/lib/dates";
 
@@ -72,15 +73,24 @@ function AreaDocumentUpload({
         <div className="flex flex-col gap-1.5">
           {documents.map((doc) => (
             <div key={doc.id} className="flex flex-col gap-0.5">
-              <a
-                href={attachmentUrl(doc.path)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2 text-sm text-accent hover:underline"
-              >
-                <FileText className="size-4 shrink-0" />
-                <span className="truncate">{doc.filename}</span>
-              </a>
+              <div className="flex items-center justify-between gap-2">
+                <a
+                  href={attachmentUrl(doc.path)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex min-w-0 items-center gap-2 text-sm text-accent hover:underline"
+                >
+                  <FileText className="size-4 shrink-0" />
+                  <span className="truncate">{doc.filename}</span>
+                </a>
+                <SoftDeleteButton
+                  title={`Apagar "${doc.filename}"?`}
+                  description="O arquivo some daqui e do QR Code público. Não dá pra desfazer — se precisar dele de novo, é só enviar outra vez."
+                  ariaLabel={`Apagar ${doc.filename}`}
+                  successMessage="Documento apagado."
+                  onConfirm={() => deleteAreaDocumentAction(doc.id)}
+                />
+              </div>
               <p className="pl-6 text-xs text-foreground-subtle">
                 Enviado em {formatDateTime(doc.uploadedAt)} por {doc.uploadedBy.name}
               </p>

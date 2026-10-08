@@ -36,6 +36,13 @@ function isPublicPath(pathname: string) {
  * página, o Server Component percebe a inconsistência e redireciona de
  * volta para /login, e o proxy libera de novo, gerando loop infinito.
  */
+/** Cache curto do "usuário existe e está ativo": o proxy roda em TODA requisição (inclusive o
+ * prefetch dos links da tela) e isso era uma consulta ao banco por vez. 30s basta pra evitar o loop
+ * de redirecionamento descrito acima; a conferência de verdade de cada página continua em
+ * `getCurrentUser`, que olha `active` a cada requisição. */
+const ACTIVE_USER_TTL_MS = 30_000;
+const activeUserCache = new Map<string, number>();
+
 async function getAuthenticatedUserId(request: NextRequest): Promise<string | null> {
   const token = request.cookies.get(SESSION_COOKIE)?.value;
   if (!token) return null;
@@ -52,9 +59,16 @@ async function getAuthenticatedUserId(request: NextRequest): Promise<string | nu
   }
   if (!userId) return null;
 
+  const verifiedAt = activeUserCache.get(userId);
+  if (verifiedAt && Date.now() - verifiedAt < ACTIVE_USER_TTL_MS) return userId;
+
   try {
     const user = await db.user.findUnique({ where: { id: userId }, select: { active: true } });
-    if (!user || !user.active) return null;
+    if (!user || !user.active) {
+      activeUserCache.delete(userId);
+      return null;
+    }
+    activeUserCache.set(userId, Date.now());
     return userId;
   } catch (error) {
     console.error("[proxy] falha ao consultar usuário no banco:", error);
@@ -67,7 +81,7 @@ export async function proxy(request: NextRequest) {
   const authenticated = (await getAuthenticatedUserId(request)) !== null;
 
   if (pathname === "/login") {
-    if (authenticated) {
+    if (authenticated && !request.nextUrl.searchParams.has("sessao")) {
       return NextResponse.redirect(new URL("/inicio", request.url));
     }
     return NextResponse.next();

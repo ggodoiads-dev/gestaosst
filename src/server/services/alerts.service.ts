@@ -30,7 +30,21 @@ export type AlertsSummary = {
  * não justificado. Cada seção só entra se o usuário tem a permissão daquele domínio — o sino não
  * deve mostrar nada que a pessoa não teria acesso de ver na tela de origem.
  */
+const ALERTS_TTL_MS = 60_000;
+const alertsCache = new Map<string, { at: number; value: AlertsSummary }>();
+
+/** O sino vive no layout, então era recalculado a cada navegação (pra admin: qualificações + ponto de
+ * 30 dias + aderência de checklist). Um minuto de cache por usuário tira isso do caminho de cada clique
+ * sem deixar o número desatualizado de forma que importe. */
 export async function getAlertsSummary(user: CurrentUser): Promise<AlertsSummary> {
+  const cached = alertsCache.get(user.id);
+  if (cached && Date.now() - cached.at < ALERTS_TTL_MS) return cached.value;
+  const value = await computeAlertsSummary(user);
+  alertsCache.set(user.id, { at: Date.now(), value });
+  return value;
+}
+
+async function computeAlertsSummary(user: CurrentUser): Promise<AlertsSummary> {
   const items: AlertItem[] = [];
 
   if (hasPermission(user, PERMISSIONS.QUALIFICATION_MANAGE)) {

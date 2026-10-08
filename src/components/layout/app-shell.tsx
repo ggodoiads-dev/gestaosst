@@ -3,13 +3,14 @@
 import * as React from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   Menu,
   X,
   LogOut,
   Search,
   ChevronDown,
+  ArrowLeft,
   LayoutDashboard,
   ClipboardCheck,
   Wrench,
@@ -148,6 +149,7 @@ export function AppShell({
 }) {
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const pathname = usePathname();
+  const router = useRouter();
   const [lastPathname, setLastPathname] = React.useState(pathname);
 
   if (pathname !== lastPathname) {
@@ -156,6 +158,14 @@ export function AppShell({
   }
 
   const { isCollapsed, toggle } = useCollapsedGroups(pathname);
+
+  // Seta de voltar em TODAS as telas (menos a inicial): volta pro histórico; se a tela foi aberta
+  // direto (link, QR, app recém-aberto) e não há pra onde voltar, vai pro início.
+  function goBack() {
+    if (window.history.length > 1) router.back();
+    else router.push("/inicio");
+  }
+  const showBack = pathname !== "/inicio";
   const roleLabel = ROLE_LABELS[user.roleKey as RoleKeyValue] ?? user.roleKey;
 
   return (
@@ -238,6 +248,18 @@ export function AppShell({
           >
             <Menu className="size-5" />
           </button>
+
+          {showBack && (
+            <button
+              type="button"
+              onClick={goBack}
+              aria-label="Voltar"
+              title="Voltar"
+              className="flex size-9 shrink-0 items-center justify-center rounded-md text-foreground-muted transition-colors hover:bg-surface-muted hover:text-foreground"
+            >
+              <ArrowLeft className="size-5" />
+            </button>
+          )}
 
           <div className="flex-1 max-w-md">
             <GlobalSearch />

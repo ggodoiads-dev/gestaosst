@@ -4,6 +4,7 @@ import { recordAudit } from "@/server/services/audit";
 import type { CurrentUser } from "@/server/auth/current-user";
 import { requirePermission, hasPermission, ForbiddenError } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
+import { deleteStoredFile } from "@/server/services/storage";
 import type { AttachmentDocType } from "@/generated/prisma/enums";
 
 export type ActivityInput = {
@@ -175,6 +176,24 @@ export async function setCollaboratorActivityAptitudes(user: CurrentUser, collab
 }
 
 /** Anexa uma nova versão de POP ou AR/VR — versões anteriores continuam no histórico (seção 44: nunca sobrescrever). */
+/** Apaga um documento da atividade (POP / AR-VR / Lista de Treinamento) — definitivo. */
+export async function deleteActivityDocument(user: CurrentUser, attachmentId: string) {
+  requirePermission(user, PERMISSIONS.ACTIVITY_MANAGE);
+  const attachment = await db.attachment.findFirst({ where: { id: attachmentId, context: "ATIVIDADE" } });
+  if (!attachment) throw new Error("Documento não encontrado.");
+
+  await db.attachment.delete({ where: { id: attachment.id } });
+  await recordAudit({
+    userId: user.id,
+    action: "DELETE",
+    entityType: "Attachment",
+    entityId: attachment.id,
+    previousValue: { filename: attachment.filename, docType: attachment.docType, activityId: attachment.activityId },
+  });
+  await deleteStoredFile(attachment.path);
+  return attachment.activityId;
+}
+
 export async function attachActivityDocument(
   user: CurrentUser,
   activityId: string,
