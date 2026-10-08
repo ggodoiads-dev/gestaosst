@@ -69,6 +69,7 @@ model User {
   userFunctions     UserFunction[]
   userRollCallAreas UserRollCallArea[]
   userRollCallTurnos UserRollCallTurno[]
+  userRollCallCollaborators UserRollCallCollaborator[]
 
   responsibleEquipments  Equipment[]            @relation("EquipmentResponsible")
   registeredEquipments   Equipment[]            @relation("EquipmentRegisteredBy")
@@ -145,6 +146,19 @@ model UserRollCallArea {
 
 /// Turnos em que o usuário faz a chamada diária — se vazio, a chamada considera todos os turnos
 /// dentro das áreas escolhidas.
+/// Pessoas específicas de quem o usuário faz a chamada (além do escopo por área/turno) — escolhidas
+/// uma a uma em Usuários e Permissões, pra a chamada mostrar exatamente quem o líder acompanha.
+model UserRollCallCollaborator {
+  userId         String
+  collaboratorId String
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  collaborator Collaborator @relation(fields: [collaboratorId], references: [id], onDelete: Cascade)
+
+  @@id([userId, collaboratorId])
+  @@index([collaboratorId])
+}
+
 model UserRollCallTurno {
   userId  String
   turnoId String
@@ -869,6 +883,7 @@ model Collaborator {
   attachments             Attachment[]
   equipmentDamagesResponsible EquipmentDamage[]
   guardianReports         GuardianReport[]
+  rollCallLeaders         UserRollCallCollaborator[]
 
   @@index([areaId])
   @@index([functionId])
