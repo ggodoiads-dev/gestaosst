@@ -166,6 +166,39 @@ export function AppShell({
     else router.push("/inicio");
   }
   const showBack = pathname !== "/inicio";
+
+  // Retomada do checklist: no celular, abrir a câmera pra anexar foto pode fazer o Android encerrar o
+  // app/WebView (pouca memória) e reabrir na tela inicial, no meio do checklist. As respostas já ficam
+  // salvas no servidor a cada toque; aqui só lembramos ONDE a pessoa estava e, se o app recomeçou do
+  // zero (sessão nova) e caiu no início há pouco, devolvemos pro mesmo checklist. Só vale pras telas
+  // de checklist e por 20 minutos, pra nunca atrapalhar quem abriu o sistema de propósito.
+  const resumeChecked = React.useRef(false);
+  React.useEffect(() => {
+    const KEY = "sigo:resume-checklist";
+    try {
+      const freshStart = window.sessionStorage.getItem("sigo:alive") === null;
+      window.sessionStorage.setItem("sigo:alive", "1");
+
+      if (!resumeChecked.current) {
+        resumeChecked.current = true;
+        if (freshStart && pathname === "/inicio") {
+          const saved = JSON.parse(window.localStorage.getItem(KEY) ?? "null") as { path: string; at: number } | null;
+          if (saved && Date.now() - saved.at < 20 * 60 * 1000 && saved.path.startsWith("/checklist/realizar")) {
+            router.replace(saved.path);
+            return;
+          }
+        }
+      }
+
+      if (pathname.startsWith("/checklist/realizar")) {
+        window.localStorage.setItem(KEY, JSON.stringify({ path: pathname + window.location.search, at: Date.now() }));
+      } else {
+        window.localStorage.removeItem(KEY);
+      }
+    } catch {
+      // storage indisponível (modo privado etc.): sem retomada, o resto funciona igual
+    }
+  }, [pathname, router]);
   const roleLabel = ROLE_LABELS[user.roleKey as RoleKeyValue] ?? user.roleKey;
 
   return (
