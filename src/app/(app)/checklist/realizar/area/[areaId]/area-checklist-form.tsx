@@ -19,6 +19,7 @@ import { FIXED_ANSWER_OPTIONS, NOT_APPLICABLE_VALUE } from "@/domain/checklist/a
 import { compressImage } from "@/lib/compress-image";
 import { withTimeout, connectionErrorMessage } from "@/lib/with-timeout";
 import { useRico } from "@/components/rico/rico-context";
+import { CameraCaptureDialog, canUseInAppCamera } from "@/components/domain/camera-capture-dialog";
 
 export type AreaChecklistItemData = {
   equipmentId: string;
@@ -293,13 +294,13 @@ function PhotoPicker({
   onSelect: (file: File) => void;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [cameraOpen, setCameraOpen] = useState(false);
   return (
     <>
       <input
         ref={fileInputRef}
         type="file"
         accept="image/*"
-        capture="environment"
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0];
@@ -308,7 +309,7 @@ function PhotoPicker({
       />
       <button
         type="button"
-        onClick={() => fileInputRef.current?.click()}
+        onClick={() => (canUseInAppCamera() ? setCameraOpen(true) : fileInputRef.current?.click())}
         className="flex items-center justify-center gap-2 rounded-md border border-dashed border-border-strong bg-surface-muted px-4 py-3 text-sm text-foreground-muted hover:bg-neutral-soft transition-colors"
       >
         {uploading ? (
@@ -321,6 +322,12 @@ function PhotoPicker({
           </>
         )}
       </button>
+      <CameraCaptureDialog
+        open={cameraOpen}
+        onOpenChange={setCameraOpen}
+        onCapture={onSelect}
+        onFallback={() => fileInputRef.current?.click()}
+      />
     </>
   );
 }

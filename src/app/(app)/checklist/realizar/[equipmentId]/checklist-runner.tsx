@@ -17,6 +17,7 @@ import {
 import { NOT_APPLICABLE_VALUE } from "@/domain/checklist/answer-values";
 import { compressImage } from "@/lib/compress-image";
 import { withTimeout, connectionErrorMessage } from "@/lib/with-timeout";
+import { CameraCaptureDialog, canUseInAppCamera } from "@/components/domain/camera-capture-dialog";
 import { useRico } from "@/components/rico/rico-context";
 import type { QuestionType, Criticality } from "@/generated/prisma/enums";
 
@@ -75,6 +76,7 @@ export function ChecklistRunner({
   const [completed, setCompleted] = useState(false);
   const [blockedMessage, setBlockedMessage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [cameraOpen, setCameraOpen] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const question = questions[index];
@@ -297,7 +299,6 @@ export function ChecklistRunner({
               ref={fileInputRef}
               type="file"
               accept="image/*"
-              capture="environment"
               className="hidden"
               onChange={(e) => {
                 const file = e.target.files?.[0];
@@ -306,7 +307,7 @@ export function ChecklistRunner({
             />
             <button
               type="button"
-              onClick={() => fileInputRef.current?.click()}
+              onClick={() => (canUseInAppCamera() ? setCameraOpen(true) : fileInputRef.current?.click())}
               className="flex items-center justify-center gap-2 rounded-md border border-dashed border-border-strong bg-surface-muted px-4 py-6 text-sm text-foreground-muted hover:bg-neutral-soft transition-colors"
             >
               {savingPhoto ? (
@@ -320,6 +321,12 @@ export function ChecklistRunner({
                 </>
               )}
             </button>
+            <CameraCaptureDialog
+              open={cameraOpen}
+              onOpenChange={setCameraOpen}
+              onCapture={(file) => void handlePhotoSelected(file)}
+              onFallback={() => fileInputRef.current?.click()}
+            />
             {answer.aiFinding && <AiFindingCard finding={answer.aiFinding} />}
           </div>
         )}
