@@ -9,17 +9,17 @@ export function RicoAvatar({
   state?: "idle" | "talking" | "listening";
   className?: string;
 }) {
+  // Em repouso o avatar fica parado: ele aparece em TODAS as telas, e respirar/balançar/piscar o tempo
+  // todo forçava o navegador a redesenhar sem parar (queda de fps, pior no celular). Só anima quando
+  // está falando ou ouvindo, que é quando o movimento comunica alguma coisa.
+  const animated = state !== "idle";
   const eyeRadius = state === "listening" ? 4.5 : 4;
   const pupilRadius = state === "listening" ? 2.3 : 2;
 
   return (
     <svg
       viewBox="0 0 64 64"
-      className={cn(
-        "size-full",
-        state === "idle" && "animate-rico-breathe",
-        className,
-      )}
+      className={cn("size-full", className)}
       role="img"
       aria-label="Rico"
     >
@@ -28,28 +28,32 @@ export function RicoAvatar({
 
       <g transform="translate(22.5,29)">
         <g>
-          <animateTransform
-            attributeName="transform"
-            type="scale"
-            values="1 1;1 1;1 0.1;1 1"
-            keyTimes="0;0.93;0.96;1"
-            dur="4.8s"
-            repeatCount="indefinite"
-          />
+          {animated && (
+            <animateTransform
+              attributeName="transform"
+              type="scale"
+              values="1 1;1 1;1 0.1;1 1"
+              keyTimes="0;0.93;0.96;1"
+              dur="4.8s"
+              repeatCount="indefinite"
+            />
+          )}
           <circle r={eyeRadius} fill="white" />
           <circle r={pupilRadius} className="fill-brand" />
         </g>
       </g>
       <g transform="translate(41.5,29)">
         <g>
-          <animateTransform
-            attributeName="transform"
-            type="scale"
-            values="1 1;1 1;1 0.1;1 1"
-            keyTimes="0;0.93;0.96;1"
-            dur="4.8s"
-            repeatCount="indefinite"
-          />
+          {animated && (
+            <animateTransform
+              attributeName="transform"
+              type="scale"
+              values="1 1;1 1;1 0.1;1 1"
+              keyTimes="0;0.93;0.96;1"
+              dur="4.8s"
+              repeatCount="indefinite"
+            />
+          )}
           <circle r={eyeRadius} fill="white" />
           <circle r={pupilRadius} className="fill-brand" />
         </g>

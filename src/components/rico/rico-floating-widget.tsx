@@ -177,7 +177,7 @@ export function RicoFloatingWidget() {
         onClick={handleOpen}
         className={cn(
           "flex size-14 items-center justify-center rounded-full shadow-lg transition-transform hover:scale-105",
-          talking ? "animate-bounce" : !open && "animate-rico-bob",
+          talking && "animate-bounce",
         )}
       >
         <RicoAvatar state={talking ? "talking" : "idle"} />

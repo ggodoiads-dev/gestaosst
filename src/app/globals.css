@@ -126,6 +126,17 @@ body {
   line-height: 1.45;
 }
 
+/* Quem pede "reduzir movimento" no aparelho não deve ver animação nenhuma */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 /* Barra indeterminada do indicador global de carregamento */
 @keyframes sigo-progress {
   0% { transform: translateX(-100%); }
