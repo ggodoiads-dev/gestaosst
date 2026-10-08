@@ -6,6 +6,7 @@ import { nextFriendlyCode } from "@/server/services/sequence";
 import type { CurrentUser } from "@/server/auth/current-user";
 import { requirePermission, requireAreaAccess, ForbiddenError } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
+import { startOfTodayInAppTimezone } from "@/lib/dates";
 import { evaluateChecklist, type AnswerInput, type QuestionInput } from "@/domain/checklist/rule-engine";
 import { getScheduledTimeForDate, computeDelayMinutes, isLate } from "@/domain/checklist/scheduling";
 import type { Prisma } from "@/generated/prisma/client";
@@ -30,6 +31,8 @@ export type ChecklistBoardAreaItem = {
   templateName: string;
   totalCount: number;
   completedTodayCount: number;
+  /** Equipamentos do checklist de área que estão bloqueados e por isso não entram no previsto. */
+  blockedCount: number;
 };
 
 export type ChecklistBoardItem = ChecklistBoardEquipmentItem | ChecklistBoardAreaItem;
@@ -92,8 +95,7 @@ export async function listChecklistBoardForUser(
   });
 
   const now = new Date();
-  const startOfDay = new Date(now);
-  startOfDay.setHours(0, 0, 0, 0);
+  const startOfDay = startOfTodayInAppTimezone(now);
 
   const equipmentItems: ChecklistBoardEquipmentItem[] = [];
   const areaGroups = new Map<string, ChecklistBoardAreaItem>();
@@ -131,9 +133,15 @@ export async function listChecklistBoardForUser(
         templateName: assignment.template.name,
         totalCount: 0,
         completedTodayCount: 0,
+        blockedCount: 0,
       };
-      group.totalCount++;
-      if (completedToday) group.completedTodayCount++;
+      // Bloqueado não dá pra inspecionar — não entra no "previsto" (senão o % nunca fecha), mas é contado à parte.
+      if (equipment.status === "BLOQUEADO") {
+        group.blockedCount++;
+      } else {
+        group.totalCount++;
+        if (completedToday) group.completedTodayCount++;
+      }
       areaGroups.set(key, group);
       continue;
     }

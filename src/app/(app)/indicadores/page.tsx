@@ -180,8 +180,16 @@ export default async function IndicadoresPage({
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <StatCard
             label="% cumprimento hoje"
-            value={`${summary.percentualCumprimento}%`}
-            tone={summary.percentualCumprimento >= 90 ? "success" : summary.percentualCumprimento >= 70 ? "warning" : "danger"}
+            value={summary.percentualCumprimento === null ? "—" : `${summary.percentualCumprimento}%`}
+            tone={
+              summary.percentualCumprimento === null
+                ? "neutral"
+                : summary.percentualCumprimento >= 90
+                  ? "success"
+                  : summary.percentualCumprimento >= 70
+                    ? "warning"
+                    : "danger"
+            }
             href="/checklist/realizar"
           />
           <StatCard label="NCs abertas" value={summary.ncAbertas} tone="warning" href="/nao-conformidades" />
@@ -191,12 +199,12 @@ export default async function IndicadoresPage({
 
         <Card>
           <CardHeader>
-            <CardTitle>Checklist de equipamentos hoje</CardTitle>
+            <CardTitle>Checklists de hoje (equipamento + área)</CardTitle>
           </CardHeader>
           <CardContent>
             <DonutStat
               centerLabel="cumprido"
-              centerValue={`${summary.percentualCumprimento}%`}
+              centerValue={summary.percentualCumprimento === null ? "—" : `${summary.percentualCumprimento}%`}
               segments={[
                 { label: "Realizados", value: summary.realizados, color: "var(--success)" },
                 { label: "Atrasados", value: summary.atrasados, color: "var(--danger)" },

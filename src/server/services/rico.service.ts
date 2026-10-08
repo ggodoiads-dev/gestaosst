@@ -647,7 +647,7 @@ export type DailyBriefingContext = {
     topRisk: { equipmentCode: string; score: number } | null;
   };
   gestao?: {
-    percentualCumprimento: number;
+    percentualCumprimento: number | null;
     equipamentosBloqueados: number;
     acoesVencidas: number;
   };
@@ -675,7 +675,7 @@ function describeBriefingContext(ctx: DailyBriefingContext): string {
   if (ctx.gestao) {
     const g = ctx.gestao;
     blocks.push(
-      `[Gestão] Cumprimento geral de checklist: ${g.percentualCumprimento}%. Equipamentos bloqueados: ${g.equipamentosBloqueados}. Ações de plano vencidas: ${g.acoesVencidas}.`,
+      `[Gestão] Cumprimento geral de checklist: ${g.percentualCumprimento === null ? "sem checklist previsto hoje" : `${g.percentualCumprimento}%`}. Equipamentos bloqueados: ${g.equipamentosBloqueados}. Ações de plano vencidas: ${g.acoesVencidas}.`,
     );
   }
 

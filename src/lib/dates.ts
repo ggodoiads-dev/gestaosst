@@ -25,9 +25,21 @@ export function formatDateTime(date: Date | string | null | undefined): string {
   return safeFormat(date, () => formatInTimeZone(new Date(date), APP_TIMEZONE, "dd/MM/yyyy HH:mm", { locale: ptBR }));
 }
 
+/** `startOfDay`/`new Date(ano, mes, dia)` no servidor (UTC) geram meia-noite UTC — um DIA de calendário,
+ * não um instante. Formatado em Brasília (UTC-3) isso vira o dia ANTERIOR (o "hoje" aparecia como ontem).
+ * Um instante real nunca cai em 00:00:00.000 UTC exato, então esse valor é tratado como data pura. */
+function isUtcMidnight(date: Date): boolean {
+  return (
+    date.getUTCHours() === 0 && date.getUTCMinutes() === 0 && date.getUTCSeconds() === 0 && date.getUTCMilliseconds() === 0
+  );
+}
+
 export function formatDate(date: Date | string | null | undefined): string {
   if (!date) return "—";
-  return safeFormat(date, () => formatInTimeZone(new Date(date), APP_TIMEZONE, "dd/MM/yyyy", { locale: ptBR }));
+  return safeFormat(date, () => {
+    const value = new Date(date);
+    return formatInTimeZone(value, isUtcMidnight(value) ? "UTC" : APP_TIMEZONE, "dd/MM/yyyy", { locale: ptBR });
+  });
 }
 
 export function formatTime(date: Date | string | null | undefined): string {
@@ -38,6 +50,14 @@ export function formatTime(date: Date | string | null | undefined): string {
 export function formatRelative(date: Date | string | null | undefined): string {
   if (!date) return "—";
   return safeFormat(date, () => formatDistanceToNow(new Date(date), { locale: ptBR, addSuffix: true }));
+}
+
+/** Instante em que o dia de HOJE começou no fuso do app (Brasília, UTC-3, sem horário de verão). O
+ * `startOfDay` do servidor (UTC) começa às 21h do dia anterior em Brasília — checklist feito à noite de
+ * ontem passava a contar como de hoje. */
+export function startOfTodayInAppTimezone(now: Date = new Date()): Date {
+  const dayKey = formatInTimeZone(now, APP_TIMEZONE, "yyyy-MM-dd");
+  return new Date(`${dayKey}T00:00:00-03:00`);
 }
 
 export function formatLongDate(date: Date | string = new Date()): string {

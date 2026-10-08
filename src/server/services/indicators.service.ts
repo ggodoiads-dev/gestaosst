@@ -2,26 +2,63 @@ import "server-only";
 import { db } from "@/server/db";
 import type { CurrentUser } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
-import { listChecklistBoardForUser, type ChecklistBoardEquipmentItem } from "@/server/services/checklist-execution.service";
+import { listChecklistBoardForUser } from "@/server/services/checklist-execution.service";
 
 function areaScope(user: CurrentUser, permission: string) {
   const canSeeAll = user.permissions.has(permission);
   return canSeeAll ? undefined : { in: Array.from(user.areaIds) };
 }
 
-function isEquipmentItem(item: { type: string }): item is ChecklistBoardEquipmentItem {
-  return item.type === "equipamento";
+type Board = Awaited<ReturnType<typeof listChecklistBoardForUser>>;
+
+/**
+ * Situação do dia somando os DOIS tipos de checklist: o por equipamento (uma linha por ferramenta,
+ * com horário previsto) e o por área (um por equipamento da área, sem horário). Antes só o primeiro
+ * entrava na conta — como o time usa quase só os de área, o painel mostrava "100%" sobre zero previsto.
+ * Equipamento bloqueado não dá pra inspecionar, então sai do previsto e é contado à parte.
+ */
+function summarizeBoard(board: Board) {
+  let previstos = 0;
+  let realizados = 0;
+  let pendentes = 0;
+  let atrasados = 0;
+  let emAndamento = 0;
+  let bloqueados = 0;
+
+  for (const item of board) {
+    if (item.type === "equipamento") {
+      if (item.situation === "BLOQUEADO") {
+        bloqueados++;
+        continue;
+      }
+      previstos++;
+      if (item.situation === "REALIZADO") realizados++;
+      else if (item.situation === "PENDENTE") pendentes++;
+      else if (item.situation === "ATRASADO") atrasados++;
+      else if (item.situation === "EM_ANDAMENTO") emAndamento++;
+    } else {
+      previstos += item.totalCount;
+      realizados += item.completedTodayCount;
+      pendentes += item.totalCount - item.completedTodayCount;
+      bloqueados += item.blockedCount;
+    }
+  }
+
+  return {
+    previstos,
+    realizados,
+    pendentes,
+    atrasados,
+    emAndamento,
+    bloqueados,
+    // Sem nada previsto não existe percentual: `null` (a tela mostra "—"), nunca um 100% falso.
+    percentualCumprimento: previstos === 0 ? null : Math.round((realizados / previstos) * 100),
+  };
 }
 
 export async function getColaboradorSummary(user: CurrentUser) {
-  const board = (await listChecklistBoardForUser(user)).filter(isEquipmentItem);
-  return {
-    previstos: board.length,
-    realizados: board.filter((b) => b.situation === "REALIZADO").length,
-    pendentes: board.filter((b) => b.situation === "PENDENTE").length,
-    atrasados: board.filter((b) => b.situation === "ATRASADO").length,
-    emAndamento: board.filter((b) => b.situation === "EM_ANDAMENTO").length,
-  };
+  const { previstos, realizados, pendentes, atrasados, emAndamento } = summarizeBoard(await listChecklistBoardForUser(user));
+  return { previstos, realizados, pendentes, atrasados, emAndamento };
 }
 
 export async function getGestaoSummary(user: CurrentUser) {
@@ -39,7 +76,7 @@ export async function getGestaoSummary(user: CurrentUser) {
     ncVencidas,
     acoesVencidas,
   ] = await Promise.all([
-    listChecklistBoardForUser(user).then((b) => b.filter(isEquipmentItem)),
+    listChecklistBoardForUser(user),
     db.equipment.groupBy({
       by: ["status"],
       where: { active: true, areaId: equipmentAreaFilter },
@@ -70,13 +107,15 @@ export async function getGestaoSummary(user: CurrentUser) {
   const statusMap: Record<string, number> = {};
   for (const row of equipmentByStatus) statusMap[row.status] = row._count;
 
+  const checklistsHoje = summarizeBoard(board);
+
   return {
-    previstos: board.length,
-    realizados: board.filter((b) => b.situation === "REALIZADO").length,
-    pendentes: board.filter((b) => b.situation === "PENDENTE").length,
-    atrasados: board.filter((b) => b.situation === "ATRASADO").length,
-    percentualCumprimento:
-      board.length === 0 ? 100 : Math.round((board.filter((b) => b.situation === "REALIZADO").length / board.length) * 100),
+    previstos: checklistsHoje.previstos,
+    realizados: checklistsHoje.realizados,
+    pendentes: checklistsHoje.pendentes,
+    atrasados: checklistsHoje.atrasados,
+    checklistsBloqueados: checklistsHoje.bloqueados,
+    percentualCumprimento: checklistsHoje.percentualCumprimento,
     equipamentosLiberados: statusMap.LIBERADO ?? 0,
     equipamentosObservacao: statusMap.LIBERADO_COM_OBSERVACAO ?? 0,
     equipamentosRestritos: statusMap.RESTRITO ?? 0,

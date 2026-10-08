@@ -341,7 +341,7 @@ export default async function InicioPage() {
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 animate-fade-up" style={{ animationDelay: "80ms" }}>
-        <StatCard label="Checklists de equipamento previstos hoje" value={headlineSummary.previstos} />
+        <StatCard label="Checklists previstos hoje" value={headlineSummary.previstos} />
         <StatCard
           label="Realizados"
           value={headlineSummary.realizados}
