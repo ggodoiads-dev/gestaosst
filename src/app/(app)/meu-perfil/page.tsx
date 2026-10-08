@@ -218,7 +218,7 @@ export default async function MeuPerfilPage({ searchParams }: { searchParams: Pr
               <CardTitle>
                 <span className="flex items-center gap-2"><ClipboardCheck className="size-4" /> Checklist</span>
               </CardTitle>
-              <CardDescription>Turnos em que você fez todos os checklists que eram da sua função.</CardDescription>
+              <CardDescription>Turnos em que você fez todos os checklists que eram da sua função — contado até ontem (D-1).</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
               {!checklist ? (

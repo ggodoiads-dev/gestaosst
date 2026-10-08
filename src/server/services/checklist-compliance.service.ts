@@ -5,6 +5,8 @@ import { getCollaboratorDayStatus } from "@/domain/schedule/schedule-calendar";
 import type { CurrentUser } from "@/server/auth/current-user";
 import { requirePermission, hasPermission, ForbiddenError } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
+import { formatInTimeZone } from "date-fns-tz";
+import { APP_TIMEZONE } from "@/lib/dates";
 
 /**
  * Conformidade de checklist por colaborador (não por equipamento): colaboradores marcados
@@ -75,6 +77,14 @@ function getRequiredItemsForCollaborator(
   return { mode: "area", items: collaborator.areaId ? (requiredByArea.get(collaborator.areaId) ?? []) : [] };
 }
 
+/** Último dia FECHADO (ontem, no calendário de Brasília), na mesma convenção de data do resto do serviço
+ * (meia-noite "local" do servidor). A conformidade é sempre calculada até D-1: o turno de hoje ainda está
+ * em andamento, e contar quem ainda não terminou como "pendente" derruba o indicador sem ninguém ter falhado. */
+function lastClosedDay(): Date {
+  const [y, m, d] = formatInTimeZone(new Date(), APP_TIMEZONE, "yyyy-MM-dd").split("-").map(Number);
+  return new Date(y, m - 1, d - 1);
+}
+
 function listEligibleCollaboratorsQuery() {
   return db.collaborator.findMany({
     where: { active: true, checklistEnabled: true, userId: { not: null } },
@@ -121,7 +131,7 @@ async function buildCollaboratorChecklistDays(collaboratorId: string, from: Date
   }
 
   const notesByKey = new Map(notes.map((n) => [localDateKey(n.date), n]));
-  const today = startOfDay(new Date());
+  const closedDay = lastClosedDay();
 
   const days = [];
   for (let date = rangeStart; date < rangeEndExclusive; date = addDays(date, 1)) {
@@ -133,7 +143,8 @@ async function buildCollaboratorChecklistDays(collaboratorId: string, from: Date
     days.push({
       date,
       status,
-      future: date > today,
+      // `future` = ainda não fechou (hoje e adiante): fica fora das contas de cumprimento (D-1).
+      future: date > closedDay,
       required,
       completed: required.filter((e) => completedIds.has(e.id)),
       pending: required.filter((e) => !completedIds.has(e.id)),
@@ -177,9 +188,9 @@ type PeriodComplianceStats = {
 
 async function computeCompliancePeriodStats(from: Date, toInclusive: Date): Promise<PeriodComplianceStats> {
   const rangeStart = startOfDay(from);
-  const today = startOfDay(new Date());
-  // Nunca conta turnos futuros como pendência — só o que já aconteceu (ou está acontecendo hoje).
-  const rangeEndExclusive = addDays(startOfDay(toInclusive) < today ? startOfDay(toInclusive) : today, 1);
+  const closedDay = lastClosedDay();
+  // Só conta dias já fechados (até ontem): turno de hoje está em andamento e o futuro nem aconteceu.
+  const rangeEndExclusive = addDays(startOfDay(toInclusive) < closedDay ? startOfDay(toInclusive) : closedDay, 1);
   if (rangeStart >= rangeEndExclusive) {
     return { collaboratorsScheduled: 0, collaboratorsComplete: 0, collaboratorsIncomplete: [] };
   }
@@ -246,12 +257,13 @@ async function computeCompliancePeriodStats(from: Date, toInclusive: Date): Prom
   };
 }
 
-/** Visão geral (hoje + mês corrente) de quantos colaboradores com checklist obrigatório
- * cumpriram tudo vs. ficaram com pendência — base do dashboard de conformidade de checklist. */
+/** Visão geral (ontem + mês corrente, sempre até D-1) de quantos colaboradores com checklist obrigatório
+ * cumpriram tudo vs. ficaram com pendência — base do dashboard de conformidade de checklist. O bloco
+ * `today` guarda o ÚLTIMO DIA FECHADO (ontem); `date` é esse dia. */
 export async function getChecklistComplianceDashboard(user: CurrentUser, params: { date?: Date } = {}) {
   requirePermission(user, PERMISSIONS.CHECKLIST_COMPLIANCE_VIEW);
   const date = params.date ?? new Date();
-  const dayStart = startOfDay(date);
+  const dayStart = lastClosedDay();
   const monthStart = startOfMonth(date);
   const monthEndInclusive = addDays(startOfMonth(addMonths(date, 1)), -1);
 

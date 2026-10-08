@@ -237,7 +237,7 @@ export default async function IndicadoresPage({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                     <Card>
                       <CardHeader>
-                        <CardTitle>Hoje — {formatDate(checklistDashboard.date)}</CardTitle>
+                        <CardTitle>Ontem — {formatDate(checklistDashboard.date)}</CardTitle>
                       </CardHeader>
                       <CardContent className="flex flex-col gap-4">
                         <DonutStat
@@ -375,7 +375,7 @@ export default async function IndicadoresPage({
                                   {WEEKDAY_LABELS[d.date.getDay()]} — {formatDate(d.date)}
                                 </span>
                                 <Badge tone={!isWork ? "neutral" : !hasRequired ? "neutral" : d.future ? "info" : incomplete ? "danger" : "success"}>
-                                  {!isWork ? "Folga" : !hasRequired ? "Sem checklist na área" : d.future ? "Agendado" : complete ? "Completo" : "Pendente"}
+                                  {!isWork ? "Folga" : !hasRequired ? "Sem checklist na área" : d.future ? "Em aberto" : complete ? "Completo" : "Pendente"}
                                 </Badge>
                               </div>
                               {isWork && hasRequired && !d.future && (
