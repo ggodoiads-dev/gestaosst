@@ -11,6 +11,7 @@ import { getColaboradorSummary, getGestaoSummary } from "@/server/services/indic
 import { getEquipmentRiskRanking, type EquipmentRisk } from "@/server/services/risk-score.service";
 import { getHrDailyStats } from "@/server/services/collaborator.service";
 import { getDailyBriefing, type DailyBriefingContext } from "@/server/services/rico.service";
+import { countMyPendingInterviews } from "@/server/services/absence-interview.service";
 import { getChecklistComplianceDashboard, compliancePercent } from "@/server/services/checklist-compliance.service";
 import { getAccidentMonthlyStats } from "@/server/services/accident.service";
 import { getExpiringQualifications } from "@/server/services/qualification.service";
@@ -315,7 +316,7 @@ export default async function InicioPage() {
   const canSeeQualifications = hasPermission(user, PERMISSIONS.QUALIFICATION_MANAGE);
   const canSeeFleet = hasPermission(user, PERMISSIONS.EQUIPMENT_DAMAGE_MANAGE);
 
-  const [colaboradorSummary, gestaoSummary, riskRanking, hrStats, checklistComplianceDashboard, accidentStats, expiringQualifications, fleetDamageSummary] =
+  const [colaboradorSummary, gestaoSummary, riskRanking, hrStats, checklistComplianceDashboard, accidentStats, expiringQualifications, fleetDamageSummary, pendingInterviews] =
     await Promise.all([
       getColaboradorSummary(user),
       canSeeGestao ? getGestaoSummary(user) : Promise.resolve(null),
@@ -330,6 +331,7 @@ export default async function InicioPage() {
             to: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0, 23, 59, 59),
           })
         : Promise.resolve(null),
+      countMyPendingInterviews(user),
     ]);
   const headlineSummary = gestaoSummary ?? colaboradorSummary;
 
@@ -382,6 +384,19 @@ export default async function InicioPage() {
           <CommandPalette groups={navGroups} />
         </div>
       </div>
+
+      {pendingInterviews > 0 && (
+        <Link
+          href="/minhas-entrevistas"
+          className="flex items-center justify-between gap-3 rounded-lg border border-warning bg-warning-soft px-4 py-3 text-sm animate-fade-up"
+        >
+          <span className="text-foreground">
+            <strong className="text-warning">Você tem {pendingInterviews} entrevista{pendingInterviews > 1 ? "s" : ""} do RH para responder.</strong>{" "}
+            Leva poucos minutos.
+          </span>
+          <span className="shrink-0 font-medium text-accent">Responder →</span>
+        </Link>
+      )}
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 animate-fade-up" style={{ animationDelay: "80ms" }}>
         <StatCard label="Checklists previstos hoje" value={headlineSummary.previstos} />
