@@ -11,6 +11,7 @@ import { CreateJobFunctionDialog } from "./job-function-form-dialog";
 import { EditJobFunctionKitDialog } from "./job-function-kit-dialog";
 import { EditJobFunctionChecklistsDialog } from "./job-function-checklist-dialog";
 import { RequiresNrToggle } from "./requires-nr-toggle";
+import { DtoExemptToggle } from "./dto-exempt-toggle";
 
 export default async function FuncoesCadastroPage() {
   const user = await requireUser();
@@ -43,12 +44,13 @@ export default async function FuncoesCadastroPage() {
                   <TableHead>Kit de EPI</TableHead>
                   <TableHead>Checklists obrigatórios</TableHead>
                   <TableHead>Precisa de NR?</TableHead>
+                  <TableHead title="ADM/liderança: não é avaliado em DTO">Isento de DTO?</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="w-56" />
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {jobFunctions.length === 0 && <TableEmpty colSpan={6} />}
+                {jobFunctions.length === 0 && <TableEmpty colSpan={7} />}
                 {jobFunctions.map((jobFunction, index) => {
                   const kit = kits[index];
                   const required = requiredChecklists[index]!;
@@ -63,6 +65,9 @@ export default async function FuncoesCadastroPage() {
                       </TableCell>
                       <TableCell>
                         <RequiresNrToggle jobFunctionId={jobFunction.id} defaultChecked={jobFunction.requiresNr} />
+                      </TableCell>
+                      <TableCell>
+                        <DtoExemptToggle jobFunctionId={jobFunction.id} defaultChecked={jobFunction.dtoExempt} />
                       </TableCell>
                       <TableCell>
                         <Badge tone={jobFunction.active ? "success" : "neutral"}>

@@ -101,6 +101,15 @@ export async function setJobFunctionRequiresNrAction(id: string, requiresNr: boo
   });
 }
 
+export async function setJobFunctionDtoExemptAction(id: string, dtoExempt: boolean): Promise<ActionResult> {
+  return toResult(async () => {
+    const user = await requireUser();
+    await epiService.setJobFunctionDtoExempt(user, id, dtoExempt);
+    revalidatePath("/cadastros/funcoes");
+    revalidatePath("/dto");
+  });
+}
+
 const kitSchema = z.object({
   jobFunctionId: z.string().min(1),
   items: z.array(z.object({ epiTypeId: z.string().min(1), quantity: z.number().int().min(1) })),

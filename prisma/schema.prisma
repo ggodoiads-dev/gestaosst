@@ -907,6 +907,7 @@ model JobFunction {
   id         String   @id @default(uuid())
   name       String   @unique
   active     Boolean  @default(true)
+  dtoExempt  Boolean  @default(false) // true pra ADM/liderança: não é avaliado em DTO, então não entra nas sugestões nem no calendário
   requiresNr Boolean  @default(true) // false pra função que não exige nenhuma NR — sem isso, "0 NR cadastrada" contava como inapto mesmo quando a função nunca exigiu nada
   createdAt  DateTime @default(now())
 

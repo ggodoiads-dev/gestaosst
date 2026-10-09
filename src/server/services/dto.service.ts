@@ -193,7 +193,8 @@ export async function getDtoSuggestions(user: CurrentUser) {
 
   const [collaborators, evaluations, justifications] = await Promise.all([
     db.collaborator.findMany({
-      where: { active: true },
+      // ADM/liderança (função marcada como isenta de DTO) não é avaliada, então não é cobrada.
+      where: { active: true, OR: [{ functionId: null }, { function: { dtoExempt: false } }] },
       select: {
         id: true,
         name: true,

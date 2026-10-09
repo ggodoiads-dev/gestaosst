@@ -10,21 +10,24 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { DtoList } from "@/components/domain/dto-list";
 import { DtoSuggestions } from "@/components/domain/dto-suggestions";
+import { DtoCalendar } from "@/components/domain/dto-calendar";
+import { getDtoCalendar } from "@/server/services/dto-calendar.service";
 import { cn } from "@/lib/utils";
 
-export default async function DtoPage({ searchParams }: { searchParams: Promise<{ mes?: string; aba?: string }> }) {
+export default async function DtoPage({ searchParams }: { searchParams: Promise<{ mes?: string; aba?: string; semana?: string; pordia?: string }> }) {
   const user = await requireUser();
   const canImport = hasPermission(user, PERMISSIONS.DTO_MANAGE);
   if (!canImport && !hasPermission(user, PERMISSIONS.DTO_VIEW)) throw new ForbiddenError();
 
-  const { mes, aba } = await searchParams;
-  const tab = aba === "sugestoes" ? "sugestoes" : "realizados";
+  const { mes, aba, semana, pordia } = await searchParams;
+  const tab = aba === "sugestoes" ? "sugestoes" : aba === "calendario" ? "calendario" : "realizados";
   const nowMonth = currentMonthKey();
   // Sem mês escolhido, abre no mês do DTO mais recente (os DTOs são feitos aos poucos, o mês corrente pode estar vazio).
   const month = isValidMonthKey(mes) && mes <= nowMonth ? mes : ((await latestDtoMonth(user)) ?? nowMonth);
 
   const [items, suggestions] = await Promise.all([listDtoOfMonth(user, month), getDtoSuggestions(user)]);
   const suggestedCount = suggestions.items.filter((i) => i.eligible).length;
+  const calendar = tab === "calendario" ? await getDtoCalendar(user, { weekKey: semana, perDay: Number(pordia) || undefined }) : null;
   const scored = items.filter((i) => i.scorePercent !== null);
   const average = scored.length > 0 ? Math.round(scored.reduce((sum, i) => sum + (i.scorePercent ?? 0), 0) / scored.length) : null;
   const totalNo = items.reduce((sum, i) => sum + i.noCount, 0);
@@ -49,6 +52,7 @@ export default async function DtoPage({ searchParams }: { searchParams: Promise<
           {[
             { key: "realizados", label: "DTOs realizados", href: "/dto" },
             { key: "sugestoes", label: `Sugestões de DTO (${suggestedCount})`, href: "/dto?aba=sugestoes" },
+            { key: "calendario", label: "Calendário semanal", href: "/dto?aba=calendario" },
           ].map((t) => (
             <Link
               key={t.key}
@@ -63,7 +67,9 @@ export default async function DtoPage({ searchParams }: { searchParams: Promise<
           ))}
         </div>
 
-        {tab === "sugestoes" ? (
+        {tab === "calendario" && calendar ? (
+          <DtoCalendar calendar={calendar} />
+        ) : tab === "sugestoes" ? (
           <DtoSuggestions
             items={suggestions.items}
             cooldownDays={suggestions.cooldownDays}
