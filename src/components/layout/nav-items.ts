@@ -224,12 +224,14 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
   }
   if (p.has(PERMISSIONS.SCHEDULE_SELF_VIEW)) {
     rh.push({ href: "/minha-escala", label: "Minha Escala", icon: "schedules" });
+    rh.push({ href: "/minhas-entrevistas", label: "Minhas Entrevistas", icon: "alert" });
   }
   if (p.has(PERMISSIONS.HR_MANAGE)) {
     rh.push({ href: "/rh/importar", label: "Importar Planilha", icon: "hrImport" });
     rh.push({ href: "/rh/ponto", label: "Importar Ponto", icon: "timeClock" });
     rh.push({ href: "/rh/tratativa-ponto", label: "Tratativa de Ponto", icon: "timeClockTreatment" });
     rh.push({ href: "/pendencias-advertencia", label: "Pendências de Advertência", icon: "warningPending" });
+    rh.push({ href: "/entrevistas-abs", label: "Entrevistas de ABS", icon: "alert" });
   }
   if (p.has(PERMISSIONS.SCHEDULE_MANAGE)) {
     rh.push({ href: "/escalas", label: "Escalas de Trabalho", icon: "schedules" });

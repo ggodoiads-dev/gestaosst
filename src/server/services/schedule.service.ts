@@ -333,14 +333,16 @@ export async function getMySchedule(user: CurrentUser, params: { month: number; 
   return { collaborator, turno: collaborator.turno, days, daysInMonth };
 }
 
-/** Faltas lançadas (via chamada ou manualmente) que ainda não tiveram advertência aplicada e/ou entrevista de ABS
- * feita — fila de trabalho de RH pra não deixar isso esquecido. Atestado médico NÃO entra: não gera advertência. */
+/** Faltas e atestados lançados (via chamada ou manualmente) com pendência de RH: falta pode precisar de advertência
+ * e/ou entrevista de ABS; atestado médico NUNCA gera advertência — só a entrevista de ABS (Rev 03/24 cobre os dois). */
 export function listPendingAbsenceFollowUps(user: CurrentUser) {
   requirePermission(user, PERMISSIONS.HR_MANAGE);
   return db.scheduleDayNote.findMany({
     where: {
-      status: "FALTA",
-      OR: [{ warningApplied: false }, { absenceInterviewDone: false }],
+      OR: [
+        { status: "FALTA", OR: [{ warningApplied: false }, { absenceInterviewDone: false }] },
+        { status: "ATESTADO", absenceInterviewDone: false },
+      ],
     },
     include: { collaborator: true },
     orderBy: { date: "desc" },

@@ -9,10 +9,13 @@ import { cn } from "@/lib/utils";
 import { formatPersonName, initials } from "@/lib/format-name";
 import { Button } from "@/components/ui/button";
 import { markWarningAppliedAction, markAbsenceInterviewDoneAction } from "@/server/actions/schedule.actions";
+import { requestAbsenceInterviewAction } from "@/server/actions/absence-interview.actions";
 import { CreateWarningDialog } from "@/app/(app)/colaboradores/[id]/warning-dialog";
 
 export type FollowUpItem = {
   noteId: string;
+  kind: "FALTA" | "ATESTADO";
+  interview: { id: string; status: "SOLICITADA" | "RESPONDIDA" | "CONCLUIDA" } | null;
   collaboratorId: string;
   collaboratorName: string;
   dateLabel: string;
@@ -51,38 +54,102 @@ function FollowUpCard({ item }: { item: FollowUpItem }) {
             {formatPersonName(item.collaboratorName)}
           </Link>
           <p className="text-xs text-foreground-subtle">
-            Falta em {item.weekday}, {item.dateLabel}
+            {item.kind === "ATESTADO" ? "Atestado" : "Falta"} em {item.weekday}, {item.dateLabel}
           </p>
           {item.notes && <p className="mt-1 text-xs text-foreground-muted">“{item.notes}”</p>}
         </div>
       </div>
 
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <StepRow
-          label="Advertência"
-          done={item.warningApplied}
-          doneText="Aplicada"
-          todoText="Pendente"
-          disabled={pending}
-          onToggle={() => run(() => markWarningAppliedAction(item.noteId, !item.warningApplied))}
-          actionLabel={item.warningApplied ? "Desfazer" : "Marcar como aplicada"}
-        />
-        <StepRow
-          label="Entrevista de ABS"
-          done={item.absenceInterviewDone}
-          doneText="Feita"
-          todoText="Pendente"
-          disabled={pending}
-          onToggle={() => run(() => markAbsenceInterviewDoneAction(item.noteId, !item.absenceInterviewDone))}
-          actionLabel={item.absenceInterviewDone ? "Desfazer" : "Marcar como feita"}
-        />
+        {item.kind === "FALTA" && (
+          <StepRow
+            label="Advertência"
+            done={item.warningApplied}
+            doneText="Aplicada"
+            todoText="Pendente"
+            disabled={pending}
+            onToggle={() => run(() => markWarningAppliedAction(item.noteId, !item.warningApplied))}
+            actionLabel={item.warningApplied ? "Desfazer" : "Marcar como aplicada"}
+          />
+        )}
+        <InterviewStep item={item} pending={pending} run={run} />
       </div>
 
-      {!item.warningApplied && (
+      {item.kind === "FALTA" && !item.warningApplied && (
         <div className="flex justify-end border-t border-border pt-3">
           <CreateWarningDialog collaboratorId={item.collaboratorId} />
         </div>
       )}
+    </div>
+  );
+}
+
+function InterviewStep({
+  item,
+  pending,
+  run,
+}: {
+  item: FollowUpItem;
+  pending: boolean;
+  run: (action: () => Promise<{ ok: true } | { ok: false; error: string }>) => void;
+}) {
+  const router = useRouter();
+  const state = item.interview?.status;
+  if (item.absenceInterviewDone || state === "CONCLUIDA") {
+    return (
+      <StepRow
+        label="Entrevista de ABS"
+        done
+        doneText="Feita"
+        todoText=""
+        disabled={pending}
+        onToggle={() => run(() => markAbsenceInterviewDoneAction(item.noteId, false))}
+        actionLabel="Desfazer"
+      />
+    );
+  }
+  return (
+    <div className="flex items-center justify-between gap-2 rounded-md bg-warning-soft px-3 py-2">
+      <div className="min-w-0">
+        <p className="text-xs text-foreground-subtle">Entrevista de ABS</p>
+        <p className="text-sm font-medium text-warning">
+          {state === "SOLICITADA" ? "Aguardando o colaborador" : state === "RESPONDIDA" ? "Aguardando sua avaliação" : "Pendente"}
+        </p>
+      </div>
+      <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
+        {item.interview ? (
+          <Link
+            href={`/entrevistas-abs/${item.interview.id}`}
+            className="inline-flex h-8 items-center rounded-md border border-border-strong bg-surface px-3 text-xs font-medium text-foreground hover:bg-neutral-soft"
+          >
+            {state === "RESPONDIDA" ? "Avaliar" : "Abrir"}
+          </Link>
+        ) : (
+          <>
+            <Button
+              size="sm"
+              disabled={pending}
+              onClick={() =>
+                run(async () => {
+                  const res = await requestAbsenceInterviewAction(item.noteId);
+                  if (res.ok && res.id) router.push(`/entrevistas-abs/${res.id}`);
+                  return res;
+                })
+              }
+            >
+              Pedir entrevista
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={pending}
+              onClick={() => run(() => markAbsenceInterviewDoneAction(item.noteId, true))}
+            >
+              Marcar como feita
+            </Button>
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -124,7 +191,7 @@ export function PendingFollowUpList({ items }: { items: FollowUpItem[] }) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("todas");
 
-  const withoutWarning = items.filter((i) => !i.warningApplied).length;
+  const withoutWarning = items.filter((i) => i.kind === "FALTA" && !i.warningApplied).length;
   const withoutInterview = items.filter((i) => !i.absenceInterviewDone).length;
 
   const shown = useMemo(
@@ -132,13 +199,13 @@ export function PendingFollowUpList({ items }: { items: FollowUpItem[] }) {
       items.filter(
         (i) =>
           (!query || normalize(i.collaboratorName).includes(normalize(query))) &&
-          (filter === "todas" || (filter === "advertencia" ? !i.warningApplied : !i.absenceInterviewDone)),
+          (filter === "todas" || (filter === "advertencia" ? i.kind === "FALTA" && !i.warningApplied : !i.absenceInterviewDone)),
       ),
     [items, query, filter],
   );
 
   const tiles: { key: Filter; label: string; value: number; tone: string; ring: string }[] = [
-    { key: "todas", label: "Faltas com pendência", value: items.length, tone: "text-foreground", ring: "border-accent" },
+    { key: "todas", label: "Pendências", value: items.length, tone: "text-foreground", ring: "border-accent" },
     { key: "advertencia", label: "Sem advertência", value: withoutWarning, tone: "text-danger", ring: "border-danger" },
     { key: "entrevista", label: "Sem entrevista de ABS", value: withoutInterview, tone: "text-warning", ring: "border-warning" },
   ];
@@ -175,7 +242,7 @@ export function PendingFollowUpList({ items }: { items: FollowUpItem[] }) {
 
       {shown.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border-strong bg-surface px-4 py-10 text-center text-sm text-foreground-subtle">
-          {items.length === 0 ? "Tudo em dia — nenhuma falta com pendência." : "Ninguém encontrado com esse filtro."}
+          {items.length === 0 ? "Tudo em dia — nenhuma pendência." : "Ninguém encontrado com esse filtro."}
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
