@@ -101,6 +101,9 @@ model User {
   timeClockPisIgnored             IgnoredTimeClockPis[]        @relation("TimeClockPisIgnoredBy")
   checklistJustificationsMade     ChecklistJustification[]     @relation("ChecklistJustificationCreatedBy")
   checklistItemJustificationsMade ChecklistItemJustification[] @relation("ChecklistItemJustificationCreatedBy")
+  absenceInterviewsRequested      AbsenceInterview[]           @relation("AbsenceInterviewRequestedBy")
+  absenceInterviewsAnswered       AbsenceInterview[]           @relation("AbsenceInterviewAnsweredBy")
+  absenceInterviewsConcluded      AbsenceInterview[]           @relation("AbsenceInterviewConcludedBy")
   collaboratorActivitiesGranted   CollaboratorActivity[]       @relation("CollaboratorActivityGrantedBy")
   collaboratorEquipmentsGranted   CollaboratorEquipment[]      @relation("CollaboratorEquipmentCreatedBy")
   warningsCreated                 Warning[]                    @relation("WarningCreatedBy")
@@ -879,6 +882,7 @@ model Collaborator {
   timeClockRecords            TimeClockRecord[]
   checklistJustifications     ChecklistJustification[]
   checklistItemJustifications ChecklistItemJustification[]
+  absenceInterviews           AbsenceInterview[]
   activityAptitudes           CollaboratorActivity[]
   equipmentAptitudes          CollaboratorEquipment[]
   warnings                    Warning[]
@@ -1388,9 +1392,10 @@ model ScheduleDayNote {
   warningApplied       Boolean                   @default(false) // pendência de advertência (FALTA/ATESTADO) marcada como resolvida
   absenceInterviewDone Boolean                   @default(false) // entrevista de ABS marcada como feita
 
-  collaborator Collaborator @relation(fields: [collaboratorId], references: [id])
-  createdBy    User         @relation("ScheduleDayNoteCreatedBy", fields: [createdById], references: [id])
-  attachments  Attachment[]
+  collaborator     Collaborator      @relation(fields: [collaboratorId], references: [id])
+  createdBy        User              @relation("ScheduleDayNoteCreatedBy", fields: [createdById], references: [id])
+  attachments      Attachment[]
+  absenceInterview AbsenceInterview?
 
   @@unique([collaboratorId, date])
   @@index([collaboratorId])
@@ -1507,4 +1512,46 @@ model ChecklistItemJustification {
 
   @@unique([collaboratorId, dayKey, itemId])
   @@index([dayKey])
+}
+
+enum AbsenceInterviewStatus {
+  SOLICITADA // RH pediu; aguardando o relato do colaborador
+  RESPONDIDA // colaborador (ou o RH por ele) respondeu; aguardando avaliação do RH
+  CONCLUIDA // avaliada pelo RH — marca a entrevista de ABS da falta/atestado como feita
+}
+
+enum AbsenceClassification {
+  JUSTIFICADA
+  NAO_JUSTIFICADA
+  PREVISTA_LEI
+}
+
+/// Entrevista de Absenteísmo (modelo Rev 03/24): parte A = relato do colaborador (`answers`), parte B = avaliação
+/// da Gente/Liderança (`classification`, `actionTaken`, `evaluation`). Uma por falta/atestado lançado.
+model AbsenceInterview {
+  id                String                 @id @default(uuid())
+  scheduleDayNoteId String                 @unique
+  collaboratorId    String
+  status            AbsenceInterviewStatus @default(SOLICITADA)
+  answers           Json?
+  filledByHr        Boolean                @default(false)
+  answeredAt        DateTime?
+  answeredById      String?
+  classification    AbsenceClassification?
+  actionTaken       String?
+  evaluation        Json?
+  concludedAt       DateTime?
+  concludedById     String?
+  requestedById     String
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+
+  note         ScheduleDayNote @relation(fields: [scheduleDayNoteId], references: [id], onDelete: Cascade)
+  collaborator Collaborator    @relation(fields: [collaboratorId], references: [id])
+  requestedBy  User            @relation("AbsenceInterviewRequestedBy", fields: [requestedById], references: [id])
+  answeredBy   User?           @relation("AbsenceInterviewAnsweredBy", fields: [answeredById], references: [id])
+  concludedBy  User?           @relation("AbsenceInterviewConcludedBy", fields: [concludedById], references: [id])
+
+  @@index([collaboratorId])
+  @@index([status])
 }
