@@ -239,6 +239,56 @@ export default async function IndicadoresPage({
                   </div>
                 );
               })}
+              <div className="flex flex-col gap-3 border-t border-border pt-4 sm:col-span-2">
+                <p className="text-sm font-medium text-foreground">
+                  Hoje — andamento{" "}
+                  <span className="font-normal text-foreground-subtle">(ainda não entra na aderência, que fecha em D-1)</span>
+                </p>
+                {checklistDashboard.todayProgress.concluded.length + checklistDashboard.todayProgress.remaining.length === 0 ? (
+                  <p className="text-xs text-foreground-subtle">Ninguém cobrado por checklist está escalado hoje.</p>
+                ) : (
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div className="flex flex-col gap-1.5">
+                      <p className="text-xs font-semibold text-success">
+                        Já concluíram hoje ({checklistDashboard.todayProgress.concluded.length})
+                      </p>
+                      {checklistDashboard.todayProgress.concluded.length === 0 ? (
+                        <p className="text-xs text-foreground-subtle">Ninguém ainda.</p>
+                      ) : (
+                        <ul className="flex flex-col gap-1 text-sm">
+                          {checklistDashboard.todayProgress.concluded.map((c) => (
+                            <li key={c.id} className="flex items-center gap-1.5">
+                              <span className="text-success">✓</span> {c.name}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <p className="text-xs font-semibold text-warning">
+                        Ainda falta ({checklistDashboard.todayProgress.remaining.length})
+                      </p>
+                      {checklistDashboard.todayProgress.remaining.length === 0 ? (
+                        <p className="text-xs text-foreground-subtle">Todos concluíram.</p>
+                      ) : (
+                        <ul className="flex flex-col gap-1 text-sm">
+                          {checklistDashboard.todayProgress.remaining.map((c) => (
+                            <li key={c.id} className="flex items-center justify-between gap-2">
+                              <span>
+                                {c.name}
+                                {c.noAccess && <span className="text-xs text-foreground-subtle"> (sem acesso ao sistema)</span>}
+                              </span>
+                              <span className="text-xs text-foreground-subtle">
+                                {c.done}/{c.required}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
             </CardContent>
           </Card>
         ) : (

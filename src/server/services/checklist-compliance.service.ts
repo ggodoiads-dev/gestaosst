@@ -302,6 +302,61 @@ async function computeCompliancePeriodStats(from: Date, toInclusive: Date): Prom
   };
 }
 
+export type TodayProgressEntry = { id: string; name: string; done: number; required: number; noAccess: boolean };
+
+/** Andamento de HOJE (informativo — NÃO entra na % de aderência, que é sempre até D-1): de quem está escalado
+ * e é cobrado por checklist, quem já concluiu tudo e quem ainda falta. */
+async function computeTodayProgress(): Promise<{ concluded: TodayProgressEntry[]; remaining: TodayProgressEntry[] }> {
+  const today = addDays(lastClosedDay(), 1);
+  const tomorrow = addDays(today, 1);
+  const [collaborators, notes, requiredByArea] = await Promise.all([
+    listEligibleCollaboratorsQuery(),
+    db.scheduleDayNote.findMany({ where: { date: { gte: today, lt: tomorrow } } }),
+    getRequiredEquipmentByArea(),
+  ]);
+  const noteByCollab = new Map(notes.map((n) => [n.collaboratorId, n]));
+
+  const rows = collaborators
+    .map((c) => ({ c, required: getRequiredItemsForCollaborator(c, requiredByArea).items }))
+    .filter(({ c, required }) => {
+      if (required.length === 0) return false;
+      const note = noteByCollab.get(c.id);
+      return (note ? note.overrideStatus : getCollaboratorDayStatus(today, c)) === "TRABALHO";
+    });
+
+  const userIds = rows.filter(({ c }) => c.userId).map(({ c }) => c.userId!);
+  const executions =
+    userIds.length > 0
+      ? await db.checklistExecution.findMany({
+          where: {
+            executedById: { in: userIds },
+            status: "CONCLUIDO",
+            finishedAt: { gte: dayStartInstant(today), lt: dayStartInstant(tomorrow) },
+          },
+          select: { executedById: true, equipmentId: true, checklistVersion: { select: { templateId: true } } },
+        })
+      : [];
+  const doneByUser = new Map<string, Set<string>>();
+  for (const ex of executions) {
+    const set = doneByUser.get(ex.executedById) ?? new Set<string>();
+    set.add(ex.equipmentId);
+    set.add(ex.checklistVersion.templateId);
+    doneByUser.set(ex.executedById, set);
+  }
+
+  const concluded: TodayProgressEntry[] = [];
+  const remaining: TodayProgressEntry[] = [];
+  for (const { c, required } of rows) {
+    const doneIds = c.userId ? (doneByUser.get(c.userId) ?? new Set<string>()) : new Set<string>();
+    const done = required.filter((e) => doneIds.has(e.id)).length;
+    const entry = { id: c.id, name: c.name, done, required: required.length, noAccess: !c.userId };
+    (done === required.length ? concluded : remaining).push(entry);
+  }
+  concluded.sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+  remaining.sort((a, b) => b.required - b.done - (a.required - a.done) || a.name.localeCompare(b.name, "pt-BR"));
+  return { concluded, remaining };
+}
+
 /** Visão geral (ontem + mês corrente, sempre até D-1) de quantos colaboradores com checklist obrigatório
  * cumpriram tudo vs. ficaram com pendência — base do dashboard de conformidade de checklist. O bloco
  * `today` guarda o ÚLTIMO DIA FECHADO (ontem); `date` é esse dia. */
@@ -312,10 +367,11 @@ export async function getChecklistComplianceDashboard(user: CurrentUser, params:
   const monthStart = startOfMonth(date);
   const monthEndInclusive = addDays(startOfMonth(addMonths(date, 1)), -1);
 
-  const [today, month] = await Promise.all([
+  const [today, month, todayProgress] = await Promise.all([
     computeCompliancePeriodStats(dayStart, dayStart),
     computeCompliancePeriodStats(monthStart, monthEndInclusive),
+    computeTodayProgress(),
   ]);
 
-  return { date: dayStart, today, month };
+  return { date: dayStart, today, month, todayProgress };
 }
