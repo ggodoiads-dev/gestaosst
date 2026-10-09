@@ -16,7 +16,7 @@ function href(week: string, perDay: number) {
   return `/dto?aba=calendario&semana=${week}&pordia=${perDay}`;
 }
 
-const KIND_LABEL = { novo: "Novo", nunca: "Nunca avaliado", tempo: "" } as const;
+const KIND_LABEL = { novo: "Novo", nunca: "Nunca avaliado" } as const;
 
 /** Calendário semanal (segunda a sexta): quem deve receber DTO em cada dia. */
 export function DtoCalendar({ calendar }: { calendar: Calendar }) {
@@ -66,7 +66,7 @@ export function DtoCalendar({ calendar }: { calendar: Calendar }) {
 
       <p className="text-xs text-foreground-subtle">
         Distribuição automática a partir de hoje entre os {calendar.eligibleTotal} colaboradores ativos que são avaliados (ADM/liderança fora): cada um
-        no dia em que trabalha, respeitando os 60 dias entre DTOs, e com a liderança da área/turno dele (quem faz a chamada dele) que trabalha nesse dia, dividindo a carga entre elas. Ordem: novos, nunca avaliados e quem está há mais tempo sem DTO.
+        no dia em que trabalha, respeitando os 60 dias entre DTOs, e com um avaliador do quadro ADM (exceto assistentes e conferente) que trabalha nesse dia, dividindo a carga entre eles. Ordem: pós-incidente (única exceção aos 60 dias), novos, nunca avaliados e quem está há mais tempo sem DTO.
       </p>
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
@@ -105,17 +105,19 @@ export function DtoCalendar({ calendar }: { calendar: Calendar }) {
                 <p
                   className={cn(
                     "text-[11px] font-medium",
-                    p.kind === "novo" ? "text-info" : p.kind === "nunca" ? "text-danger" : "text-warning",
+                    p.kind === "incidente" ? "text-danger" : p.kind === "novo" ? "text-info" : p.kind === "nunca" ? "text-danger" : "text-warning",
                   )}
                 >
-                  {p.kind === "novo"
+                  {p.kind === "incidente"
+                    ? `Pós-incidente${p.incidentDate ? ` (${dm(p.incidentDate.toISOString().slice(0, 10))})` : ""}`
+                    : p.kind === "novo"
                     ? `${KIND_LABEL.novo} · ${p.tenureDays} dia(s) de casa`
                     : p.kind === "nunca"
                       ? KIND_LABEL.nunca
                       : `Há ${p.daysSince} dias sem DTO`}
                 </p>
                 <p className={cn("truncate text-[11px]", p.leaderName ? "text-foreground-muted" : "text-danger")}>
-                  {p.leaderName ? `Com: ${formatPersonName(p.leaderName)}` : "Sem liderança definida"}
+                  {p.leaderName ? `Com: ${formatPersonName(p.leaderName)}` : "Sem avaliador disponível"}
                 </p>
               </div>
             ))}

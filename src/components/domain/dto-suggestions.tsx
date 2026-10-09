@@ -133,8 +133,9 @@ export function DtoSuggestions({
 
   const eligible = items.filter((i) => i.eligible);
   const cooling = items.filter((i) => !i.eligible);
-  const newHires = eligible.filter((i) => i.isNewHire).length;
-  const never = eligible.filter((i) => i.daysSince === null && !i.isNewHire).length;
+  const incidents = eligible.filter((i) => i.pendingIncident).length;
+  const newHires = eligible.filter((i) => i.isNewHire && !i.pendingIncident).length;
+  const never = eligible.filter((i) => i.daysSince === null && !i.isNewHire && !i.pendingIncident).length;
   const areas = useMemo(() => [...new Set(items.map((i) => i.areaName).filter((a): a is string => !!a))].sort(), [items]);
 
   const matches = (i: DtoSuggestion) =>
@@ -163,6 +164,7 @@ export function DtoSuggestions({
             <span className={cn("text-2xl font-semibold tabular-nums leading-none", t.tone)}>{t.value}</span>
             <span className="text-xs text-foreground-subtle">
               {t.label}
+              {t.key === "sugeridos" && incidents > 0 && ` · ${incidents} pós-incidente`}
               {t.key === "sugeridos" && newHires > 0 && ` · ${newHires} novo(s)`}
               {t.key === "sugeridos" && never > 0 && ` · ${never} nunca avaliado(s)`}
             </span>
@@ -171,8 +173,8 @@ export function DtoSuggestions({
       </div>
 
       <p className="text-xs text-foreground-subtle">
-        Colaboradores ativos no SIGO. Os novos (menos de 60 dias de casa) vêm primeiro, depois quem nunca foi avaliado e quem está
-        há mais tempo sem DTO. Quem foi avaliado só pode ser avaliado de novo depois de {cooldownDays} dias.
+        Colaboradores ativos no SIGO (ADM/liderança fora). Primeiro quem sofreu incidente — a única exceção, pode fazer DTO mesmo dentro dos
+        {cooldownDays} dias —, depois os novos (menos de 60 dias de casa), quem nunca foi avaliado e quem está há mais tempo sem DTO.
       </p>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -221,6 +223,11 @@ export function DtoSuggestions({
                 <div className="min-w-0 flex-1">
                   <p className="flex flex-wrap items-center gap-x-2 text-sm font-medium text-foreground">
                     <span className="truncate">{formatPersonName(i.name)}</span>
+                    {i.pendingIncident && (
+                      <span className="rounded bg-danger-soft px-1.5 py-0.5 text-[11px] font-semibold text-danger">
+                        Pós-incidente · {formatDate(i.pendingIncident.date)}
+                      </span>
+                    )}
                     {i.isNewHire && (
                       <span className="rounded bg-info-soft px-1.5 py-0.5 text-[11px] font-semibold text-info">
                         Novo · {i.tenureDays} dia(s) de casa

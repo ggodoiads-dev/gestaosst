@@ -1,4 +1,4 @@
-import { DTO_NEW_HIRE_DAYS, dtoCooldown, tenureDays } from "./suggestions";
+import { DTO_NEW_HIRE_DAYS, dtoCooldown, hasPendingIncident, tenureDays } from "./suggestions";
 
 export type PlannerPerson = {
   id: string;
@@ -6,10 +6,18 @@ export type PlannerPerson = {
   admissionDate: Date | null;
   /** Último DTO ou justificativa (meio-dia UTC do dia). */
   lastEffective: Date | null;
+  /** Incidente mais recente envolvendo a pessoa (se houver) — libera o DTO mesmo dentro da carência. */
+  incidentDate?: Date | null;
   works: (dayKey: string) => boolean;
 };
 
-export type PlannedSlot = { id: string; kind: "novo" | "nunca" | "tempo"; tenureDays: number | null; daysSince: number | null };
+export type PlannedSlot = {
+  id: string;
+  kind: "incidente" | "novo" | "nunca" | "tempo";
+  tenureDays: number | null;
+  daysSince: number | null;
+  incidentDate: Date | null;
+};
 
 function addDaysKey(key: string, n: number): string {
   const [y, m, d] = key.split("-").map(Number);
@@ -36,16 +44,20 @@ export function planDtoCalendar(args: { fromKey: string; toKey: string; perDay: 
     if (!isWeekday(key)) continue;
     const ranked = args.people
       .map((p) => {
-        const cooldown = dtoCooldown(last.get(p.id) ?? null, key);
+        const lastEff = last.get(p.id) ?? null;
+        const cooldown = dtoCooldown(lastEff, key);
         const tenure = tenureDays(p.admissionDate, key);
         const isNew = tenure !== null && tenure >= 0 && tenure < DTO_NEW_HIRE_DAYS;
-        const kind: PlannedSlot["kind"] = isNew ? "novo" : cooldown.daysSince === null ? "nunca" : "tempo";
-        return { p, cooldown, tenure, kind };
+        const incident = hasPendingIncident(lastEff, p.incidentDate ?? null);
+        const kind: PlannedSlot["kind"] = incident ? "incidente" : isNew ? "novo" : cooldown.daysSince === null ? "nunca" : "tempo";
+        return { p, cooldown, tenure, kind, incident };
       })
-      .filter((x) => x.cooldown.eligible && x.p.works(key))
+      // Incidente é a única exceção à carência de 60 dias.
+      .filter((x) => (x.cooldown.eligible || x.incident) && x.p.works(key))
       .sort((a, b) => {
-        const rank = (k: PlannedSlot["kind"]) => (k === "novo" ? 0 : k === "nunca" ? 1 : 2);
+        const rank = (k: PlannedSlot["kind"]) => (k === "incidente" ? 0 : k === "novo" ? 1 : k === "nunca" ? 2 : 3);
         if (rank(a.kind) !== rank(b.kind)) return rank(a.kind) - rank(b.kind);
+        if (a.kind === "incidente") return (b.p.incidentDate?.getTime() ?? 0) - (a.p.incidentDate?.getTime() ?? 0) || a.p.name.localeCompare(b.p.name, "pt-BR");
         if (a.kind === "novo") return (b.tenure ?? 0) - (a.tenure ?? 0) || a.p.name.localeCompare(b.p.name, "pt-BR");
         if (a.kind === "nunca") {
           return (a.p.admissionDate?.getTime() ?? Infinity) - (b.p.admissionDate?.getTime() ?? Infinity) || a.p.name.localeCompare(b.p.name, "pt-BR");
@@ -57,19 +69,20 @@ export function planDtoCalendar(args: { fromKey: string; toKey: string; perDay: 
     for (const x of ranked) last.set(x.p.id, new Date(`${key}T12:00:00Z`));
     plan.set(
       key,
-      ranked.map((x) => ({ id: x.p.id, kind: x.kind, tenureDays: x.tenure, daysSince: x.cooldown.daysSince })),
+      ranked.map((x) => ({ id: x.p.id, kind: x.kind, tenureDays: x.tenure, daysSince: x.cooldown.daysSince, incidentDate: x.p.incidentDate ?? null })),
     );
   }
   return plan;
 }
 
-/** Liderança que pode fazer o DTO: quem "faz a chamada" daquela área/turno/pessoa (mesma configuração de Usuários e
- * Permissões), e que trabalha no dia. */
+/** Quem faz o DTO (avaliador): o quadro ADM, exceto assistentes e conferente, que trabalhe no dia. */
 export type PlannerLeader = {
   id: string;
   name: string;
   /** Colaborador ligado ao usuário (pra uma liderança nunca avaliar a si mesma). */
   ownCollaboratorId: string | null;
+  /** Quadro ADM (exceto assistentes e conferente): faz DTO com qualquer colaborador avaliado. */
+  coversAll?: boolean;
   areaIds: Set<string>;
   turnoIds: Set<string>;
   collaboratorIds: Set<string>;
@@ -81,6 +94,7 @@ export type PersonScope = { id: string; areaId: string | null; turnoId: string |
 /** Mesmo critério da chamada: área (e, se o líder tem turnos definidos, só esses turnos) ou pessoa escolhida a dedo. */
 export function leaderCovers(leader: PlannerLeader, person: PersonScope): boolean {
   if (leader.ownCollaboratorId === person.id) return false;
+  if (leader.coversAll) return true;
   if (leader.collaboratorIds.has(person.id)) return true;
   if (person.areaId && leader.areaIds.has(person.areaId)) {
     return leader.turnoIds.size === 0 || (person.turnoId !== null && leader.turnoIds.has(person.turnoId));

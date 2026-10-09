@@ -7,15 +7,15 @@ import type { ActionItemStatus } from "@/generated/prisma/enums";
 
 export type DtoActionStatusResult = { ok: true } | { ok: false; error: string };
 
-export async function setDtoActionStatusAction(id: string, status: ActionItemStatus): Promise<DtoActionStatusResult> {
+export async function setDtoActionStatusAction(id: string, status: ActionItemStatus, reason?: string): Promise<DtoActionStatusResult> {
   try {
     const user = await requireUser();
-    await setDtoActionStatus(user, id, status);
+    await setDtoActionStatus(user, id, status, reason);
     revalidatePath("/planos-de-acao");
     return { ok: true };
   } catch (error) {
     if (error instanceof ForbiddenError) return { ok: false, error: error.message };
-    if (error instanceof Error && /Status inválido/.test(error.message)) return { ok: false, error: error.message };
+    if (error instanceof Error && /Status inválido|justificativa obrigatória/.test(error.message)) return { ok: false, error: error.message };
     console.error("[dto-action] falha ao mudar status:", error);
     return { ok: false, error: "Não foi possível atualizar. Tente de novo." };
   }

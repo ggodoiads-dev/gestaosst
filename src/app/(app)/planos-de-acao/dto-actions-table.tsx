@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { ActionItemStatusBadge } from "@/components/domain/status-badges";
 import { formatDate } from "@/lib/dates";
 import { formatPersonName } from "@/lib/format-name";
@@ -19,7 +20,67 @@ function normalize(text: string) {
   return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 }
 
-function StatusButtons({ id, status }: { id: string; status: DtoActionRow["status"] }) {
+function CancelDialog({ id, title }: { id: string; title: string }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  function confirm() {
+    setError(null);
+    startTransition(async () => {
+      const res = await setDtoActionStatusAction(id, "CANCELADA", reason);
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      toast.success("Ação cancelada.");
+      setOpen(false);
+      setReason("");
+      router.refresh();
+    });
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <Button size="sm" variant="ghost" onClick={() => setOpen(true)}>
+        Cancelar
+      </Button>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Cancelar esta ação?</DialogTitle>
+        </DialogHeader>
+        <DialogBody className="flex flex-col gap-3">
+          <p className="text-sm text-foreground">{title}</p>
+          <label className="flex flex-col gap-1.5 text-sm font-medium text-foreground">
+            Justificativa (obrigatória)
+            <textarea
+              rows={3}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="Por que esta ação não vai ser feita?"
+              className="rounded-md border border-border-strong bg-surface px-3 py-2 text-sm font-normal"
+            />
+          </label>
+          {error && <p className="text-sm text-danger">{error}</p>}
+        </DialogBody>
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button type="button" variant="secondary">
+              Voltar
+            </Button>
+          </DialogClose>
+          <Button onClick={confirm} loading={pending} variant="danger">
+            Cancelar ação
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function StatusButtons({ id, status, title }: { id: string; status: DtoActionRow["status"]; title: string }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   function set(next: DtoActionRow["status"]) {
@@ -49,9 +110,7 @@ function StatusButtons({ id, status }: { id: string; status: DtoActionRow["statu
       <Button size="sm" loading={pending} onClick={() => set("CONCLUIDA")}>
         Concluir
       </Button>
-      <Button size="sm" variant="ghost" loading={pending} onClick={() => set("CANCELADA")}>
-        Cancelar
-      </Button>
+      <CancelDialog id={id} title={title} />
     </div>
   );
 }
@@ -134,10 +193,13 @@ export function DtoActionsTable({ rows, canManage }: { rows: DtoActionRow[]; can
                     <span>·</span>
                     <span className={cn(isOverdue && "font-medium text-danger")}>Prazo: {formatDate(r.dueDate)}</span>
                   </p>
+                  {r.status === "CANCELADA" && r.cancelReason && (
+                    <p className="mt-1 text-xs text-foreground-subtle">Justificativa do cancelamento: {r.cancelReason}</p>
+                  )}
                 </div>
                 <div className="flex shrink-0 flex-col items-start gap-2 sm:items-end">
                   {isOverdue ? <span className="text-xs font-semibold text-danger">Vencida</span> : <ActionItemStatusBadge status={r.status} />}
-                  {canManage && <StatusButtons id={r.id} status={r.status} />}
+                  {canManage && <StatusButtons id={r.id} status={r.status} title={r.title} />}
                 </div>
               </div>
             );

@@ -10,10 +10,13 @@ import { normalizeText, parseDtoWorkbook, type DtoAnswer, type DtoRawRow } from 
 import {
   DTO_ACTIONS_WINDOW_DAYS,
   DTO_COOLDOWN_DAYS,
+  DTO_INCIDENT_TYPES,
+  DTO_INCIDENT_WINDOW_DAYS,
   DTO_JUSTIFICATION_REASON,
   DTO_NEW_HIRE_DAYS,
   daysSinceDate,
   dtoCooldown,
+  hasPendingIncident,
   tenureDays,
 } from "@/domain/dto/suggestions";
 import { classifyAnswer } from "@/domain/dto/answers";
@@ -198,6 +201,8 @@ export type DtoSuggestion = {
   tenureDays: number | null;
   /** Menos de 60 dias de casa: prioridade pro primeiro DTO. */
   isNewHire: boolean;
+  /** Incidente que ainda espera DTO (libera mesmo dentro dos 60 dias). */
+  pendingIncident: { date: Date; code: string } | null;
 };
 
 /** Sugestões de DTO: colaboradores ativos no SIGO, do mais tempo sem DTO pro menos. Quem nunca foi avaliado vem
@@ -206,7 +211,9 @@ export async function getDtoSuggestions(user: CurrentUser) {
   requireDtoView(user);
   const todayKey = formatInTimeZone(new Date(), APP_TIMEZONE, "yyyy-MM-dd");
 
-  const [collaborators, evaluations, justifications] = await Promise.all([
+  const [y, m, d] = todayKey.split("-").map(Number);
+  const incidentFrom = new Date(Date.UTC(y, m - 1, d - DTO_INCIDENT_WINDOW_DAYS, 0));
+  const [collaborators, evaluations, justifications, incidents] = await Promise.all([
     db.collaborator.findMany({
       // ADM/liderança (função marcada como isenta de DTO) não é avaliada, então não é cobrada.
       where: { active: true, OR: [{ functionId: null }, { function: { dtoExempt: false } }] },
@@ -229,7 +236,20 @@ export async function getDtoSuggestions(user: CurrentUser) {
         console.error("[dto] justificativas indisponíveis:", error);
         return [] as { id: string; collaboratorId: string; date: Date; note: string | null; reason: string }[];
       }),
+    // Incidentes recentes com o colaborador como vítima: pedem DTO mesmo dentro dos 60 dias de carência.
+    db.accidentInvolvement.findMany({
+      where: {
+        role: "VITIMA",
+        accident: { status: { not: "CANCELADA" }, type: { in: [...DTO_INCIDENT_TYPES] }, date: { gte: incidentFrom } },
+      },
+      select: { collaboratorId: true, accident: { select: { date: true, code: true } } },
+    }),
   ]);
+  const lastIncident = new Map<string, { date: Date; code: string }>();
+  for (const i of incidents) {
+    const current = lastIncident.get(i.collaboratorId);
+    if (!current || i.accident.date > current.date) lastIncident.set(i.collaboratorId, i.accident);
+  }
 
   const lastDto = new Map<string, { date: Date; activity: string }>();
   for (const e of evaluations) if (!lastDto.has(e.collaboratorId)) lastDto.set(e.collaboratorId, { date: e.date, activity: e.activity });
@@ -242,6 +262,8 @@ export async function getDtoSuggestions(user: CurrentUser) {
     const lastEffectiveDate = [dto?.date, just?.date].filter((d): d is Date => !!d).sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
     const cooldown = dtoCooldown(lastEffectiveDate, todayKey);
     const tenure = tenureDays(c.admissionDate, todayKey);
+    const incident = lastIncident.get(c.id) ?? null;
+    const pendingIncident = incident && hasPendingIncident(lastEffectiveDate, incident.date) ? incident : null;
     return {
       collaboratorId: c.id,
       name: c.name,
@@ -254,16 +276,20 @@ export async function getDtoSuggestions(user: CurrentUser) {
       justification: just && (!dto || just.date >= dto.date) ? just : null,
       lastEffectiveDate,
       daysSince: cooldown.daysSince,
-      eligible: cooldown.eligible,
+      // Incidente é a única exceção à carência de 60 dias.
+      eligible: cooldown.eligible || !!pendingIncident,
       eligibleOn: cooldown.eligibleOn,
+      pendingIncident,
       tenureDays: tenure,
       isNewHire: tenure !== null && tenure >= 0 && tenure < DTO_NEW_HIRE_DAYS,
     };
   });
 
-  // Prioridade: 1) novos (< 60 dias de casa), os mais perto de completar 60 dias primeiro; 2) nunca avaliados (os mais
+  // Prioridade: 0) pós-incidente; 1) novos (< 60 dias de casa), os mais perto de completar 60 dias primeiro; 2) nunca avaliados (os mais
   // antigos na casa antes); 3) quem está há mais tempo sem DTO.
   items.sort((a, b) => {
+    if (!!a.pendingIncident !== !!b.pendingIncident) return a.pendingIncident ? -1 : 1;
+    if (a.pendingIncident && b.pendingIncident) return b.pendingIncident.date.getTime() - a.pendingIncident.date.getTime() || a.name.localeCompare(b.name, "pt-BR");
     if (a.isNewHire !== b.isNewHire) return a.isNewHire ? -1 : 1;
     if (a.isNewHire && b.isNewHire) return (b.tenureDays ?? 0) - (a.tenureDays ?? 0) || a.name.localeCompare(b.name, "pt-BR");
     if (a.daysSince === null && b.daysSince !== null) return -1;

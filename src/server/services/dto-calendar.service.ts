@@ -8,6 +8,7 @@ import { PERMISSIONS } from "@/domain/shared/permissions";
 import { APP_TIMEZONE } from "@/lib/dates";
 import { getCollaboratorDayStatus } from "@/domain/schedule/schedule-calendar";
 import { assignLeaders, planDtoCalendar, type PlannerLeader } from "@/domain/dto/planner";
+import { DTO_INCIDENT_TYPES, DTO_INCIDENT_WINDOW_DAYS, DTO_NON_EVALUATOR_FUNCTION_KEYWORDS } from "@/domain/dto/suggestions";
 
 /**
  * Calendário semanal de DTO: de segunda a sexta, quem deve receber DTO em cada dia. Parte de hoje e distribui os
@@ -39,10 +40,12 @@ export type DtoCalendarPerson = {
   name: string;
   areaName: string | null;
   functionName: string | null;
-  kind: "novo" | "nunca" | "tempo";
+  kind: "incidente" | "novo" | "nunca" | "tempo";
   tenureDays: number | null;
   daysSince: number | null;
-  /** Liderança que deve fazer o DTO com essa pessoa (null = nenhuma liderança definida pra ela). */
+  /** Data do incidente que pede o DTO pós-incidente (só quando kind = "incidente"). */
+  incidentDate: Date | null;
+  /** Quem faz o DTO (quadro ADM, exceto assistentes e conferente) nesse dia; null = ninguém disponível. */
   leaderName: string | null;
 };
 
@@ -78,7 +81,8 @@ export async function getDtoCalendar(user: CurrentUser, params: { weekKey?: stri
   const weekDays = [0, 1, 2, 3, 4].map((i) => keyOf(addDays(dateFromKey(weekStart), i)));
   const weekEnd = weekDays[4];
 
-  const [collaborators, evaluations, justifications, notes, leaderUsers] = await Promise.all([
+  const incidentFrom = new Date(Date.UTC(Number(todayKey.slice(0, 4)), Number(todayKey.slice(5, 7)) - 1, Number(todayKey.slice(8, 10)) - DTO_INCIDENT_WINDOW_DAYS, 0));
+  const [collaborators, evaluations, justifications, notes, evaluatorRows, incidents] = await Promise.all([
     db.collaborator.findMany({
       where: { active: true, OR: [{ functionId: null }, { function: { dtoExempt: false } }] },
       select: {
@@ -102,19 +106,29 @@ export async function getDtoCalendar(user: CurrentUser, params: { weekKey?: stri
       where: { date: { gte: dateFromKey(todayKey < weekStart ? todayKey : weekStart), lte: addDays(dateFromKey(weekEnd), 1) } },
       select: { collaboratorId: true, date: true, overrideStatus: true },
     }),
-    // Lideranças = quem "faz chamada" (escopo por área/turno/pessoa em Usuários e Permissões).
-    db.user.findMany({
-      where: { active: true, canRollCall: true },
+    // Quem faz o DTO: quadro ADM (funções isentas de DTO), exceto assistentes e conferente.
+    db.collaborator.findMany({
+      where: {
+        active: true,
+        function: {
+          dtoExempt: true,
+          NOT: DTO_NON_EVALUATOR_FUNCTION_KEYWORDS.map((k) => ({ name: { contains: k, mode: "insensitive" as const } })),
+        },
+      },
       select: {
         id: true,
         name: true,
-        userRollCallAreas: { select: { areaId: true } },
-        userRollCallTurnos: { select: { turnoId: true } },
-        userRollCallCollaborators: { select: { collaboratorId: true } },
-        collaboratorProfile: {
-          select: { id: true, scheduleStartDate: true, turno: { select: { startDate: true, scheduleType: { select: { workDays: true, restDays: true } } } } },
-        },
+        scheduleStartDate: true,
+        turno: { select: { startDate: true, scheduleType: { select: { workDays: true, restDays: true } } } },
       },
+    }),
+    // Incidentes recentes com o colaborador como vítima (pedem DTO mesmo dentro dos 60 dias de carência).
+    db.accidentInvolvement.findMany({
+      where: {
+        role: "VITIMA",
+        accident: { status: { not: "CANCELADA" }, type: { in: [...DTO_INCIDENT_TYPES] }, date: { gte: incidentFrom } },
+      },
+      select: { collaboratorId: true, accident: { select: { date: true } } },
     }),
   ]);
 
@@ -136,6 +150,12 @@ export async function getDtoCalendar(user: CurrentUser, params: { weekKey?: stri
     return getCollaboratorDayStatus(dateFromKey(dayKey), c) === "TRABALHO";
   };
 
+  const incidentByCollaborator = new Map<string, Date>();
+  for (const i of incidents) {
+    const current = incidentByCollaborator.get(i.collaboratorId);
+    if (!current || i.accident.date > current) incidentByCollaborator.set(i.collaboratorId, i.accident.date);
+  }
+
   // Simulação dia a dia a partir de hoje (dias úteis) até o fim da semana pedida — ver `planDtoCalendar`.
   const slots = planDtoCalendar({
     fromKey: todayKey,
@@ -146,18 +166,20 @@ export async function getDtoCalendar(user: CurrentUser, params: { weekKey?: stri
       name: c.name,
       admissionDate: c.admissionDate,
       lastEffective: lastEffective.get(c.id) ?? null,
+      incidentDate: incidentByCollaborator.get(c.id) ?? null,
       works: (dayKey: string) => worksOn(c, dayKey),
     })),
   });
-  const leaders: PlannerLeader[] = leaderUsers.map((u) => ({
-    id: u.id,
-    name: u.name,
-    ownCollaboratorId: u.collaboratorProfile?.id ?? null,
-    areaIds: new Set(u.userRollCallAreas.map((a) => a.areaId)),
-    turnoIds: new Set(u.userRollCallTurnos.map((t) => t.turnoId)),
-    collaboratorIds: new Set(u.userRollCallCollaborators.map((c) => c.collaboratorId)),
-    // Sem escala cadastrada pra liderança: conta como dia útil.
-    works: (dayKey: string) => (u.collaboratorProfile?.turno ? getCollaboratorDayStatus(dateFromKey(dayKey), u.collaboratorProfile) === "TRABALHO" : true),
+  const leaders: PlannerLeader[] = evaluatorRows.map((e) => ({
+    id: e.id,
+    name: e.name,
+    ownCollaboratorId: e.id,
+    coversAll: true,
+    areaIds: new Set<string>(),
+    turnoIds: new Set<string>(),
+    collaboratorIds: new Set<string>(),
+    // Sem escala cadastrada: conta como dia útil.
+    works: (dayKey: string) => (e.turno ? getCollaboratorDayStatus(dateFromKey(dayKey), e) === "TRABALHO" : true),
   }));
   const leaderBySlot = assignLeaders(
     slots,
@@ -179,6 +201,7 @@ export async function getDtoCalendar(user: CurrentUser, params: { weekKey?: stri
           kind: slot.kind,
           tenureDays: slot.tenureDays,
           daysSince: slot.daysSince,
+          incidentDate: slot.incidentDate,
           leaderName: leaderBySlot.get(`${dayKey}|${slot.id}`)?.name ?? null,
         };
       }),

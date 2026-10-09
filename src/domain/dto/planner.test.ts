@@ -40,6 +40,29 @@ describe("planDtoCalendar", () => {
     expect(allIds.filter((id) => id === "livre")).toHaveLength(1);
   });
 
+  it("incidente libera o DTO mesmo dentro dos 60 dias e vem na frente de todos", () => {
+    const plan = planDtoCalendar({
+      fromKey: "2026-10-12",
+      toKey: "2026-10-12",
+      perDay: 1,
+      people: [
+        person("novo", { admissionDate: noon("2026-09-20") }),
+        person("acidentado", { lastEffective: noon("2026-10-01"), incidentDate: noon("2026-10-08") }),
+      ],
+    });
+    expect(plan.get("2026-10-12")![0]).toMatchObject({ id: "acidentado", kind: "incidente" });
+  });
+
+  it("incidente já atendido por um DTO depois dele não libera de novo", () => {
+    const plan = planDtoCalendar({
+      fromKey: "2026-10-12",
+      toKey: "2026-10-12",
+      perDay: 5,
+      people: [person("atendido", { lastEffective: noon("2026-10-09"), incidentDate: noon("2026-10-08") })],
+    });
+    expect(plan.get("2026-10-12")).toEqual([]);
+  });
+
   it("só escala no dia em que a pessoa trabalha", () => {
     const plan = planDtoCalendar({
       fromKey: "2026-10-12",
@@ -74,7 +97,7 @@ describe("lideranças", () => {
   });
 
   it("distribui a carga entre as lideranças e respeita quem trabalha no dia", () => {
-    const plan = new Map([["2026-10-12", [{ id: "p1", kind: "tempo" as const, tenureDays: null, daysSince: 90 }, { id: "p2", kind: "tempo" as const, tenureDays: null, daysSince: 80 }]]]);
+    const plan = new Map([["2026-10-12", [{ id: "p1", kind: "tempo" as const, tenureDays: null, daysSince: 90, incidentDate: null }, { id: "p2", kind: "tempo" as const, tenureDays: null, daysSince: 80, incidentDate: null }]]]);
     const persons = new Map([
       ["p1", { id: "p1", areaId: "areaA", turnoId: null }],
       ["p2", { id: "p2", areaId: "areaA", turnoId: null }],
@@ -84,8 +107,14 @@ describe("lideranças", () => {
     expect([result.get("2026-10-12|p1")?.id, result.get("2026-10-12|p2")?.id].sort()).toEqual(["ana", "bia"]);
   });
 
+  it("avaliador do quadro ADM cobre qualquer pessoa, menos ele mesmo", () => {
+    const adm = leader("adm", { coversAll: true, ownCollaboratorId: "p1" });
+    expect(leaderCovers(adm, { id: "p9", areaId: "qualquer", turnoId: null })).toBe(true);
+    expect(leaderCovers(adm, { id: "p1", areaId: "areaA", turnoId: null })).toBe(false);
+  });
+
   it("sem liderança que sirva, fica sem líder", () => {
-    const plan = new Map([["2026-10-12", [{ id: "p1", kind: "nunca" as const, tenureDays: null, daysSince: null }]]]);
+    const plan = new Map([["2026-10-12", [{ id: "p1", kind: "nunca" as const, tenureDays: null, daysSince: null, incidentDate: null }]]]);
     const result = assignLeaders(plan, new Map([["p1", { id: "p1", areaId: "areaX", turnoId: null }]]), [leader("ana", { areaIds: new Set(["areaA"]) })]);
     expect(result.get("2026-10-12|p1")).toBeNull();
   });

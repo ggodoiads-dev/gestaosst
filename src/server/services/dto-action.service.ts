@@ -45,6 +45,7 @@ export type DtoActionRow = {
   ownerRole: string;
   dueDate: Date;
   status: ActionItemStatus;
+  cancelReason: string | null;
   collaboratorId: string;
   collaboratorName: string;
   activity: string;
@@ -65,6 +66,7 @@ export async function listDtoActions(user: CurrentUser): Promise<DtoActionRow[]>
       ownerRole: r.ownerRole,
       dueDate: r.dueDate,
       status: r.status,
+      cancelReason: r.cancelReason,
       collaboratorId: r.dtoEvaluation.collaboratorId,
       collaboratorName: r.dtoEvaluation.evaluatedName,
       activity: r.dtoEvaluation.activity,
@@ -76,14 +78,16 @@ export async function listDtoActions(user: CurrentUser): Promise<DtoActionRow[]>
   }
 }
 
-export async function setDtoActionStatus(user: CurrentUser, id: string, status: ActionItemStatus) {
+export async function setDtoActionStatus(user: CurrentUser, id: string, status: ActionItemStatus, reason?: string | null) {
   requirePermission(user, PERMISSIONS.ACTIONPLAN_MANAGE);
   if (status === "VENCIDA") throw new Error("Status inválido.");
+  const cancelReason = status === "CANCELADA" ? (reason ?? "").trim() : null;
+  if (status === "CANCELADA" && cancelReason!.length < 5) throw new Error("Explique por que está cancelando (justificativa obrigatória).");
   const before = await db.dtoAction.findUniqueOrThrow({ where: { id } });
   const done = status === "CONCLUIDA";
   await db.dtoAction.update({
     where: { id },
-    data: { status, completedAt: done ? new Date() : null, completedById: done ? user.id : null },
+    data: { status, completedAt: done ? new Date() : null, completedById: done ? user.id : null, cancelReason },
   });
   await recordAudit({
     userId: user.id,
@@ -91,6 +95,6 @@ export async function setDtoActionStatus(user: CurrentUser, id: string, status: 
     entityType: "DtoAction",
     entityId: id,
     previousValue: { status: before.status },
-    newValue: { status },
+    newValue: { status, cancelReason },
   });
 }

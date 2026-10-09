@@ -1636,6 +1636,7 @@ model DtoAction {
   status          ActionItemStatus @default(PENDENTE)
   completedAt     DateTime?
   completedById   String?
+  cancelReason    String?
   createdAt       DateTime         @default(now())
 
   dtoEvaluation DtoEvaluation @relation(fields: [dtoEvaluationId], references: [id], onDelete: Cascade)

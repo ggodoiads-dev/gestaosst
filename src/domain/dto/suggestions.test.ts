@@ -44,3 +44,20 @@ describe("daysSinceDate", () => {
     expect(daysSinceDate(new Date("2026-08-04T12:00:00Z"), "2026-10-09")).toBe(66);
   });
 });
+
+import { hasPendingIncident } from "./suggestions";
+
+describe("hasPendingIncident", () => {
+  const inc = new Date("2026-10-05T12:00:00Z");
+  it("sem incidente não há o que atender", () => {
+    expect(hasPendingIncident(null, null)).toBe(false);
+  });
+  it("incidente sem nenhum DTO está pendente", () => {
+    expect(hasPendingIncident(null, inc)).toBe(true);
+  });
+  it("DTO antes do incidente não resolve; no dia ou depois resolve", () => {
+    expect(hasPendingIncident(new Date("2026-10-01T12:00:00Z"), inc)).toBe(true);
+    expect(hasPendingIncident(new Date("2026-10-05T12:00:00Z"), inc)).toBe(false);
+    expect(hasPendingIncident(new Date("2026-10-07T12:00:00Z"), inc)).toBe(false);
+  });
+});

@@ -10,6 +10,16 @@ export const DTO_NEW_HIRE_DAYS = 60;
 /** Só DTOs dos últimos N dias geram ações no Plano de Ações — prazo "daqui a 2 semanas" pra um DTO de um ano atrás não faz sentido. */
 export const DTO_ACTIONS_WINDOW_DAYS = 90;
 
+/** Janela em que um incidente ainda pede um DTO "pós-incidente" (que pode ser feito mesmo dentro dos 60 dias de carência). */
+export const DTO_INCIDENT_WINDOW_DAYS = 60;
+
+/** Tipos de ocorrência que pedem DTO com o colaborador. Acidente de trajeto e doença ocupacional não são sobre a
+ * execução da atividade, então não entram. */
+export const DTO_INCIDENT_TYPES = ["ACIDENTE_TIPICO", "QUASE_ACIDENTE", "FAI"] as const;
+
+/** Funções cujos ocupantes NÃO fazem DTO como avaliador, mesmo estando no quadro ADM. */
+export const DTO_NON_EVALUATOR_FUNCTION_KEYWORDS = ["assistente", "conferente"] as const;
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 function dayNumber(date: Date): number {
@@ -42,4 +52,12 @@ export function tenureDays(admissionDate: Date | null, todayKey: string): number
 /** Dias entre `date` (meio-dia UTC do dia de calendário) e `todayKey` (AAAA-MM-DD). */
 export function daysSinceDate(date: Date, todayKey: string): number {
   return keyDayNumber(todayKey) - dayNumber(date);
+}
+
+/** Incidente que ainda espera DTO: aconteceu e não houve DTO (nem justificativa) no dia dele ou depois. É a ÚNICA exceção
+ * à carência de 60 dias. `lastEffective` = último DTO/justificativa; `incidentDate` = data do incidente mais recente. */
+export function hasPendingIncident(lastEffective: Date | null, incidentDate: Date | null): boolean {
+  if (!incidentDate) return false;
+  if (!lastEffective) return true;
+  return dayNumber(lastEffective) < dayNumber(incidentDate);
 }
