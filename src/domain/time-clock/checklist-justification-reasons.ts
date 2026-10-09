@@ -20,6 +20,12 @@ export const CHECKLIST_JUSTIFICATION_REASONS: Record<
   OUTRO: { label: "Outro", countsAsCompliant: false },
 };
 
+/** Motivos oferecidos ao justificar UM equipamento do checklist (atestado/férias valem pro dia inteiro, não pra um item).
+ * "Outro" documenta mas não conta como cumprido — mesma regra do catálogo acima. */
+export const CHECKLIST_ITEM_JUSTIFICATION_REASON_OPTIONS = (
+  ["EQUIPAMENTO_INDISPONIVEL", "FALHA_SISTEMA", "TREINAMENTO_OUTRA_ATIVIDADE", "OUTRO"] as ChecklistJustificationReason[]
+).map((key) => ({ key, ...CHECKLIST_JUSTIFICATION_REASONS[key] }));
+
 export const CHECKLIST_JUSTIFICATION_REASON_OPTIONS = (
   Object.keys(CHECKLIST_JUSTIFICATION_REASONS) as ChecklistJustificationReason[]
 ).map((key) => ({ key, ...CHECKLIST_JUSTIFICATION_REASONS[key] }));

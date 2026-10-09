@@ -7,6 +7,11 @@ import { requirePermission, hasPermission, ForbiddenError } from "@/server/auth/
 import { PERMISSIONS } from "@/domain/shared/permissions";
 import { formatInTimeZone } from "date-fns-tz";
 import { APP_TIMEZONE } from "@/lib/dates";
+import { recordAudit } from "@/server/services/audit";
+import {
+  CHECKLIST_JUSTIFICATION_REASONS,
+  type ChecklistJustificationReason,
+} from "@/domain/time-clock/checklist-justification-reasons";
 
 /**
  * Conformidade de checklist por colaborador (não por equipamento): colaboradores marcados
@@ -98,6 +103,58 @@ function brtDayKey(instant: Date): string {
   return formatInTimeZone(instant, APP_TIMEZONE, "yyyy-MM-dd");
 }
 
+export type ItemJustification = {
+  itemId: string;
+  reason: ChecklistJustificationReason;
+  reasonLabel: string;
+  countsAsCompliant: boolean;
+  note: string | null;
+  createdByName: string;
+  createdAt: Date;
+};
+
+/** Justificativas de itens (equipamento) por "colaborador|dia". Se a tabela ainda não existir no banco (migração
+ * pendente) ou a consulta falhar, devolve vazio — a aderência segue funcionando, só sem os itens justificados. */
+async function loadItemJustifications(
+  fromKey: string,
+  toKey: string,
+  collaboratorIds?: string[],
+): Promise<Map<string, ItemJustification[]>> {
+  const byKey = new Map<string, ItemJustification[]>();
+  try {
+    const rows = await db.checklistItemJustification.findMany({
+      where: {
+        dayKey: { gte: fromKey, lte: toKey },
+        ...(collaboratorIds ? { collaboratorId: { in: collaboratorIds } } : {}),
+      },
+      include: { createdBy: { select: { name: true } } },
+    });
+    for (const r of rows) {
+      const meta = CHECKLIST_JUSTIFICATION_REASONS[r.reason];
+      const key = `${r.collaboratorId}|${r.dayKey}`;
+      const list = byKey.get(key) ?? [];
+      list.push({
+        itemId: r.itemId,
+        reason: r.reason,
+        reasonLabel: meta.label,
+        countsAsCompliant: meta.countsAsCompliant,
+        note: r.note,
+        createdByName: r.createdBy.name,
+        createdAt: r.createdAt,
+      });
+      byKey.set(key, list);
+    }
+  } catch (error) {
+    console.error("[checklist-compliance] justificativas de item indisponíveis:", error);
+  }
+  return byKey;
+}
+
+/** Itens do dia que contam como cumpridos por justificativa válida. */
+function justifiedItemIds(justifications: ItemJustification[] | undefined): Set<string> {
+  return new Set((justifications ?? []).filter((j) => j.countsAsCompliant).map((j) => j.itemId));
+}
+
 /** Quem é COBRADO por checklist: o colaborador marcado "Precisa de checklist" (RH/Supervisão) ou cuja
  * função tem checklist obrigatório. Inclui quem ainda não tem login — ele é cobrado e não consegue
  * cumprir, então entra na conta como pendente (antes era simplesmente ignorado e o número melhorava
@@ -156,6 +213,7 @@ async function buildCollaboratorChecklistDays(collaboratorId: string, from: Date
 
   const notesByKey = new Map(notes.map((n) => [localDateKey(n.date), n]));
   const closedDay = lastClosedDay();
+  const justificationsByKey = await loadItemJustifications(localDateKey(rangeStart), localDateKey(addDays(rangeEndExclusive, -1)), [collaboratorId]);
 
   const days = [];
   for (let date = rangeStart; date < rangeEndExclusive; date = addDays(date, 1)) {
@@ -163,7 +221,10 @@ async function buildCollaboratorChecklistDays(collaboratorId: string, from: Date
     const note = notesByKey.get(key) ?? null;
     const computed = getCollaboratorDayStatus(date, collaborator);
     const status = note ? note.overrideStatus : computed;
-    const completedIds = completedByDay.get(key) ?? new Set<string>();
+    const completedIds = new Set([
+      ...(completedByDay.get(key) ?? []),
+      ...justifiedItemIds(justificationsByKey.get(`${collaboratorId}|${key}`)),
+    ]);
     days.push({
       date,
       status,
@@ -262,6 +323,11 @@ async function computeCompliancePeriodStats(from: Date, toInclusive: Date): Prom
   }
 
   const notesByKey = new Map(notes.map((n) => [`${n.collaboratorId}|${localDateKey(n.date)}`, n]));
+  const justificationsByKey = await loadItemJustifications(
+    localDateKey(rangeStart),
+    localDateKey(addDays(rangeEndExclusive, -1)),
+    eligible.map((c) => c.id),
+  );
 
   let scheduledCount = 0;
   let shiftsRequired = 0;
@@ -281,7 +347,10 @@ async function computeCompliancePeriodStats(from: Date, toInclusive: Date): Prom
       if (status !== "TRABALHO") continue;
       scheduledAnyDay = true;
       // Sem login não há como cumprir: tudo que é cobrado fica pendente.
-      const completedIds = c.userId ? (completedByKey.get(`${c.userId}|${dayKey}`) ?? new Set<string>()) : new Set<string>();
+      const completedIds = new Set([
+        ...(c.userId ? (completedByKey.get(`${c.userId}|${dayKey}`) ?? []) : []),
+        ...justifiedItemIds(justificationsByKey.get(`${c.id}|${dayKey}`)),
+      ]);
       const pendingToday = required.filter((e) => !completedIds.has(e.id)).length;
       pendingTotal += pendingToday;
       shiftsRequired++;
@@ -344,10 +413,15 @@ async function computeTodayProgress(): Promise<{ concluded: TodayProgressEntry[]
     doneByUser.set(ex.executedById, set);
   }
 
+  const todayKey = localDateKey(today);
+  const justificationsByKey = await loadItemJustifications(todayKey, todayKey, rows.map(({ c }) => c.id));
   const concluded: TodayProgressEntry[] = [];
   const remaining: TodayProgressEntry[] = [];
   for (const { c, required } of rows) {
-    const doneIds = c.userId ? (doneByUser.get(c.userId) ?? new Set<string>()) : new Set<string>();
+    const doneIds = new Set([
+      ...(c.userId ? (doneByUser.get(c.userId) ?? []) : []),
+      ...justifiedItemIds(justificationsByKey.get(`${c.id}|${todayKey}`)),
+    ]);
     const done = required.filter((e) => doneIds.has(e.id)).length;
     const entry = { id: c.id, name: c.name, done, required: required.length, noAccess: !c.userId };
     (done === required.length ? concluded : remaining).push(entry);
@@ -477,13 +551,87 @@ export async function getCollaboratorChecklistDayDetail(
     keys: [ex.equipment.id, ex.checklistVersion.templateId],
   }));
 
-  const doneIds = new Set(executions.flatMap((e) => e.keys));
+  const justificationsByKey = await loadItemJustifications(params.dayKey, params.dayKey, [params.collaboratorId]);
+  const dayJustifications = justificationsByKey.get(`${params.collaboratorId}|${params.dayKey}`) ?? [];
+  const justifiedIds = justifiedItemIds(dayJustifications);
+  const doneIds = new Set([...executions.flatMap((e) => e.keys), ...justifiedIds]);
   const missing = required.filter((e) => !doneIds.has(e.id));
+  const justified = required
+    .filter((e) => justifiedIds.has(e.id) && !executions.some((x) => x.keys.includes(e.id)))
+    .map((e) => ({ ...e, justification: dayJustifications.find((j) => j.itemId === e.id)! }));
+  // Justificativa que não conta como cumprido (ex: "Outro") fica visível junto do item que continua faltando.
+  const notCounting = new Map(dayJustifications.filter((j) => !j.countsAsCompliant).map((j) => [j.itemId, j]));
   return {
     collaborator: { id: collaborator.id, name: collaborator.name, area: collaborator.area?.name ?? null, hasLogin: !!collaborator.userId },
     required: required.length,
     doneCount: required.length - missing.length,
-    missing,
+    missing: missing.map((e) => ({ ...e, note: notCounting.get(e.id) ?? null })),
+    justified,
     executions: executions.map((e) => e.detail),
+    canJustify: canJustifyChecklist(user),
   };
+}
+
+/** Justificar um item não feito é ESCRITA — só RH ou quem gerencia plano de ação (o Auditor, só-leitura, não). */
+export function canJustifyChecklist(user: CurrentUser): boolean {
+  return hasPermission(user, PERMISSIONS.HR_MANAGE) || hasPermission(user, PERMISSIONS.ACTIONPLAN_MANAGE);
+}
+
+/** Registra (ou troca) a justificativa de um equipamento que o colaborador não fez no dia. Se o motivo conta como
+ * cumprido, o item passa a entrar como concluído na aderência. */
+export async function justifyChecklistItem(
+  user: CurrentUser,
+  input: { collaboratorId: string; dayKey: string; itemId: string; reason: ChecklistJustificationReason; note: string },
+) {
+  if (!canJustifyChecklist(user)) throw new ForbiddenError();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.dayKey)) throw new Error("Data inválida.");
+  const note = input.note.trim();
+  if (note.length < 3) throw new Error("Explique o motivo em poucas palavras.");
+
+  const collaborator = await db.collaborator.findUniqueOrThrow({
+    where: { id: input.collaboratorId },
+    include: collaboratorWithFunctionInclude,
+  });
+  // Supervisor sem visão consolidada só justifica gente da própria área.
+  if (!hasPermission(user, PERMISSIONS.HR_MANAGE) && !hasPermission(user, PERMISSIONS.INDICATORS_VIEW_CONSOLIDATED)) {
+    if (!collaborator.areaId || !user.areaIds.has(collaborator.areaId)) throw new ForbiddenError();
+  }
+  // Só dá pra justificar o que era realmente exigido dele.
+  const { items } = getRequiredItemsForCollaborator(collaborator, await getRequiredEquipmentByArea());
+  if (!items.some((i) => i.id === input.itemId)) throw new Error("Esse item não era exigido desse colaborador.");
+
+  const saved = await db.checklistItemJustification.upsert({
+    where: {
+      collaboratorId_dayKey_itemId: { collaboratorId: input.collaboratorId, dayKey: input.dayKey, itemId: input.itemId },
+    },
+    update: { reason: input.reason, note, createdById: user.id },
+    create: { ...input, note, createdById: user.id },
+  });
+  await recordAudit({
+    userId: user.id,
+    action: "CREATE",
+    entityType: "ChecklistItemJustification",
+    entityId: saved.id,
+    newValue: { collaboratorId: input.collaboratorId, dayKey: input.dayKey, itemId: input.itemId, reason: input.reason, note },
+  });
+  return saved;
+}
+
+/** Desfaz uma justificativa de item (o equipamento volta a constar como faltando). */
+export async function removeChecklistItemJustification(
+  user: CurrentUser,
+  input: { collaboratorId: string; dayKey: string; itemId: string },
+) {
+  if (!canJustifyChecklist(user)) throw new ForbiddenError();
+  const key = { collaboratorId: input.collaboratorId, dayKey: input.dayKey, itemId: input.itemId };
+  const existing = await db.checklistItemJustification.findUnique({ where: { collaboratorId_dayKey_itemId: key } });
+  if (!existing) return;
+  await db.checklistItemJustification.delete({ where: { id: existing.id } });
+  await recordAudit({
+    userId: user.id,
+    action: "DELETE",
+    entityType: "ChecklistItemJustification",
+    entityId: existing.id,
+    previousValue: { ...key, reason: existing.reason, note: existing.note },
+  });
 }

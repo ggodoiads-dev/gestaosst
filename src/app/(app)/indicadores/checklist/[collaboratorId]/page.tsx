@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { APP_TIMEZONE, formatDate, formatDateTime, parseDateOnly } from "@/lib/dates";
 import { attachmentUrl } from "@/lib/attachment-url";
+import { JustifyChecklistItemDialog } from "@/components/domain/justify-checklist-item-dialog";
 
 const RESULT_TONE: Record<string, "success" | "info" | "warning" | "danger"> = {
   LIBERADO: "success",
@@ -90,15 +91,68 @@ export default async function ChecklistDoColaboradorPage({
               <p className="text-sm font-semibold text-danger">
                 Faltou{isToday ? " (até agora)" : ""} — {detail.missing.length}
               </p>
-              <div className="flex flex-wrap gap-1.5">
+              <div className="flex flex-col divide-y divide-border">
                 {detail.missing.map((e) => (
-                  <Badge key={e.id} tone="danger">{e.code}</Badge>
+                  <div key={e.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
+                    <span className="min-w-0">
+                      <span className="font-medium text-foreground">{e.code}</span>
+                      {e.name !== e.code && <span className="text-foreground-subtle"> — {e.name}</span>}
+                      {e.note && (
+                        <span className="block text-xs text-foreground-subtle">
+                          Justificativa registrada ({e.note.reasonLabel}): {e.note.note} — não conclui o item.
+                        </span>
+                      )}
+                    </span>
+                    {detail.canJustify && (
+                      <JustifyChecklistItemDialog
+                        collaboratorId={detail.collaborator.id}
+                        collaboratorName={detail.collaborator.name}
+                        dayKey={dayKey}
+                        itemId={e.id}
+                        itemLabel={e.code}
+                        currentReason={e.note?.reason ?? null}
+                        currentNote={e.note?.note ?? null}
+                      />
+                    )}
+                  </div>
                 ))}
               </div>
             </CardContent>
           </Card>
         )}
-        {complete && <p className="text-sm font-medium text-success">Tudo que era exigido foi feito neste dia.</p>}
+        {complete && <p className="text-sm font-medium text-success">Tudo que era exigido foi feito (ou justificado) neste dia.</p>}
+
+        {detail.justified.length > 0 && (
+          <Card>
+            <CardContent className="flex flex-col gap-2 py-4">
+              <p className="text-sm font-semibold text-foreground">Justificados e concluídos — {detail.justified.length}</p>
+              <div className="flex flex-col divide-y divide-border">
+                {detail.justified.map((e) => (
+                  <div key={e.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
+                    <span className="min-w-0">
+                      <span className="font-medium text-foreground">{e.code}</span>
+                      <span className="block text-xs text-foreground-subtle">
+                        {e.justification.reasonLabel}: {e.justification.note} — por {e.justification.createdByName},{" "}
+                        {formatDateTime(e.justification.createdAt)}
+                      </span>
+                    </span>
+                    {detail.canJustify && (
+                      <JustifyChecklistItemDialog
+                        collaboratorId={detail.collaborator.id}
+                        collaboratorName={detail.collaborator.name}
+                        dayKey={dayKey}
+                        itemId={e.id}
+                        itemLabel={e.code}
+                        currentReason={e.justification.reason}
+                        currentNote={e.justification.note}
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <div className="flex flex-col gap-2">
           <p className="text-sm font-semibold text-foreground">Checklists respondidos ({detail.executions.length})</p>
