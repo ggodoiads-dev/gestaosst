@@ -11,7 +11,7 @@ import { getColaboradorSummary, getGestaoSummary } from "@/server/services/indic
 import { getEquipmentRiskRanking, type EquipmentRisk } from "@/server/services/risk-score.service";
 import { getHrDailyStats } from "@/server/services/collaborator.service";
 import { getDailyBriefing, type DailyBriefingContext } from "@/server/services/rico.service";
-import { getChecklistComplianceDashboard } from "@/server/services/checklist-compliance.service";
+import { getChecklistComplianceDashboard, compliancePercent } from "@/server/services/checklist-compliance.service";
 import { getAccidentMonthlyStats } from "@/server/services/accident.service";
 import { getExpiringQualifications } from "@/server/services/qualification.service";
 import { getEquipmentDamageCostSummary } from "@/server/services/equipment-damage.service";
@@ -148,32 +148,35 @@ type ChecklistComplianceDashboard = NonNullable<Awaited<ReturnType<typeof getChe
 
 function PersonChecklistCard({ dashboard }: { dashboard: ChecklistComplianceDashboard }) {
   const { today } = dashboard;
-  const pct = today.collaboratorsScheduled === 0 ? 100 : Math.round((today.collaboratorsComplete / today.collaboratorsScheduled) * 100);
+  // `today` é o último dia FECHADO (ontem): aderência é sempre D-1, por colaborador.
+  const pct = compliancePercent(today);
+  const noAccessCount = today.collaboratorsIncomplete.filter((c) => c.noAccess).length;
   return (
     <Card>
       <CardHeader>
         <CardTitle>
-          <span className="flex items-center gap-2"><ClipboardCheck className="size-4 text-accent" /> Checklist por pessoa hoje</span>
+          <span className="flex items-center gap-2"><ClipboardCheck className="size-4 text-accent" /> Checklist por pessoa — ontem</span>
         </CardTitle>
-        <CardDescription>Colaboradores escalados pra trabalhar hoje com checklist obrigatório.</CardDescription>
+        <CardDescription>Colaboradores escalados ontem e cobrados por checklist — dia já fechado.</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         {today.collaboratorsScheduled === 0 ? (
-          <p className="text-sm text-foreground-subtle">Ninguém com checklist obrigatório escalado hoje.</p>
+          <p className="text-sm text-foreground-subtle">Ninguém cobrado por checklist estava escalado ontem.</p>
         ) : (
           <>
             <div className="flex items-baseline gap-2">
-              <span className={cn("text-2xl font-semibold tabular-nums", pct === 100 ? "text-success" : pct >= 70 ? "text-warning" : "text-danger")}>
-                {pct}%
+              <span className={cn("text-2xl font-semibold tabular-nums", pct === null ? "text-foreground-subtle" : pct === 100 ? "text-success" : pct >= 70 ? "text-warning" : "text-danger")}>
+                {pct === null ? "—" : `${pct}%`}
               </span>
               <span className="text-sm text-foreground-subtle">
                 {today.collaboratorsComplete} de {today.collaboratorsScheduled} cumpriram
+                {noAccessCount > 0 && ` · ${noAccessCount} sem acesso`}
               </span>
             </div>
             {today.collaboratorsIncomplete.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
                 {today.collaboratorsIncomplete.slice(0, 6).map((c) => (
-                  <Badge key={c.id} tone="danger">{c.name}</Badge>
+                  <Badge key={c.id} tone="danger">{c.name}{c.noAccess ? " (sem acesso)" : ""}</Badge>
                 ))}
                 {today.collaboratorsIncomplete.length > 6 && (
                   <Badge tone="neutral">+{today.collaboratorsIncomplete.length - 6}</Badge>
@@ -304,7 +307,9 @@ export default async function InicioPage() {
     },
     gestao: gestaoSummary
       ? {
-          percentualCumprimento: gestaoSummary.percentualCumprimento,
+          percentualCumprimento: checklistComplianceDashboard
+            ? compliancePercent(checklistComplianceDashboard.today)
+            : gestaoSummary.percentualCumprimento,
           equipamentosBloqueados: gestaoSummary.equipamentosBloqueados,
           acoesVencidas: gestaoSummary.acoesVencidas,
         }

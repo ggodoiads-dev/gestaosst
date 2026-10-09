@@ -31,6 +31,9 @@ async function getRequiredEquipmentByArea(): Promise<Map<string, RequiredEquipme
   const equipments = await db.equipment.findMany({
     where: {
       active: true,
+      // Bloqueado / em manutenção não dá pra inspecionar — exigir esse equipamento deixava a pessoa
+      // eternamente "pendente" mesmo fazendo o checklist certinho (ex: 4 bloqueados em Amarração).
+      status: { notIn: ["BLOQUEADO", "EM_MANUTENCAO"] },
       assignments: { some: { active: true, template: { versions: { some: { status: "ATIVA" } } } } },
     },
     select: { id: true, code: true, name: true, areaId: true },
@@ -85,9 +88,26 @@ function lastClosedDay(): Date {
   return new Date(y, m - 1, d - 1);
 }
 
+/** Instante (UTC) em que o dia de calendário `date` começa em Brasília — as execuções são carimbadas em
+ * UTC, então comparar com meia-noite UTC jogava checklist feito à noite no dia errado. */
+function dayStartInstant(date: Date): Date {
+  return new Date(`${localDateKey(date)}T00:00:00-03:00`);
+}
+
+function brtDayKey(instant: Date): string {
+  return formatInTimeZone(instant, APP_TIMEZONE, "yyyy-MM-dd");
+}
+
+/** Quem é COBRADO por checklist: o colaborador marcado "Precisa de checklist" (RH/Supervisão) ou cuja
+ * função tem checklist obrigatório. Inclui quem ainda não tem login — ele é cobrado e não consegue
+ * cumprir, então entra na conta como pendente (antes era simplesmente ignorado e o número melhorava
+ * de mentira). */
 function listEligibleCollaboratorsQuery() {
   return db.collaborator.findMany({
-    where: { active: true, checklistEnabled: true, userId: { not: null } },
+    where: {
+      active: true,
+      OR: [{ requiresChecklist: true }, { function: { requiredChecklists: { some: {} } } }],
+    },
     include: collaboratorWithFunctionInclude,
     orderBy: { name: "asc" },
   });
@@ -116,14 +136,18 @@ async function buildCollaboratorChecklistDays(collaboratorId: string, from: Date
   const executions =
     collaborator.userId && required.length > 0
       ? await db.checklistExecution.findMany({
-          where: { executedById: collaborator.userId, status: "CONCLUIDO", finishedAt: { gte: rangeStart, lt: rangeEndExclusive } },
+          where: {
+            executedById: collaborator.userId,
+            status: "CONCLUIDO",
+            finishedAt: { gte: dayStartInstant(rangeStart), lt: dayStartInstant(rangeEndExclusive) },
+          },
           select: { equipmentId: true, finishedAt: true, checklistVersion: { select: { templateId: true } } },
         })
       : [];
 
   const completedByDay = new Map<string, Set<string>>();
   for (const ex of executions) {
-    const key = localDateKey(ex.finishedAt!);
+    const key = brtDayKey(ex.finishedAt!);
     const set = completedByDay.get(key) ?? new Set<string>();
     set.add(ex.equipmentId);
     set.add(ex.checklistVersion.templateId);
@@ -183,8 +207,17 @@ export async function getChecklistComplianceRange(
 type PeriodComplianceStats = {
   collaboratorsScheduled: number;
   collaboratorsComplete: number;
-  collaboratorsIncomplete: { id: string; name: string; pendingCount: number }[];
+  collaboratorsIncomplete: { id: string; name: string; pendingCount: number; noAccess: boolean }[];
+  /** Turnos (pessoa × dia escalado) com checklist cobrado, e quantos foram cumpridos — base da % de aderência. */
+  shiftsRequired: number;
+  shiftsComplete: number;
 };
+
+/** Aderência por COLABORADOR: dos turnos em que alguém era cobrado por checklist, quantos foram cumpridos
+ * por essa pessoa (no login dela). `null` quando ninguém era cobrado no período. */
+export function compliancePercent(stats: Pick<PeriodComplianceStats, "shiftsRequired" | "shiftsComplete">): number | null {
+  return stats.shiftsRequired === 0 ? null : Math.round((stats.shiftsComplete / stats.shiftsRequired) * 100);
+}
 
 async function computeCompliancePeriodStats(from: Date, toInclusive: Date): Promise<PeriodComplianceStats> {
   const rangeStart = startOfDay(from);
@@ -192,7 +225,7 @@ async function computeCompliancePeriodStats(from: Date, toInclusive: Date): Prom
   // Só conta dias já fechados (até ontem): turno de hoje está em andamento e o futuro nem aconteceu.
   const rangeEndExclusive = addDays(startOfDay(toInclusive) < closedDay ? startOfDay(toInclusive) : closedDay, 1);
   if (rangeStart >= rangeEndExclusive) {
-    return { collaboratorsScheduled: 0, collaboratorsComplete: 0, collaboratorsIncomplete: [] };
+    return { collaboratorsScheduled: 0, collaboratorsComplete: 0, collaboratorsIncomplete: [], shiftsRequired: 0, shiftsComplete: 0 };
   }
 
   const [collaborators, notes, requiredByArea] = await Promise.all([
@@ -202,13 +235,17 @@ async function computeCompliancePeriodStats(from: Date, toInclusive: Date): Prom
   ]);
 
   const requiredByCollaborator = new Map(collaborators.map((c) => [c.id, getRequiredItemsForCollaborator(c, requiredByArea)]));
-  const eligible = collaborators.filter((c) => c.userId && (requiredByCollaborator.get(c.id)?.items.length ?? 0) > 0);
-  const userIds = eligible.map((c) => c.userId!);
+  const eligible = collaborators.filter((c) => (requiredByCollaborator.get(c.id)?.items.length ?? 0) > 0);
+  const userIds = eligible.filter((c) => c.userId).map((c) => c.userId!);
 
   const executions =
     userIds.length > 0
       ? await db.checklistExecution.findMany({
-          where: { executedById: { in: userIds }, status: "CONCLUIDO", finishedAt: { gte: rangeStart, lt: rangeEndExclusive } },
+          where: {
+            executedById: { in: userIds },
+            status: "CONCLUIDO",
+            finishedAt: { gte: dayStartInstant(rangeStart), lt: dayStartInstant(rangeEndExclusive) },
+          },
           select: { executedById: true, equipmentId: true, finishedAt: true, checklistVersion: { select: { templateId: true } } },
         })
       : [];
@@ -217,7 +254,7 @@ async function computeCompliancePeriodStats(from: Date, toInclusive: Date): Prom
   // guardar os dois no mesmo Set por pessoa/dia sem precisar ramificar por modo mais abaixo.
   const completedByKey = new Map<string, Set<string>>();
   for (const ex of executions) {
-    const key = `${ex.executedById}|${localDateKey(ex.finishedAt!)}`;
+    const key = `${ex.executedById}|${brtDayKey(ex.finishedAt!)}`;
     const set = completedByKey.get(key) ?? new Set<string>();
     set.add(ex.equipmentId);
     set.add(ex.checklistVersion.templateId);
@@ -227,6 +264,8 @@ async function computeCompliancePeriodStats(from: Date, toInclusive: Date): Prom
   const notesByKey = new Map(notes.map((n) => [`${n.collaboratorId}|${localDateKey(n.date)}`, n]));
 
   let scheduledCount = 0;
+  let shiftsRequired = 0;
+  let shiftsComplete = 0;
   const incomplete: PeriodComplianceStats["collaboratorsIncomplete"] = [];
 
   for (const c of eligible) {
@@ -241,19 +280,25 @@ async function computeCompliancePeriodStats(from: Date, toInclusive: Date): Prom
       const status = note ? note.overrideStatus : computed;
       if (status !== "TRABALHO") continue;
       scheduledAnyDay = true;
-      const completedIds = completedByKey.get(`${c.userId}|${dayKey}`) ?? new Set<string>();
-      pendingTotal += required.filter((e) => !completedIds.has(e.id)).length;
+      // Sem login não há como cumprir: tudo que é cobrado fica pendente.
+      const completedIds = c.userId ? (completedByKey.get(`${c.userId}|${dayKey}`) ?? new Set<string>()) : new Set<string>();
+      const pendingToday = required.filter((e) => !completedIds.has(e.id)).length;
+      pendingTotal += pendingToday;
+      shiftsRequired++;
+      if (pendingToday === 0) shiftsComplete++;
     }
 
     if (!scheduledAnyDay) continue;
     scheduledCount++;
-    if (pendingTotal > 0) incomplete.push({ id: c.id, name: c.name, pendingCount: pendingTotal });
+    if (pendingTotal > 0) incomplete.push({ id: c.id, name: c.name, pendingCount: pendingTotal, noAccess: !c.userId });
   }
 
   return {
     collaboratorsScheduled: scheduledCount,
     collaboratorsComplete: scheduledCount - incomplete.length,
     collaboratorsIncomplete: incomplete,
+    shiftsRequired,
+    shiftsComplete,
   };
 }
 

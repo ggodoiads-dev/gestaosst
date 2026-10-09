@@ -11,6 +11,7 @@ import {
 } from "@/server/services/indicators.service";
 import {
   getChecklistComplianceDashboard,
+  compliancePercent,
   getChecklistComplianceRange,
 } from "@/server/services/checklist-compliance.service";
 import {
@@ -159,6 +160,8 @@ export default async function IndicadoresPage({
     }
   }
 
+  const complianceYesterdayPercent = checklistDashboard ? compliancePercent(checklistDashboard.today) : null;
+
   const desempenhoBars = desempenho.map((d) => ({
     name: d.areaName,
     value: d.totalEquipamentos > 0 ? Math.round((d.realizadosHoje / d.totalEquipamentos) * 100) : 0,
@@ -178,41 +181,84 @@ export default async function IndicadoresPage({
       />
       <PageBody className="flex flex-col gap-6">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <StatCard
-            label="% cumprimento hoje"
-            value={summary.percentualCumprimento === null ? "—" : `${summary.percentualCumprimento}%`}
-            tone={
-              summary.percentualCumprimento === null
-                ? "neutral"
-                : summary.percentualCumprimento >= 90
-                  ? "success"
-                  : summary.percentualCumprimento >= 70
-                    ? "warning"
-                    : "danger"
-            }
-            href="/checklist/realizar"
-          />
+          {checklistDashboard ? (
+            <StatCard
+              label="Aderência de checklist (ontem)"
+              value={complianceYesterdayPercent === null ? "—" : `${complianceYesterdayPercent}%`}
+              tone={
+                complianceYesterdayPercent === null
+                  ? "neutral"
+                  : complianceYesterdayPercent >= 90
+                    ? "success"
+                    : complianceYesterdayPercent >= 70
+                      ? "warning"
+                      : "danger"
+              }
+              href="/indicadores#checklist-por-colaborador"
+            />
+          ) : (
+            <StatCard
+              label="Checklists feitos hoje (equipamentos)"
+              value={summary.percentualCumprimento === null ? "—" : `${summary.percentualCumprimento}%`}
+              tone="neutral"
+              href="/checklist/realizar"
+            />
+          )}
           <StatCard label="NCs abertas" value={summary.ncAbertas} tone="warning" href="/nao-conformidades" />
           <StatCard label="NCs críticas" value={summary.ncCriticas} tone="danger" href="/nao-conformidades?severity=CRITICA" />
           <StatCard label="Ações vencidas" value={summary.acoesVencidas} tone="danger" href="/planos-de-acao?overdue=true" />
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Checklists de hoje (equipamento + área)</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <DonutStat
-              centerLabel="cumprido"
-              centerValue={summary.percentualCumprimento === null ? "—" : `${summary.percentualCumprimento}%`}
-              segments={[
-                { label: "Realizados", value: summary.realizados, color: "var(--success)" },
-                { label: "Atrasados", value: summary.atrasados, color: "var(--danger)" },
-                { label: "Pendentes", value: Math.max(summary.pendentes - summary.atrasados, 0), color: "var(--warning)" },
-              ]}
-            />
-          </CardContent>
-        </Card>
+        {checklistDashboard ? (
+          <Card id="checklist-por-colaborador">
+            <CardHeader>
+              <CardTitle>Aderência de checklist por colaborador</CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+              {[
+                { title: `Ontem — ${formatDate(checklistDashboard.date)}`, stats: checklistDashboard.today },
+                { title: `Mês — ${MONTH_LABELS[now.getMonth()]} de ${now.getFullYear()} (até ontem)`, stats: checklistDashboard.month },
+              ].map(({ title, stats }) => {
+                const pct = compliancePercent(stats);
+                const noAccessCount = stats.collaboratorsIncomplete.filter((c) => c.noAccess).length;
+                return (
+                  <div key={title} className="flex flex-col gap-3">
+                    <p className="text-sm font-medium text-foreground">{title}</p>
+                    <DonutStat
+                      centerLabel="aderência"
+                      centerValue={pct === null ? "—" : `${pct}%`}
+                      segments={[
+                        { label: "Turnos cumpridos", value: stats.shiftsComplete, color: "var(--success)" },
+                        { label: "Turnos pendentes", value: stats.shiftsRequired - stats.shiftsComplete, color: "var(--danger)" },
+                      ]}
+                    />
+                    <p className="text-xs text-foreground-subtle">
+                      {stats.collaboratorsComplete} de {stats.collaboratorsScheduled} colaborador(es) em dia
+                      {noAccessCount > 0 && ` · ${noAccessCount} ainda sem acesso ao sistema`}
+                    </p>
+                  </div>
+                );
+              })}
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
+            <CardHeader>
+              <CardTitle>Checklists de hoje (equipamento + área)</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <DonutStat
+                centerLabel="cumprido"
+                centerValue={summary.percentualCumprimento === null ? "—" : `${summary.percentualCumprimento}%`}
+                segments={[
+                  { label: "Realizados", value: summary.realizados, color: "var(--success)" },
+                  { label: "Atrasados", value: summary.atrasados, color: "var(--danger)" },
+                  { label: "Pendentes", value: Math.max(summary.pendentes - summary.atrasados, 0), color: "var(--warning)" },
+                ]}
+              />
+            </CardContent>
+          </Card>
+        )}
 
         {canSeeCollaboratorReport && (
           <section className="flex flex-col gap-3 border-t border-border pt-6">
@@ -230,8 +276,8 @@ export default async function IndicadoresPage({
               {canSeeChecklistCompliance && checklistDashboard && (
                 <TabsContent value="checklist" className="flex flex-col gap-5">
                   <p className="text-sm text-foreground-subtle">
-                    Quem, marcado como &quot;Faz checklist&quot;, cumpriu o checklist dos equipamentos da própria área em
-                    cada turno escalado — e quem ficou pendente.
+                    Quem é cobrado por checklist (marcado &quot;Precisa de checklist&quot; ou com checklist obrigatório na função)
+                    cumpriu o seu em cada turno escalado — e quem ficou pendente. Quem ainda não tem acesso ao sistema conta como pendente.
                   </p>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
@@ -256,7 +302,7 @@ export default async function IndicadoresPage({
                           <div className="flex flex-wrap gap-2">
                             {checklistDashboard.today.collaboratorsIncomplete.map((c) => (
                               <Badge key={c.id} tone="danger">
-                                {c.name} — {c.pendingCount} pendente{c.pendingCount > 1 ? "s" : ""}
+                                {c.name} — {c.noAccess ? "sem acesso ao sistema" : `${c.pendingCount} pendente${c.pendingCount > 1 ? "s" : ""}`}
                               </Badge>
                             ))}
                           </div>
@@ -287,7 +333,7 @@ export default async function IndicadoresPage({
                               .sort((a, b) => b.pendingCount - a.pendingCount)
                               .map((c) => (
                                 <div key={c.id} className="flex items-center justify-between px-1 py-2 text-sm">
-                                  <span>{c.name}</span>
+                                  <span>{c.name}{c.noAccess && <span className="ml-2 text-xs font-normal text-foreground-subtle">(sem acesso ao sistema)</span>}</span>
                                   <span className="font-semibold tabular-nums text-danger">
                                     {c.pendingCount} pendente{c.pendingCount > 1 ? "s" : ""}
                                   </span>
