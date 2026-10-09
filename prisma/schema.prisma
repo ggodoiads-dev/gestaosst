@@ -65,10 +65,10 @@ model User {
   role Role  @relation(fields: [roleId], references: [id])
   unit Unit? @relation(fields: [unitId], references: [id])
 
-  userAreas         UserArea[]
-  userFunctions     UserFunction[]
-  userRollCallAreas UserRollCallArea[]
-  userRollCallTurnos UserRollCallTurno[]
+  userAreas                 UserArea[]
+  userFunctions             UserFunction[]
+  userRollCallAreas         UserRollCallArea[]
+  userRollCallTurnos        UserRollCallTurno[]
   userRollCallCollaborators UserRollCallCollaborator[]
 
   responsibleEquipments  Equipment[]            @relation("EquipmentResponsible")
@@ -88,24 +88,25 @@ model User {
   auditLogs              AuditLog[]
   uploadedAttachments    Attachment[]
 
-  accidentsInvestigated         Accident[]               @relation("AccidentInvestigatedBy")
-  accidentsReported             Accident[]               @relation("AccidentReportedBy")
-  accidentActionsResponsible    AccidentAction[]         @relation("AccidentActionResponsibleUser")
-  qualificationRecordsCreated   QualificationRecord[]    @relation("QualificationCreatedBy")
-  turnosCreated                 Turno[]                  @relation("TurnoCreatedBy")
-  scheduleDayNotesCreated       ScheduleDayNote[]        @relation("ScheduleDayNoteCreatedBy")
-  productivityEntriesCreated    ProductivityEntry[]      @relation("ProductivityCreatedBy")
-  productivityGoalsCreated      ProductivityGoal[]       @relation("ProductivityGoalCreatedBy")
-  epiDeliveriesCreated          EpiDelivery[]            @relation("EpiDeliveryCreatedBy")
-  timeClockRecordsImported      TimeClockRecord[]        @relation("TimeClockImportedBy")
-  timeClockPisIgnored           IgnoredTimeClockPis[]     @relation("TimeClockPisIgnoredBy")
-  checklistJustificationsMade   ChecklistJustification[] @relation("ChecklistJustificationCreatedBy")
-  collaboratorActivitiesGranted CollaboratorActivity[]   @relation("CollaboratorActivityGrantedBy")
-  collaboratorEquipmentsGranted CollaboratorEquipment[]  @relation("CollaboratorEquipmentCreatedBy")
-  warningsCreated               Warning[]                @relation("WarningCreatedBy")
-  equipmentDamagesReported      EquipmentDamage[]        @relation("EquipmentDamageReportedBy")
-  guardianReportsImported       GuardianReport[]         @relation("GuardianReportImportedBy")
-  collaboratorProfile           Collaborator?
+  accidentsInvestigated           Accident[]                   @relation("AccidentInvestigatedBy")
+  accidentsReported               Accident[]                   @relation("AccidentReportedBy")
+  accidentActionsResponsible      AccidentAction[]             @relation("AccidentActionResponsibleUser")
+  qualificationRecordsCreated     QualificationRecord[]        @relation("QualificationCreatedBy")
+  turnosCreated                   Turno[]                      @relation("TurnoCreatedBy")
+  scheduleDayNotesCreated         ScheduleDayNote[]            @relation("ScheduleDayNoteCreatedBy")
+  productivityEntriesCreated      ProductivityEntry[]          @relation("ProductivityCreatedBy")
+  productivityGoalsCreated        ProductivityGoal[]           @relation("ProductivityGoalCreatedBy")
+  epiDeliveriesCreated            EpiDelivery[]                @relation("EpiDeliveryCreatedBy")
+  timeClockRecordsImported        TimeClockRecord[]            @relation("TimeClockImportedBy")
+  timeClockPisIgnored             IgnoredTimeClockPis[]        @relation("TimeClockPisIgnoredBy")
+  checklistJustificationsMade     ChecklistJustification[]     @relation("ChecklistJustificationCreatedBy")
+  checklistItemJustificationsMade ChecklistItemJustification[] @relation("ChecklistItemJustificationCreatedBy")
+  collaboratorActivitiesGranted   CollaboratorActivity[]       @relation("CollaboratorActivityGrantedBy")
+  collaboratorEquipmentsGranted   CollaboratorEquipment[]      @relation("CollaboratorEquipmentCreatedBy")
+  warningsCreated                 Warning[]                    @relation("WarningCreatedBy")
+  equipmentDamagesReported        EquipmentDamage[]            @relation("EquipmentDamageReportedBy")
+  guardianReportsImported         GuardianReport[]             @relation("GuardianReportImportedBy")
+  collaboratorProfile             Collaborator?
 
   @@index([roleId])
 }
@@ -196,16 +197,16 @@ model Area {
 
   unit Unit @relation(fields: [unitId], references: [id])
 
-  userAreas       UserArea[]
-  userRollCallAreas UserRollCallArea[]
-  equipments      Equipment[]
-  areaHistoryFrom EquipmentAreaHistory[] @relation("AreaFrom")
-  areaHistoryTo   EquipmentAreaHistory[] @relation("AreaTo")
-  nonconformities Nonconformity[]
-  collaborators   Collaborator[]
-  accidents       Accident[]
+  userAreas          UserArea[]
+  userRollCallAreas  UserRollCallArea[]
+  equipments         Equipment[]
+  areaHistoryFrom    EquipmentAreaHistory[] @relation("AreaFrom")
+  areaHistoryTo      EquipmentAreaHistory[] @relation("AreaTo")
+  nonconformities    Nonconformity[]
+  collaborators      Collaborator[]
+  accidents          Accident[]
   checklistTemplates ChecklistTemplate[]
-  attachments     Attachment[]
+  attachments        Attachment[]
 
   createdAt DateTime @default(now())
 
@@ -271,15 +272,15 @@ model Equipment {
   responsible  User?         @relation("EquipmentResponsible", fields: [responsibleId], references: [id])
   registeredBy User          @relation("EquipmentRegisteredBy", fields: [registeredById], references: [id])
 
-  areaHistory     EquipmentAreaHistory[]
-  assignments     EquipmentChecklistAssignment[]
-  schedules       ChecklistSchedule[]
-  executions      ChecklistExecution[]
-  nonconformities Nonconformity[]
-  events          EquipmentEvent[]
-  attachments     Attachment[]
+  areaHistory           EquipmentAreaHistory[]
+  assignments           EquipmentChecklistAssignment[]
+  schedules             ChecklistSchedule[]
+  executions            ChecklistExecution[]
+  nonconformities       Nonconformity[]
+  events                EquipmentEvent[]
+  attachments           Attachment[]
   collaboratorAptitudes CollaboratorEquipment[]
-  damages         EquipmentDamage[]
+  damages               EquipmentDamage[]
 
   @@index([typeId])
   @@index([areaId])
@@ -867,23 +868,24 @@ model Collaborator {
   user     User?        @relation(fields: [userId], references: [id])
   function JobFunction? @relation(fields: [functionId], references: [id])
 
-  accidentInvolvements    AccidentInvolvement[]
-  accidentActions         AccidentAction[]
-  qualificationRecords    QualificationRecord[]
-  scheduleDayNotes        ScheduleDayNote[]
-  productivityEntries     ProductivityEntry[]
-  productivityGoals       ProductivityGoal[]
-  shiftCheckIns           ShiftCheckIn[]
-  epiDeliveries           EpiDelivery[]
-  timeClockRecords        TimeClockRecord[]
-  checklistJustifications ChecklistJustification[]
-  activityAptitudes       CollaboratorActivity[]
-  equipmentAptitudes      CollaboratorEquipment[]
-  warnings                Warning[]
-  attachments             Attachment[]
+  accidentInvolvements        AccidentInvolvement[]
+  accidentActions             AccidentAction[]
+  qualificationRecords        QualificationRecord[]
+  scheduleDayNotes            ScheduleDayNote[]
+  productivityEntries         ProductivityEntry[]
+  productivityGoals           ProductivityGoal[]
+  shiftCheckIns               ShiftCheckIn[]
+  epiDeliveries               EpiDelivery[]
+  timeClockRecords            TimeClockRecord[]
+  checklistJustifications     ChecklistJustification[]
+  checklistItemJustifications ChecklistItemJustification[]
+  activityAptitudes           CollaboratorActivity[]
+  equipmentAptitudes          CollaboratorEquipment[]
+  warnings                    Warning[]
+  attachments                 Attachment[]
   equipmentDamagesResponsible EquipmentDamage[]
-  guardianReports         GuardianReport[]
-  rollCallLeaders         UserRollCallCollaborator[]
+  guardianReports             GuardianReport[]
+  rollCallLeaders             UserRollCallCollaborator[]
 
   @@index([areaId])
   @@index([functionId])
@@ -894,11 +896,11 @@ model Collaborator {
 // =========================================================================
 
 model JobFunction {
-  id        String   @id @default(uuid())
-  name      String   @unique
-  active    Boolean  @default(true)
-  requiresNr Boolean @default(true) // false pra função que não exige nenhuma NR — sem isso, "0 NR cadastrada" contava como inapto mesmo quando a função nunca exigiu nada
-  createdAt DateTime @default(now())
+  id         String   @id @default(uuid())
+  name       String   @unique
+  active     Boolean  @default(true)
+  requiresNr Boolean  @default(true) // false pra função que não exige nenhuma NR — sem isso, "0 NR cadastrada" contava como inapto mesmo quando a função nunca exigiu nada
+  createdAt  DateTime @default(now())
 
   collaborators      Collaborator[]
   kitItems           JobFunctionEpiKitItem[]
@@ -919,10 +921,12 @@ model JobFunctionEpiKitItem {
   @@index([epiTypeId])
 }
 
-/** Checklist(s) que todo colaborador de uma função precisa realizar por dia — ex: função
+/**
+ * Checklist(s) que todo colaborador de uma função precisa realizar por dia — ex: função
  * "Amarrador" exige o checklist de Amarração. Quando configurado, isso passa a valer sozinho
  * (independe do Collaborator.requiresChecklist manual) tanto na cobrança de pendência
- * (time-clock.service.ts) quanto na tela de Realizar Checklist (só mostra o que é da função). */
+ * (time-clock.service.ts) quanto na tela de Realizar Checklist (só mostra o que é da função).
+ */
 model JobFunctionRequiredChecklist {
   id         String   @id @default(uuid())
   functionId String
@@ -1136,27 +1140,27 @@ enum GuardianReportType {
 /// que aparece na mesma exportação nunca é gravada. `guardianId` é o "ID da ocorrência" da
 /// planilha — chave de negócio que permite reimportar o arquivo do dia seguinte sem duplicar.
 model GuardianReport {
-  id                 String             @id @default(uuid())
-  guardianId         String             @unique
-  type               GuardianReportType
-  categoryName       String?
-  description        String?
-  occurredAt         DateTime?
-  reportedAt         DateTime?
-  unit               String?
-  area               String?
-  subArea            String?
-  location           String?
-  equipment          String?
-  reporterName       String?
-  reporterExternalId String?
-  reporterEmail      String?
-  reporterCompany    String?
+  id                     String             @id @default(uuid())
+  guardianId             String             @unique
+  type                   GuardianReportType
+  categoryName           String?
+  description            String?
+  occurredAt             DateTime?
+  reportedAt             DateTime?
+  unit                   String?
+  area                   String?
+  subArea                String?
+  location               String?
+  equipment              String?
+  reporterName           String?
+  reporterExternalId     String?
+  reporterEmail          String?
+  reporterCompany        String?
   reporterCollaboratorId String?
-  isAnonymous        Boolean            @default(false)
-  raw                String? // linha original inteira (JSON), pra nunca perder um campo que não foi modelado
-  importedAt         DateTime           @default(now())
-  importedById       String
+  isAnonymous            Boolean            @default(false)
+  raw                    String? // linha original inteira (JSON), pra nunca perder um campo que não foi modelado
+  importedAt             DateTime           @default(now())
+  importedById           String
 
   reporterCollaborator Collaborator? @relation(fields: [reporterCollaboratorId], references: [id])
   importedBy           User          @relation("GuardianReportImportedBy", fields: [importedById], references: [id])
@@ -1355,8 +1359,8 @@ model Turno {
   createdById    String
   createdAt      DateTime @default(now())
 
-  scheduleType  ScheduleType   @relation(fields: [scheduleTypeId], references: [id])
-  createdBy     User           @relation("TurnoCreatedBy", fields: [createdById], references: [id])
+  scheduleType  ScheduleType        @relation(fields: [scheduleTypeId], references: [id])
+  createdBy     User                @relation("TurnoCreatedBy", fields: [createdById], references: [id])
   collaborators Collaborator[]
   rollCallUsers UserRollCallTurno[]
 }
@@ -1449,9 +1453,9 @@ model TimeClockRecord {
 /// relógio tipo "00000000000", ou sobra de um arquivo antigo) — só tira da lista de reconciliação,
 /// não apaga nenhuma marcação já importada.
 model IgnoredTimeClockPis {
-  pis        String   @id
+  pis         String   @id
   ignoredById String
-  ignoredAt  DateTime @default(now())
+  ignoredAt   DateTime @default(now())
 
   ignoredBy User @relation("TimeClockPisIgnoredBy", fields: [ignoredById], references: [id])
 }
@@ -1483,4 +1487,24 @@ model ChecklistJustification {
 
   @@unique([collaboratorId, date])
   @@index([collaboratorId, date])
+}
+
+/// Justificativa de UM item de checklist (equipamento, ou template quando a função exige checklist específico)
+/// não feito por um colaborador num dia. Quando o motivo "conta como cumprido", o item entra como concluído
+/// na aderência. `dayKey` = "yyyy-MM-dd" no calendário de Brasília; `itemId` = equipmentId ou templateId.
+model ChecklistItemJustification {
+  id             String                       @id @default(uuid())
+  collaboratorId String
+  dayKey         String
+  itemId         String
+  reason         ChecklistJustificationReason
+  note           String?
+  createdById    String
+  createdAt      DateTime                     @default(now())
+
+  collaborator Collaborator @relation(fields: [collaboratorId], references: [id])
+  createdBy    User         @relation("ChecklistItemJustificationCreatedBy", fields: [createdById], references: [id])
+
+  @@unique([collaboratorId, dayKey, itemId])
+  @@index([dayKey])
 }
