@@ -192,26 +192,18 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
   }
   if (p.has(PERMISSIONS.ACCIDENT_MANAGE)) {
     sst.push({ href: "/acidentes", label: "Investigação de Acidentes", icon: "accidents" });
-    sst.push({ href: "/acidentes/importar", label: "Importar Acidentes", icon: "qualificationImport" });
   }
   if (p.has(PERMISSIONS.ACTIVITY_MANAGE)) {
     sst.push({ href: "/atividades", label: "Atividades e Documentos", icon: "activities" });
   }
   if (p.has(PERMISSIONS.QUALIFICATION_MANAGE)) {
     sst.push({ href: "/qualificacoes", label: "Qualificações", icon: "qualifications" });
-    sst.push({ href: "/qualificacoes/importar", label: "Importar ASOs/NRs", icon: "qualificationImport" });
   }
   if (p.has(PERMISSIONS.GUARDIAN_MANAGE) || p.has(PERMISSIONS.GUARDIAN_VIEW)) {
     sst.push({ href: "/guardian", label: "Guardian", icon: "guardian" });
   }
-  if (p.has(PERMISSIONS.GUARDIAN_MANAGE)) {
-    sst.push({ href: "/guardian/importar", label: "Importar Guardian", icon: "qualificationImport" });
-  }
   if (p.has(PERMISSIONS.DTO_MANAGE) || p.has(PERMISSIONS.DTO_VIEW)) {
     sst.push({ href: "/dto", label: "DTO", icon: "checklistCompliance" });
-  }
-  if (p.has(PERMISSIONS.DTO_MANAGE)) {
-    sst.push({ href: "/dto/importar", label: "Importar DTO", icon: "qualificationImport" });
   }
   if (sst.length > 0) groups.push({ key: "sst", title: "Segurança", items: sst });
 
@@ -233,8 +225,6 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
     rh.push({ href: "/minhas-entrevistas", label: "Minhas Entrevistas", icon: "alert" });
   }
   if (p.has(PERMISSIONS.HR_MANAGE)) {
-    rh.push({ href: "/rh/importar", label: "Importar Planilha", icon: "hrImport" });
-    rh.push({ href: "/rh/ponto", label: "Importar Ponto", icon: "timeClock" });
     rh.push({ href: "/rh/tratativa-ponto", label: "Tratativa de Ponto", icon: "timeClockTreatment" });
     rh.push({ href: "/pendencias-advertencia", label: "Pendências de Advertência", icon: "warningPending" });
     rh.push({ href: "/entrevistas-abs", label: "Entrevistas de ABS", icon: "alert" });
@@ -262,11 +252,33 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
   }
   if (indicadores.length > 0) groups.push({ key: "indicadores", title: "Supervisão", items: indicadores });
 
+  // Tudo que alimenta o SIGO com planilhas/exports de outros sistemas fica num lugar só.
+  const importacoes: NavItem[] = [];
+  if (p.has(PERMISSIONS.HR_MANAGE)) {
+    importacoes.push({ href: "/rh/importar", label: "Importar RH (colaboradores)", icon: "hrImport" });
+    importacoes.push({ href: "/rh/ponto", label: "Importar Ponto", icon: "timeClock" });
+  }
+  if (p.has(PERMISSIONS.ACCIDENT_MANAGE)) {
+    importacoes.push({ href: "/acidentes/importar", label: "Importar Acidentes", icon: "qualificationImport" });
+  }
+  if (p.has(PERMISSIONS.QUALIFICATION_MANAGE)) {
+    importacoes.push({ href: "/qualificacoes/importar", label: "Importar ASOs/NRs", icon: "qualificationImport" });
+  }
+  if (p.has(PERMISSIONS.GUARDIAN_MANAGE)) {
+    importacoes.push({ href: "/guardian/importar", label: "Importar Guardian", icon: "guardian" });
+  }
+  if (p.has(PERMISSIONS.DTO_MANAGE)) {
+    importacoes.push({ href: "/dto/importar", label: "Importar DTO", icon: "checklistCompliance" });
+  }
+  if (p.has(PERMISSIONS.MASTERDATA_MANAGE)) {
+    importacoes.push({ href: "/cadastros/equipamentos/importar", label: "Importar Equipamentos", icon: "equipmentImport" });
+  }
+  if (importacoes.length > 0) groups.push({ key: "importacoes", title: "Importações", items: importacoes });
+
   const admin: NavItem[] = [];
   if (p.has(PERMISSIONS.MASTERDATA_MANAGE)) {
     admin.push({ href: "/cadastros/areas", label: "Áreas e Unidades", icon: "building" });
     admin.push({ href: "/cadastros/equipamentos", label: "Tipos de Equipamento", icon: "equipment" });
-    admin.push({ href: "/cadastros/equipamentos/importar", label: "Importar Equipamentos", icon: "equipmentImport" });
     admin.push({ href: "/cadastros/modelos-checklist", label: "Modelos de Checklist", icon: "checklistTemplate" });
   }
   if (p.has(PERMISSIONS.QUALIFICATION_MANAGE)) {
