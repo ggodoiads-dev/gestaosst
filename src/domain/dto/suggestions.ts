@@ -7,6 +7,9 @@ export const DTO_JUSTIFICATION_REASON = "Já realizado por liderança não monit
 /** Quem tem menos que isso de casa é prioridade pro primeiro DTO. */
 export const DTO_NEW_HIRE_DAYS = 60;
 
+/** Só DTOs dos últimos N dias geram ações no Plano de Ações — prazo "daqui a 2 semanas" pra um DTO de um ano atrás não faz sentido. */
+export const DTO_ACTIONS_WINDOW_DAYS = 90;
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 function dayNumber(date: Date): number {
@@ -34,4 +37,9 @@ export function dtoCooldown(lastEffective: Date | null, todayKey: string, cooldo
 export function tenureDays(admissionDate: Date | null, todayKey: string): number | null {
   if (!admissionDate) return null;
   return keyDayNumber(todayKey) - dayNumber(admissionDate);
+}
+
+/** Dias entre `date` (meio-dia UTC do dia de calendário) e `todayKey` (AAAA-MM-DD). */
+export function daysSinceDate(date: Date, todayKey: string): number {
+  return keyDayNumber(todayKey) - dayNumber(date);
 }

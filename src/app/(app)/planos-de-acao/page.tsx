@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { after } from "next/server";
+import { generateMissingActions } from "@/server/services/dto.service";
 import { requireUser, hasPermission, ForbiddenError } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
 import { listActionItemsForUser } from "@/server/services/nonconformity.service";
@@ -22,6 +24,8 @@ export default async function PlanosDeAcaoPage({
     throw new ForbiddenError();
   }
   const { overdue, aba } = await searchParams;
+  // As ações dos DTOs recentes se completam sozinhas (em segundo plano) sempre que alguém abre esta tela.
+  after(() => generateMissingActions());
   const tab = aba === "dto" ? "dto" : "nc";
 
   const [items, dtoActions] = await Promise.all([listActionItemsForUser(user, { overdue: overdue === "true" }), listDtoActions(user)]);

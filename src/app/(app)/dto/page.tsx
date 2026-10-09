@@ -1,8 +1,9 @@
 import Link from "next/link";
+import { after } from "next/server";
 import { ChevronLeft, ChevronRight, Upload } from "lucide-react";
 import { requireUser, hasPermission, ForbiddenError } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
-import { getDtoSuggestions, latestDtoMonth, listDtoOfMonth } from "@/server/services/dto.service";
+import { generateMissingActions, getDtoSuggestions, latestDtoMonth, listDtoOfMonth } from "@/server/services/dto.service";
 import { currentMonthKey, isValidMonthKey, monthLabel, shiftMonth } from "@/lib/month";
 import { PageHeader, PageBody } from "@/components/domain/page-header";
 import { StatCard } from "@/components/domain/stat-card";
@@ -20,6 +21,8 @@ export default async function DtoPage({ searchParams }: { searchParams: Promise<
   if (!canImport && !hasPermission(user, PERMISSIONS.DTO_VIEW)) throw new ForbiddenError();
 
   const { mes, aba, semana, pordia } = await searchParams;
+  // As ações dos DTOs recentes se completam sozinhas (em segundo plano) sempre que alguém abre esta tela.
+  after(() => generateMissingActions());
   const tab = aba === "sugestoes" ? "sugestoes" : aba === "calendario" ? "calendario" : "realizados";
   const nowMonth = currentMonthKey();
   // Sem mês escolhido, abre no mês do DTO mais recente (os DTOs são feitos aos poucos, o mês corrente pode estar vazio).

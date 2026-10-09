@@ -7,7 +7,15 @@ import { PERMISSIONS } from "@/domain/shared/permissions";
 import { formatInTimeZone } from "date-fns-tz";
 import { APP_TIMEZONE } from "@/lib/dates";
 import { normalizeText, parseDtoWorkbook, type DtoAnswer, type DtoRawRow } from "@/domain/dto/parse";
-import { DTO_COOLDOWN_DAYS, DTO_JUSTIFICATION_REASON, DTO_NEW_HIRE_DAYS, dtoCooldown, tenureDays } from "@/domain/dto/suggestions";
+import {
+  DTO_ACTIONS_WINDOW_DAYS,
+  DTO_COOLDOWN_DAYS,
+  DTO_JUSTIFICATION_REASON,
+  DTO_NEW_HIRE_DAYS,
+  daysSinceDate,
+  dtoCooldown,
+  tenureDays,
+} from "@/domain/dto/suggestions";
 import { classifyAnswer } from "@/domain/dto/answers";
 import { syncDtoActionRows } from "@/server/services/dto-action.service";
 import { generateDtoActions, type DtoActionSuggestionItem } from "@/server/services/rico.service";
@@ -314,6 +322,11 @@ export type DtoActionsResult = { actions: DtoActionSuggestionItem[]; generatedAt
 
 /** Gera (ou lê do cache) as ações do Rico de um DTO e garante que elas existam no Plano de Ações. Sem checagem de
  * acesso: quem chama já decidiu que pode (tela do DTO ou importação). */
+function isRecentDto(date: Date): boolean {
+  const todayKey = formatInTimeZone(new Date(), APP_TIMEZONE, "yyyy-MM-dd");
+  return daysSinceDate(date, todayKey) <= DTO_ACTIONS_WINDOW_DAYS;
+}
+
 async function ensureDtoActions(dtoId: string, regenerate: boolean): Promise<DtoActionsResult> {
   const dto = await db.dtoEvaluation.findUniqueOrThrow({ where: { id: dtoId } });
 
@@ -321,7 +334,7 @@ async function ensureDtoActions(dtoId: string, regenerate: boolean): Promise<Dto
     const cached = await db.dtoActionSuggestion.findUnique({ where: { dtoEvaluationId: dtoId } }).catch(() => null);
     if (cached) {
       const cachedActions = cached.actions as DtoActionSuggestionItem[];
-      await syncDtoActionRows(dtoId, cachedActions); // cobre sugestões geradas antes do Plano de Ações existir
+      if (isRecentDto(dto.date)) await syncDtoActionRows(dtoId, cachedActions); // cobre sugestões geradas antes do Plano de Ações existir
       return { actions: cachedActions, generatedAt: cached.generatedAt, cached: true };
     }
   }
@@ -350,7 +363,7 @@ async function ensureDtoActions(dtoId: string, regenerate: boolean): Promise<Dto
       console.error("[dto] não foi possível guardar as ações do Rico:", error);
       return null;
     });
-  await syncDtoActionRows(dtoId, actions);
+  if (isRecentDto(dto.date)) await syncDtoActionRows(dtoId, actions);
   return { actions, generatedAt: saved?.generatedAt ?? new Date(), cached: false };
 }
 
@@ -378,3 +391,32 @@ export async function generateActionsForDtos(dtoIds: string[]): Promise<void> {
   }
 }
 
+
+/**
+ * Põe em dia, sozinho, o plano de ações dos DTOs recentes (últimos 90 dias): gera as ações do Rico dos que têm item "Não"
+ * e ainda não foram analisados, e cria no Plano de Ações os itens dos que já têm sugestão mas não têm item. Roda em
+ * segundo plano quando alguém abre DTO ou Planos de Ação; faz poucos por vez pra controlar o custo da IA.
+ */
+export async function generateMissingActions(limit = 12): Promise<void> {
+  try {
+    const todayKey = formatInTimeZone(new Date(), APP_TIMEZONE, "yyyy-MM-dd");
+    const [y, m, d] = todayKey.split("-").map(Number);
+    const cutoff = new Date(Date.UTC(y, m - 1, d - DTO_ACTIONS_WINDOW_DAYS, 0));
+
+    const pending = await db.dtoEvaluation.findMany({
+      where: {
+        date: { gte: cutoff },
+        OR: [
+          { noCount: { gt: 0 }, actionSuggestion: null },
+          { actionSuggestion: { isNot: null }, actions: { none: {} } },
+        ],
+      },
+      select: { id: true },
+      orderBy: { date: "desc" },
+      take: limit,
+    });
+    await generateActionsForDtos(pending.map((p) => p.id));
+  } catch (error) {
+    console.error("[dto] não foi possível pôr em dia as ações dos DTOs:", error);
+  }
+}

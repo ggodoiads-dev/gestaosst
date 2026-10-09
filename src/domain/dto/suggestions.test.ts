@@ -36,3 +36,11 @@ describe("tenureDays", () => {
     expect(tenureDays(null, "2026-10-09")).toBeNull();
   });
 });
+
+import { daysSinceDate } from "./suggestions";
+
+describe("daysSinceDate", () => {
+  it("conta dias entre a data do DTO e hoje", () => {
+    expect(daysSinceDate(new Date("2026-08-04T12:00:00Z"), "2026-10-09")).toBe(66);
+  });
+});
