@@ -34,6 +34,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { DonutStat } from "@/components/domain/charts/donut-stat";
 import { HorizontalBarChart } from "@/components/domain/charts/horizontal-bar-chart";
 import { cn } from "@/lib/utils";
+import { formatPersonName } from "@/lib/format-name";
 import { formatDate, parseDateOnly, APP_TIMEZONE } from "@/lib/dates";
 import { formatInTimeZone } from "date-fns-tz";
 import { ChecklistComplianceCollaboratorPicker } from "./checklist-compliance-collaborator-picker";
@@ -340,74 +341,9 @@ export default async function IndicadoresPage({
               {canSeeChecklistCompliance && checklistDashboard && (
                 <TabsContent value="checklist" className="flex flex-col gap-5">
                   <p className="text-sm text-foreground-subtle">
-                    Quem é cobrado por checklist (marcado &quot;Precisa de checklist&quot; ou com checklist obrigatório na função)
-                    cumpriu o seu em cada turno escalado — e quem ficou pendente. Quem ainda não tem acesso ao sistema conta como pendente.
+                    Escolha um colaborador para ver, dia a dia, o que ele fez e o que faltou. O resumo de quem concluiu e de
+                    quem falta (por dia, mês ou ano) fica no card &quot;Aderência de checklist por colaborador&quot;, mais acima.
                   </p>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>Ontem — {formatDate(checklistDashboard.date)}</CardTitle>
-                      </CardHeader>
-                      <CardContent className="flex flex-col gap-4">
-                        <DonutStat
-                          centerLabel="em dia"
-                          centerValue={
-                            checklistDashboard.today.collaboratorsScheduled === 0
-                              ? "100%"
-                              : `${Math.round((checklistDashboard.today.collaboratorsComplete / checklistDashboard.today.collaboratorsScheduled) * 100)}%`
-                          }
-                          segments={[
-                            { label: "Cumpriram tudo", value: checklistDashboard.today.collaboratorsComplete, color: "var(--success)" },
-                            { label: "Com pendência", value: checklistDashboard.today.collaboratorsIncomplete.length, color: "var(--danger)" },
-                          ]}
-                        />
-                        {checklistDashboard.today.collaboratorsIncomplete.length > 0 && (
-                          <div className="flex flex-wrap gap-2">
-                            {checklistDashboard.today.collaboratorsIncomplete.map((c) => (
-                              <Badge key={c.id} tone="danger">
-                                <Link href={`/indicadores/checklist/${c.id}?dia=${localDateKey(checklistDashboard.date)}`} className="hover:underline">{c.name}</Link> — {c.noAccess ? "sem acesso ao sistema" : `${c.pendingCount} pendente${c.pendingCount > 1 ? "s" : ""}`}
-                              </Badge>
-                            ))}
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>Mês — {MONTH_LABELS[now.getMonth()]} de {now.getFullYear()}</CardTitle>
-                      </CardHeader>
-                      <CardContent className="flex flex-col gap-4">
-                        <DonutStat
-                          centerLabel="em dia"
-                          centerValue={
-                            checklistDashboard.month.collaboratorsScheduled === 0
-                              ? "100%"
-                              : `${Math.round((checklistDashboard.month.collaboratorsComplete / checklistDashboard.month.collaboratorsScheduled) * 100)}%`
-                          }
-                          segments={[
-                            { label: "Em dia o mês todo", value: checklistDashboard.month.collaboratorsComplete, color: "var(--success)" },
-                            { label: "Com pendência", value: checklistDashboard.month.collaboratorsIncomplete.length, color: "var(--warning)" },
-                          ]}
-                        />
-                        {checklistDashboard.month.collaboratorsIncomplete.length > 0 && (
-                          <div className="flex flex-col divide-y divide-border">
-                            {checklistDashboard.month.collaboratorsIncomplete
-                              .sort((a, b) => b.pendingCount - a.pendingCount)
-                              .map((c) => (
-                                <div key={c.id} className="flex items-center justify-between px-1 py-2 text-sm">
-                                  <span>{c.name}{c.noAccess && <span className="ml-2 text-xs font-normal text-foreground-subtle">(sem acesso ao sistema)</span>}</span>
-                                  <span className="font-semibold tabular-nums text-danger">
-                                    {c.pendingCount} pendente{c.pendingCount > 1 ? "s" : ""}
-                                  </span>
-                                </div>
-                              ))}
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  </div>
 
                   <div className="flex flex-wrap items-end justify-between gap-3">
                     <ChecklistComplianceCollaboratorPicker collaborators={collaborators} selectedId={collaboratorId} />
@@ -453,7 +389,7 @@ export default async function IndicadoresPage({
                   {checklistRangeReport && (
                     <>
                       <p className="text-sm text-foreground-subtle">
-                        {checklistRangeReport.collaborator.name}
+                        {formatPersonName(checklistRangeReport.collaborator.name)}
                         {checklistRangeReport.collaborator.area
                           ? ` · Área ${checklistRangeReport.collaborator.area.name}`
                           : " · Sem área definida"}
