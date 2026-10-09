@@ -146,6 +146,10 @@ function EquipmentStatusCard({ summary }: { summary: GestaoSummary }) {
 
 type ChecklistComplianceDashboard = NonNullable<Awaited<ReturnType<typeof getChecklistComplianceDashboard>>>;
 
+function dayKeyOfDate(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 function PersonChecklistCard({ dashboard }: { dashboard: ChecklistComplianceDashboard }) {
   const { today, todayProgress: progress } = dashboard;
   // `today` é o último dia FECHADO (ontem): aderência é sempre D-1, por colaborador.
@@ -176,7 +180,9 @@ function PersonChecklistCard({ dashboard }: { dashboard: ChecklistComplianceDash
             {today.collaboratorsIncomplete.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
                 {today.collaboratorsIncomplete.slice(0, 6).map((c) => (
-                  <Badge key={c.id} tone="danger">{c.name}{c.noAccess ? " (sem acesso)" : ""}</Badge>
+                  <Link key={c.id} href={`/indicadores/checklist/${c.id}?dia=${dayKeyOfDate(dashboard.date)}`}>
+                    <Badge tone="danger">{c.name}{c.noAccess ? " (sem acesso)" : ""}</Badge>
+                  </Link>
                 ))}
                 {today.collaboratorsIncomplete.length > 6 && (
                   <Badge tone="neutral">+{today.collaboratorsIncomplete.length - 6}</Badge>
@@ -197,7 +203,7 @@ function PersonChecklistCard({ dashboard }: { dashboard: ChecklistComplianceDash
               {progress.concluded.length > 0 && (
                 <div className="flex flex-wrap gap-1.5">
                   {progress.concluded.slice(0, 8).map((c) => (
-                    <Badge key={c.id} tone="success">✓ {c.name}</Badge>
+                    <Link key={c.id} href={`/indicadores/checklist/${c.id}`}><Badge tone="success">✓ {c.name}</Badge></Link>
                   ))}
                   {progress.concluded.length > 8 && <Badge tone="neutral">+{progress.concluded.length - 8}</Badge>}
                 </div>
@@ -205,9 +211,11 @@ function PersonChecklistCard({ dashboard }: { dashboard: ChecklistComplianceDash
               {progress.remaining.length > 0 && (
                 <div className="flex flex-wrap gap-1.5">
                   {progress.remaining.slice(0, 6).map((c) => (
-                    <Badge key={c.id} tone="warning">
-                      {c.name} {c.done}/{c.required}
-                    </Badge>
+                    <Link key={c.id} href={`/indicadores/checklist/${c.id}`}>
+                      <Badge tone="warning">
+                        {c.name} {c.done}/{c.required}
+                      </Badge>
+                    </Link>
                   ))}
                   {progress.remaining.length > 6 && <Badge tone="neutral">+{progress.remaining.length - 6}</Badge>}
                 </div>

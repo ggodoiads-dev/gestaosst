@@ -258,7 +258,8 @@ export default async function IndicadoresPage({
                         <ul className="flex flex-col gap-1 text-sm">
                           {checklistDashboard.todayProgress.concluded.map((c) => (
                             <li key={c.id} className="flex items-center gap-1.5">
-                              <span className="text-success">✓</span> {c.name}
+                              <span className="text-success">✓</span>{" "}
+                              <Link href={`/indicadores/checklist/${c.id}`} className="hover:underline">{c.name}</Link>
                             </li>
                           ))}
                         </ul>
@@ -275,7 +276,7 @@ export default async function IndicadoresPage({
                           {checklistDashboard.todayProgress.remaining.map((c) => (
                             <li key={c.id} className="flex items-center justify-between gap-2">
                               <span>
-                                {c.name}
+                                <Link href={`/indicadores/checklist/${c.id}`} className="hover:underline">{c.name}</Link>
                                 {c.noAccess && <span className="text-xs text-foreground-subtle"> (sem acesso ao sistema)</span>}
                               </span>
                               <span className="text-xs text-foreground-subtle">
@@ -352,7 +353,7 @@ export default async function IndicadoresPage({
                           <div className="flex flex-wrap gap-2">
                             {checklistDashboard.today.collaboratorsIncomplete.map((c) => (
                               <Badge key={c.id} tone="danger">
-                                {c.name} — {c.noAccess ? "sem acesso ao sistema" : `${c.pendingCount} pendente${c.pendingCount > 1 ? "s" : ""}`}
+                                <Link href={`/indicadores/checklist/${c.id}?dia=${localDateKey(checklistDashboard.date)}`} className="hover:underline">{c.name}</Link> — {c.noAccess ? "sem acesso ao sistema" : `${c.pendingCount} pendente${c.pendingCount > 1 ? "s" : ""}`}
                               </Badge>
                             ))}
                           </div>

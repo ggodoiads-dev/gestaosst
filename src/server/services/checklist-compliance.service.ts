@@ -375,3 +375,115 @@ export async function getChecklistComplianceDashboard(user: CurrentUser, params:
 
   return { date: dayStart, today, month, todayProgress };
 }
+
+export type DayExecutionAnswer = {
+  question: string;
+  value: string | null;
+  comment: string | null;
+  critical: boolean;
+  photos: { id: string; filename: string; path: string }[];
+};
+
+export type DayExecutionDetail = {
+  id: string;
+  code: string;
+  equipmentCode: string;
+  equipmentName: string;
+  finishedAt: Date;
+  result: string | null;
+  answers: DayExecutionAnswer[];
+};
+
+const FIXED_LABELS: Record<string, string> = {
+  CONFORME: "Conforme",
+  NAO_CONFORME: "Não conforme",
+  SIM: "Sim",
+  NAO: "Não",
+  BOM: "Bom",
+  REGULAR: "Regular",
+  RUIM: "Ruim",
+  CONFIRMADO: "Confirmado",
+  NAO_APLICAVEL: "N/A",
+};
+
+/** Detalhe de um dia de um colaborador: o que cada equipamento exigido recebeu de checklist (com as respostas,
+ * comentários e fotos) e o que ficou faltando. `dayKey` = "yyyy-MM-dd" no calendário de Brasília. */
+export async function getCollaboratorChecklistDayDetail(
+  user: CurrentUser,
+  params: { collaboratorId: string; dayKey: string },
+) {
+  if (!hasPermission(user, PERMISSIONS.CHECKLIST_COMPLIANCE_VIEW)) {
+    const own = await db.collaborator.findUnique({ where: { userId: user.id }, select: { id: true } });
+    if (own?.id !== params.collaboratorId) throw new ForbiddenError();
+  }
+  const [y, m, d] = params.dayKey.split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+  const next = addDays(date, 1);
+
+  const [collaborator, requiredByArea] = await Promise.all([
+    db.collaborator.findUniqueOrThrow({ where: { id: params.collaboratorId }, include: collaboratorWithFunctionInclude }),
+    getRequiredEquipmentByArea(),
+  ]);
+  const { items: required } = getRequiredItemsForCollaborator(collaborator, requiredByArea);
+
+  const rawExecutions = collaborator.userId
+    ? await db.checklistExecution.findMany({
+        where: {
+          executedById: collaborator.userId,
+          status: "CONCLUIDO",
+          finishedAt: { gte: dayStartInstant(date), lt: dayStartInstant(next) },
+        },
+        orderBy: { finishedAt: "asc" },
+        select: {
+          id: true,
+          code: true,
+          result: true,
+          finishedAt: true,
+          equipment: { select: { id: true, code: true, name: true } },
+          checklistVersion: { select: { templateId: true } },
+          answers: {
+            orderBy: { question: { order: "asc" } },
+            select: {
+              value: true,
+              comment: true,
+              isCritical: true,
+              question: { select: { title: true, options: { select: { value: true, label: true } } } },
+              attachments: { select: { id: true, filename: true, path: true } },
+            },
+          },
+        },
+      })
+    : [];
+
+  const executions = rawExecutions.map((ex) => ({
+    detail: {
+      id: ex.id,
+      code: ex.code,
+      equipmentCode: ex.equipment.code,
+      equipmentName: ex.equipment.name,
+      finishedAt: ex.finishedAt!,
+      result: ex.result,
+      answers: ex.answers.map((a) => ({
+        question: a.question.title,
+        value:
+          a.value == null
+            ? null
+            : (a.question.options.find((o) => o.value === a.value)?.label ?? FIXED_LABELS[a.value] ?? a.value),
+        comment: a.comment,
+        critical: a.isCritical,
+        photos: a.attachments,
+      })),
+    } satisfies DayExecutionDetail,
+    keys: [ex.equipment.id, ex.checklistVersion.templateId],
+  }));
+
+  const doneIds = new Set(executions.flatMap((e) => e.keys));
+  const missing = required.filter((e) => !doneIds.has(e.id));
+  return {
+    collaborator: { id: collaborator.id, name: collaborator.name, area: collaborator.area?.name ?? null, hasLogin: !!collaborator.userId },
+    required: required.length,
+    doneCount: required.length - missing.length,
+    missing,
+    executions: executions.map((e) => e.detail),
+  };
+}
