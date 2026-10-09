@@ -41,27 +41,21 @@ export function AnswersSummary({
 }) {
   return (
     <div className="flex flex-col gap-3">
-      <Rows
-        rows={[
-          ["Início da ausência", dateFromKey(answers.startDate)],
-          ["Fim da ausência", dateFromKey(answers.endDate)],
-          ["Falta(s) anterior(es) sem justificativa", yn(answers.priorUnjustified)],
-          ["Comunicou a empresa antes", yn(answers.communicatedBefore)],
-          ["Apresentou justificativa", yn(answers.presentedJustification)],
-          ["Motivo principal", answers.reason],
-          ["Problema de saúde", answers.healthProblem],
-          ["CRM / CRO", answers.crm],
-          ["CID", answers.cid],
-        ]}
-      />
       <div className="flex flex-col">
         <span className="text-xs text-foreground-subtle">O que aconteceu</span>
         <p className="whitespace-pre-wrap text-sm text-foreground">{answers.description}</p>
       </div>
-      {answers.comments && (
-        <div className="flex flex-col">
-          <span className="text-xs text-foreground-subtle">Comentários do colaborador</span>
-          <p className="whitespace-pre-wrap text-sm text-foreground">{answers.comments}</p>
+      {answers.fiveWhys?.length > 0 && (
+        <div className="flex flex-col gap-1">
+          <span className="text-xs text-foreground-subtle">Os 5 porquês</span>
+          <ol className="flex flex-col gap-1 text-sm text-foreground">
+            {answers.fiveWhys.map((w, i) => (
+              <li key={i}>
+                <span className="text-foreground-subtle">{i + 1}. Por quê? </span>
+                {w}
+              </li>
+            ))}
+          </ol>
         </div>
       )}
       {answeredAt && (
@@ -79,22 +73,22 @@ export function EvaluationSummary({ evaluation, concludedBy, concludedAt }: { ev
     <div className="flex flex-col gap-3">
       <Rows
         rows={[
+          ["Início da ausência", dateFromKey(evaluation.startDate)],
+          ["Fim da ausência", dateFromKey(evaluation.endDate)],
+          ["Falta(s) anterior(es) sem justificativa", yn(evaluation.priorUnjustified)],
+          ["Comunicação prévia à empresa", yn(evaluation.communicatedBefore)],
+          ["Justificativa compatível apresentada", yn(evaluation.presentedJustification)],
           ["Classificação", CLASSIFICATION_LABELS[evaluation.classification as Classification]],
           ["Detalhe", evaluation.detail],
           ["Problema de saúde", evaluation.healthProblem],
+          ["CRM / CRO", evaluation.crm],
+          ["CID", evaluation.cid],
           ["Ação tomada", evaluation.actionTaken],
           ["Justificativa acatada pela empresa", yn(evaluation.excuseAccepted)],
           ["Dia descontado", yn(evaluation.dayDiscounted)],
           ["Poderia ser evitada com folga alinhada", yn(evaluation.avoidableByDayOff)],
         ]}
       />
-      {evaluation.fiveWhys?.length > 0 && (
-        <ol className="list-decimal pl-5 text-sm text-foreground">
-          {evaluation.fiveWhys.map((w, i) => (
-            <li key={i}>{w}</li>
-          ))}
-        </ol>
-      )}
       {evaluation.hrComments && <p className="text-sm text-foreground">Gente e Gestão: {evaluation.hrComments}</p>}
       {evaluation.leadershipComments && <p className="text-sm text-foreground">Liderança: {evaluation.leadershipComments}</p>}
       {concludedAt && (

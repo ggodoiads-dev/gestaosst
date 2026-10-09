@@ -10,21 +10,6 @@ export const CLASSIFICATION_LABELS = {
 } as const;
 export type Classification = keyof typeof CLASSIFICATION_LABELS;
 
-/** Motivos que o colaborador escolhe no relato (a classificação final é decisão do RH, na parte B). */
-export const EMPLOYEE_REASONS = [
-  "Dificuldade com transporte",
-  "Excesso de jornada no dia anterior",
-  "Problemas familiares",
-  "Problemas pessoais",
-  "Saúde - com atestado médico",
-  "Saúde - sem atestado médico",
-  "Compromisso previsto em lei (audiência, doação de sangue, exame, falecimento, licença)",
-  "Outro",
-] as const;
-
-export const REASON_IS_HEALTH = (reason: string | null | undefined) => !!reason && reason.startsWith("Saúde");
-export const REASON_HAS_CERTIFICATE = (reason: string | null | undefined) => reason === "Saúde - com atestado médico";
-
 export const HEALTH_PROBLEMS = [
   "Doenças sazonais (Influenza, Corona Vírus, Dengue, Zika, Chikungunya, Intoxicação Alimentar, Febre Amarela, entre outras)",
   "Doenças relacionadas a saúde mental (ansiedade, depressão, entre outras)",
@@ -98,32 +83,33 @@ export const YES_NO_LABELS = { SIM: "Sim", NAO: "Não" } as const;
 
 const dateKey = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida.");
 
-/** Parte A — relato do colaborador. */
+/** Parte A — o que o COLABORADOR responde: o que aconteceu e os 5 porquês. */
 export const employeeAnswersSchema = z.object({
+  description: z.string().trim().min(3, "Conte o que aconteceu."),
+  fiveWhys: z
+    .array(z.string().trim().max(500))
+    .max(5)
+    .transform((list) => list.filter((w) => w.length > 0))
+    .refine((list) => list.length >= 1, "Responda pelo menos o primeiro porquê."),
+});
+export type EmployeeAnswers = z.infer<typeof employeeAnswersSchema>;
+
+/** Parte B — o que o RH/Liderança responde (conclui a entrevista): detalhamento, classificação e ação tomada. */
+export const evaluationSchema = z.object({
   startDate: dateKey,
   endDate: dateKey,
   priorUnjustified: yesNo,
   communicatedBefore: yesNo,
   presentedJustification: yesNo,
-  reason: z.string().trim().min(1, "Escolha o motivo da ausência."),
-  healthProblem: z.string().trim().optional().nullable(),
-  crm: z.string().trim().max(40).optional().nullable(),
-  cid: z.string().trim().max(40).optional().nullable(),
-  description: z.string().trim().min(3, "Descreva o motivo da ausência."),
-  comments: z.string().trim().max(2000).optional().nullable(),
-});
-export type EmployeeAnswers = z.infer<typeof employeeAnswersSchema>;
-
-/** Parte B — avaliação da Gente/Liderança (conclui a entrevista). */
-export const evaluationSchema = z.object({
   classification: z.enum(["JUSTIFICADA", "NAO_JUSTIFICADA", "PREVISTA_LEI"]),
   detail: z.string().trim().min(1, "Escolha a classificação detalhada."),
   healthProblem: z.string().trim().optional().nullable(),
+  crm: z.string().trim().max(40).optional().nullable(),
+  cid: z.string().trim().max(40).optional().nullable(),
   actionTaken: z.string().trim().min(1, "Informe a ação tomada."),
   excuseAccepted: yesNo,
   dayDiscounted: yesNo,
   avoidableByDayOff: yesNo,
-  fiveWhys: z.array(z.string().trim().max(500)).max(5).default([]),
   hrComments: z.string().trim().max(2000).optional().nullable(),
   leadershipComments: z.string().trim().max(2000).optional().nullable(),
 });

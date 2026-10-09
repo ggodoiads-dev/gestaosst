@@ -57,7 +57,7 @@ export default async function EntrevistaAbsPage({ params }: { params: Promise<{ 
       <PageBody>
         <Card>
           <CardHeader>
-            <CardTitle>Parte A — Relato do colaborador</CardTitle>
+            <CardTitle>Parte A — O que o colaborador responde</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             {interview.status === "SOLICITADA" && !interview.collaborator.userId && (
@@ -82,12 +82,7 @@ export default async function EntrevistaAbsPage({ params }: { params: Promise<{ 
                     {answers ? "Editar o relato" : "Preencher o relato em nome do colaborador"}
                   </summary>
                   <div className="p-3">
-                    <InterviewAnswersForm
-                      interviewId={interview.id}
-                      initial={answers}
-                      defaultDate={dayKey(interview.note.date)}
-                      onBehalf
-                    />
+                    <InterviewAnswersForm interviewId={interview.id} initial={answers} onBehalf />
                   </div>
                 </details>
               </>
@@ -97,7 +92,7 @@ export default async function EntrevistaAbsPage({ params }: { params: Promise<{ 
 
         <Card>
           <CardHeader>
-            <CardTitle>Parte B — Avaliação da Gente / Liderança</CardTitle>
+            <CardTitle>Parte B — O que o RH responde</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             {concluded && evaluation ? (
@@ -108,7 +103,7 @@ export default async function EntrevistaAbsPage({ params }: { params: Promise<{ 
             ) : !answers ? (
               <p className="text-sm text-foreground-subtle">A avaliação libera depois que o relato do colaborador for registrado.</p>
             ) : (
-              <InterviewEvaluationForm interviewId={interview.id} initial={evaluation} />
+              <InterviewEvaluationForm interviewId={interview.id} initial={evaluation} defaultDate={dayKey(interview.note.date)} />
             )}
           </CardContent>
         </Card>

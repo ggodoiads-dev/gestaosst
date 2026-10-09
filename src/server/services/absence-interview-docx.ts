@@ -121,17 +121,12 @@ export async function buildInterviewDocx(interview: InterviewDetail): Promise<Bu
           section("2 - DETALHAMENTO DA(S) FALTA(S)"),
           table([
             ["Ausência registrada no SIGO", `${noteLabel} em ${formatDate(interview.note.date)}`],
-            ["Data de início da ausência", dateFromKey(a?.startDate)],
-            ["Data final da ausência", dateFromKey(a?.endDate)],
-            ["Ocorrência de falta(s) anterior(es) sem justificativa", yn(a?.priorUnjustified)],
-            ["Comunicação prévia desta(s) falta(s) à empresa", yn(a?.communicatedBefore)],
-            ["Apresentação de justificativa compatível", yn(a?.presentedJustification)],
-            ["Motivo relatado pelo colaborador", a?.reason ?? "—"],
-            ...(a?.healthProblem ? ([["Problema de saúde relatado", a.healthProblem]] as [string, string][]) : []),
-            ...(a?.crm ? ([["CRM do médico / CRO do dentista", a.crm]] as [string, string][]) : []),
-            ...(a?.cid ? ([["CID do atestado", a.cid]] as [string, string][]) : []),
-            ["Descrição do motivo da ausência", a?.description ?? "—"],
-            ["Comentários do colaborador", a?.comments || "—"],
+            ["Data de início da ausência", dateFromKey(ev?.startDate)],
+            ["Data final da ausência", dateFromKey(ev?.endDate)],
+            ["Ocorrência de falta(s) anterior(es) sem justificativa", yn(ev?.priorUnjustified)],
+            ["Comunicação prévia desta(s) falta(s) à empresa", yn(ev?.communicatedBefore)],
+            ["Apresentação de justificativa compatível", yn(ev?.presentedJustification)],
+            ["Relato do colaborador (o que aconteceu)", a?.description ?? "—"],
             [
               "Preenchido por",
               interview.answeredAt
@@ -144,7 +139,9 @@ export async function buildInterviewDocx(interview: InterviewDetail): Promise<Bu
           table([
             ["Classificação", ev ? CLASSIFICATION_LABELS[ev.classification as Classification] : "—"],
             ["Classificação detalhada", ev?.detail ?? "—"],
-            ...(ev?.healthProblem ? ([["Problema de saúde (entrevista)", ev.healthProblem]] as [string, string][]) : []),
+            ...(ev?.healthProblem ? ([["Problema de saúde relatado", ev.healthProblem]] as [string, string][]) : []),
+            ...(ev?.crm ? ([["CRM do médico / CRO do dentista", ev.crm]] as [string, string][]) : []),
+            ...(ev?.cid ? ([["CID do atestado", ev.cid]] as [string, string][]) : []),
           ]),
 
           section("4 - AÇÃO TOMADA"),
@@ -157,7 +154,7 @@ export async function buildInterviewDocx(interview: InterviewDetail): Promise<Bu
 
           section("5 - ANÁLISE 5 PORQUÊS"),
           table(
-            [0, 1, 2, 3, 4].map((i) => [`${i + 1}. Por quê?`, ev?.fiveWhys?.[i] || "—"] as [string, string]),
+            [0, 1, 2, 3, 4].map((i) => [`${i + 1}. Por quê?`, a?.fiveWhys?.[i] || "—"] as [string, string]),
           ),
           new Paragraph({ spacing: { before: 160 }, children: [] }),
           table([

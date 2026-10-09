@@ -43,8 +43,8 @@ export default async function MinhaEntrevistaPage({ params }: { params: Promise<
           <CardContent className="flex flex-col gap-4">
             {!answers && (
               <p className="text-sm text-foreground-subtle">
-                O RH pediu esta conversa para entender o que houve e ajudar, se for o caso. Responda com sinceridade — suas
-                respostas ficam só com você e com o RH.
+                O RH pediu que você conte o que aconteceu e responda aos 5 porquês. O restante da entrevista o RH preenche.
+                Suas respostas ficam só com você e com o RH.
               </p>
             )}
             {answers && (
@@ -56,12 +56,7 @@ export default async function MinhaEntrevistaPage({ params }: { params: Promise<
                   {answers ? "Corrigir minha resposta" : "Responder"}
                 </summary>
                 <div className="p-3">
-                  <InterviewAnswersForm
-                    interviewId={interview.id}
-                    initial={answers}
-                    defaultDate={interview.note.date.toISOString().slice(0, 10)}
-                    onBehalf={false}
-                  />
+                  <InterviewAnswersForm interviewId={interview.id} initial={answers} onBehalf={false} />
                 </div>
               </details>
             )}
