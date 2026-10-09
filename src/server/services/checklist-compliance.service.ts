@@ -272,6 +272,17 @@ type PeriodComplianceStats = {
   /** Turnos (pessoa × dia escalado) com checklist cobrado, e quantos foram cumpridos — base da % de aderência. */
   shiftsRequired: number;
   shiftsComplete: number;
+  /** Por pessoa: turnos cobrados e cumpridos no período (base da lista de Mês/Ano). */
+  people: PeriodPerson[];
+};
+
+export type PeriodPerson = {
+  id: string;
+  name: string;
+  areaName: string | null;
+  noAccess: boolean;
+  shiftsRequired: number;
+  shiftsComplete: number;
 };
 
 /** Aderência por COLABORADOR: dos turnos em que alguém era cobrado por checklist, quantos foram cumpridos
@@ -286,7 +297,7 @@ async function computeCompliancePeriodStats(from: Date, toInclusive: Date): Prom
   // Só conta dias já fechados (até ontem): turno de hoje está em andamento e o futuro nem aconteceu.
   const rangeEndExclusive = addDays(startOfDay(toInclusive) < closedDay ? startOfDay(toInclusive) : closedDay, 1);
   if (rangeStart >= rangeEndExclusive) {
-    return { collaboratorsScheduled: 0, collaboratorsComplete: 0, collaboratorsIncomplete: [], shiftsRequired: 0, shiftsComplete: 0 };
+    return { collaboratorsScheduled: 0, collaboratorsComplete: 0, collaboratorsIncomplete: [], shiftsRequired: 0, shiftsComplete: 0, people: [] };
   }
 
   const [collaborators, notes, requiredByArea] = await Promise.all([
@@ -333,11 +344,14 @@ async function computeCompliancePeriodStats(from: Date, toInclusive: Date): Prom
   let shiftsRequired = 0;
   let shiftsComplete = 0;
   const incomplete: PeriodComplianceStats["collaboratorsIncomplete"] = [];
+  const people: PeriodPerson[] = [];
 
   for (const c of eligible) {
     const required = requiredByCollaborator.get(c.id)!.items;
     let scheduledAnyDay = false;
     let pendingTotal = 0;
+    let personRequired = 0;
+    let personComplete = 0;
 
     for (let date = rangeStart; date < rangeEndExclusive; date = addDays(date, 1)) {
       const dayKey = localDateKey(date);
@@ -354,10 +368,22 @@ async function computeCompliancePeriodStats(from: Date, toInclusive: Date): Prom
       const pendingToday = required.filter((e) => !completedIds.has(e.id)).length;
       pendingTotal += pendingToday;
       shiftsRequired++;
-      if (pendingToday === 0) shiftsComplete++;
+      personRequired++;
+      if (pendingToday === 0) {
+        shiftsComplete++;
+        personComplete++;
+      }
     }
 
     if (!scheduledAnyDay) continue;
+    people.push({
+      id: c.id,
+      name: c.name,
+      areaName: c.area?.name ?? null,
+      noAccess: !c.userId,
+      shiftsRequired: personRequired,
+      shiftsComplete: personComplete,
+    });
     scheduledCount++;
     if (pendingTotal > 0) incomplete.push({ id: c.id, name: c.name, pendingCount: pendingTotal, noAccess: !c.userId });
   }
@@ -368,6 +394,7 @@ async function computeCompliancePeriodStats(from: Date, toInclusive: Date): Prom
     collaboratorsIncomplete: incomplete,
     shiftsRequired,
     shiftsComplete,
+    people,
   };
 }
 
@@ -384,8 +411,10 @@ export type TodayProgressEntry = {
 
 /** Andamento de HOJE (informativo — NÃO entra na % de aderência, que é sempre até D-1): de quem está escalado
  * e é cobrado por checklist, quem já concluiu tudo e quem ainda falta. */
-async function computeTodayProgress(): Promise<{ dayKey: string; concluded: TodayProgressEntry[]; remaining: TodayProgressEntry[] }> {
-  const today = addDays(lastClosedDay(), 1);
+async function computeDayProgress(
+  day: Date,
+): Promise<{ dayKey: string; concluded: TodayProgressEntry[]; remaining: TodayProgressEntry[] }> {
+  const today = day;
   const tomorrow = addDays(today, 1);
   const [collaborators, notes, requiredByArea] = await Promise.all([
     listEligibleCollaboratorsQuery(),
@@ -461,7 +490,7 @@ export async function getChecklistComplianceDashboard(user: CurrentUser, params:
   const [today, month, todayProgress] = await Promise.all([
     computeCompliancePeriodStats(dayStart, dayStart),
     computeCompliancePeriodStats(monthStart, monthEndInclusive),
-    computeTodayProgress(),
+    computeDayProgress(addDays(lastClosedDay(), 1)),
   ]);
 
   return { date: dayStart, today, month, todayProgress, canJustify: canJustifyChecklist(user) };
@@ -652,4 +681,51 @@ export async function removeChecklistItemJustification(
     entityId: existing.id,
     previousValue: { ...key, reason: existing.reason, note: existing.note },
   });
+}
+
+export type ComplianceExplorerPeriod = "dia" | "mes" | "ano";
+
+/** Consulta livre por período (dia, mês ou ano) — mesma regra de aderência, sempre limitada a ontem (D-1).
+ * `dia`: quem concluiu/faltou naquele dia (hoje = andamento). `mes`/`ano`: turnos cumpridos por pessoa. */
+export async function getChecklistComplianceExplorer(
+  user: CurrentUser,
+  params: { period: ComplianceExplorerPeriod; refKey: string },
+) {
+  requirePermission(user, PERMISSIONS.CHECKLIST_COMPLIANCE_VIEW);
+  const closedDay = lastClosedDay();
+  const today = addDays(closedDay, 1);
+  const [y, m, d] = params.refKey.split("-").map(Number);
+  let ref = new Date(y, m - 1, d);
+  if (Number.isNaN(ref.getTime())) ref = today;
+  if (ref > today) ref = today;
+
+  let from = ref;
+  let to = ref;
+  if (params.period === "mes") {
+    from = startOfMonth(ref);
+    to = addDays(startOfMonth(addMonths(ref, 1)), -1);
+  } else if (params.period === "ano") {
+    from = new Date(ref.getFullYear(), 0, 1);
+    to = new Date(ref.getFullYear(), 11, 31);
+  }
+
+  const isDay = params.period === "dia";
+  const [stats, dayProgress] = await Promise.all([
+    computeCompliancePeriodStats(from, to),
+    isDay ? computeDayProgress(ref) : Promise.resolve(null),
+  ]);
+
+  return {
+    period: params.period,
+    refKey: localDateKey(ref),
+    fromKey: localDateKey(from),
+    toKey: localDateKey(to),
+    /** Dia ainda não fechado (hoje): só andamento, sem % de aderência. */
+    isOpenDay: isDay && ref > closedDay,
+    /** Mês/ano corrente: a conta para em ontem. */
+    cappedAtYesterday: !isDay && to > closedDay,
+    stats,
+    dayProgress,
+    canJustify: canJustifyChecklist(user),
+  };
 }

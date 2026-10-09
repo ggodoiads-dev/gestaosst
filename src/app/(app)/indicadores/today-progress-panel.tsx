@@ -18,11 +18,13 @@ export function TodayProgressPanel({
   remaining,
   dayKey,
   canJustify,
+  when = "hoje",
 }: {
   concluded: TodayProgressEntry[];
   remaining: TodayProgressEntry[];
   dayKey: string;
   canJustify: boolean;
+  when?: string;
 }) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("todos");
@@ -94,7 +96,7 @@ export function TodayProgressPanel({
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {filter !== "faltam" && (
           <div className="flex flex-col gap-1.5">
-            <p className="text-xs font-semibold text-success">Já concluíram hoje ({shownConcluded.length})</p>
+            <p className="text-xs font-semibold text-success">Já concluíram {when} ({shownConcluded.length})</p>
             {shownConcluded.length === 0 ? (
               <p className="text-xs text-foreground-subtle">Ninguém.</p>
             ) : (
@@ -102,7 +104,7 @@ export function TodayProgressPanel({
                 {shownConcluded.map((c) => (
                   <li key={c.id} className="flex items-center gap-1.5">
                     <span className="text-success">✓</span>
-                    <Link href={`/indicadores/checklist/${c.id}`} className="hover:underline">{c.name}</Link>
+                    <Link href={`/indicadores/checklist/${c.id}?dia=${dayKey}`} className="hover:underline">{c.name}</Link>
                   </li>
                 ))}
               </ul>
@@ -139,7 +141,7 @@ export function TodayProgressPanel({
                       {expanded && (
                         <div className="mt-2 flex flex-col gap-2 pl-5">
                           <div className="flex flex-wrap items-center gap-2">
-                            <Link href={`/indicadores/checklist/${c.id}`} className="text-xs font-medium text-accent hover:underline">
+                            <Link href={`/indicadores/checklist/${c.id}?dia=${dayKey}`} className="text-xs font-medium text-accent hover:underline">
                               Ver respostas do dia →
                             </Link>
                             {canJustify && c.missing.length > 0 && (

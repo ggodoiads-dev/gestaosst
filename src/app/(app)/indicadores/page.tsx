@@ -13,6 +13,7 @@ import {
   getChecklistComplianceDashboard,
   compliancePercent,
   getChecklistComplianceRange,
+  getChecklistComplianceExplorer,
 } from "@/server/services/checklist-compliance.service";
 import {
   getProductivityDashboard,
@@ -33,11 +34,14 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { DonutStat } from "@/components/domain/charts/donut-stat";
 import { HorizontalBarChart } from "@/components/domain/charts/horizontal-bar-chart";
 import { cn } from "@/lib/utils";
-import { formatDate, parseDateOnly } from "@/lib/dates";
+import { formatDate, parseDateOnly, APP_TIMEZONE } from "@/lib/dates";
+import { formatInTimeZone } from "date-fns-tz";
 import { ChecklistComplianceCollaboratorPicker } from "./checklist-compliance-collaborator-picker";
 import { ProductivityGoalDialog, DeleteProductivityGoalButton } from "./productivity-goal-dialog";
 import { ProductivityCalendarClient } from "./productivity-calendar-client";
 import { TodayProgressPanel } from "./today-progress-panel";
+import { PeriodToolbar } from "./period-toolbar";
+import { PeriodPeoplePanel } from "./period-people-panel";
 
 const MONTH_LABELS = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
@@ -80,9 +84,9 @@ function progressBar(percent: number) {
 export default async function IndicadoresPage({
   searchParams,
 }: {
-  searchParams: Promise<{ collaboratorId?: string; period?: string; ref?: string }>;
+  searchParams: Promise<{ collaboratorId?: string; period?: string; ref?: string; cp?: string; cr?: string }>;
 }) {
-  const { collaboratorId, period: periodParam, ref: refParam } = await searchParams;
+  const { collaboratorId, period: periodParam, ref: refParam, cp, cr } = await searchParams;
   const now = new Date();
   const period: Period = periodParam === "dia" || periodParam === "semana" ? periodParam : "mes";
   const refDate = refParam ? parseDateOnly(refParam) : now;
@@ -130,6 +134,7 @@ export default async function IndicadoresPage({
 
   let collaborators: Awaited<ReturnType<typeof listActiveCollaboratorsForSupervision>> = [];
   let checklistDashboard: Awaited<ReturnType<typeof getChecklistComplianceDashboard>> | null = null;
+  let explorer: Awaited<ReturnType<typeof getChecklistComplianceExplorer>> | null = null;
   let checklistRangeReport: Awaited<ReturnType<typeof getChecklistComplianceRange>> | null = null;
   let productivityDashboard: Awaited<ReturnType<typeof getProductivityDashboard>> | null = null;
   let productivityRangeReport: Awaited<ReturnType<typeof getProductivityRange>> | null = null;
@@ -142,6 +147,11 @@ export default async function IndicadoresPage({
   }
   if (canSeeChecklistCompliance) {
     checklistDashboard = await getChecklistComplianceDashboard(user);
+    const todayKeyBrt = formatInTimeZone(new Date(), APP_TIMEZONE, "yyyy-MM-dd");
+    explorer = await getChecklistComplianceExplorer(user, {
+      period: cp === "mes" || cp === "ano" ? cp : "dia",
+      refKey: cr && /^\d{4}-\d{2}-\d{2}$/.test(cr) ? cr : todayKeyBrt,
+    });
     if (collaboratorId) {
       checklistRangeReport = await getChecklistComplianceRange(user, { collaboratorId, from: rangeFrom, to: rangeTo });
     }
@@ -240,22 +250,59 @@ export default async function IndicadoresPage({
                   </div>
                 );
               })}
-              <div className="flex flex-col gap-3 border-t border-border pt-4 sm:col-span-2">
-                <p className="text-sm font-medium text-foreground">
-                  Hoje — andamento{" "}
-                  <span className="font-normal text-foreground-subtle">(ainda não entra na aderência, que fecha em D-1)</span>
-                </p>
-                {checklistDashboard.todayProgress.concluded.length + checklistDashboard.todayProgress.remaining.length === 0 ? (
-                  <p className="text-xs text-foreground-subtle">Ninguém cobrado por checklist está escalado hoje.</p>
-                ) : (
-                  <TodayProgressPanel
-                    concluded={checklistDashboard.todayProgress.concluded}
-                    remaining={checklistDashboard.todayProgress.remaining}
-                    dayKey={checklistDashboard.todayProgress.dayKey}
-                    canJustify={checklistDashboard.canJustify}
-                  />
-                )}
-              </div>
+              {explorer && (
+                <div className="flex flex-col gap-3 border-t border-border pt-4 sm:col-span-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm font-medium text-foreground">
+                      {explorer.period === "dia"
+                        ? explorer.isOpenDay
+                          ? "Hoje — andamento"
+                          : `Dia ${formatDate(parseDateOnly(explorer.refKey))}`
+                        : explorer.period === "mes"
+                          ? `${MONTH_LABELS[parseDateOnly(explorer.refKey).getMonth()]} de ${parseDateOnly(explorer.refKey).getFullYear()}`
+                          : `Ano ${parseDateOnly(explorer.refKey).getFullYear()}`}
+                      {explorer.isOpenDay && (
+                        <span className="font-normal text-foreground-subtle"> (ainda não entra na aderência, que fecha em D-1)</span>
+                      )}
+                      {explorer.cappedAtYesterday && (
+                        <span className="font-normal text-foreground-subtle"> (até ontem)</span>
+                      )}
+                    </p>
+                    <PeriodToolbar
+                      period={explorer.period}
+                      refKey={explorer.refKey}
+                      todayKey={formatInTimeZone(new Date(), APP_TIMEZONE, "yyyy-MM-dd")}
+                    />
+                  </div>
+
+                  {!explorer.isOpenDay && explorer.stats.shiftsRequired > 0 && (
+                    <p className="text-sm text-foreground-subtle">
+                      Aderência no período:{" "}
+                      <span className="font-semibold text-foreground">{compliancePercent(explorer.stats)}%</span> ·{" "}
+                      {explorer.stats.shiftsComplete} de {explorer.stats.shiftsRequired} turnos cumpridos
+                    </p>
+                  )}
+
+                  {explorer.period === "dia" && explorer.dayProgress ? (
+                    explorer.dayProgress.concluded.length + explorer.dayProgress.remaining.length === 0 ? (
+                      <p className="text-xs text-foreground-subtle">Ninguém cobrado por checklist estava escalado nesse dia.</p>
+                    ) : (
+                      <TodayProgressPanel
+                        key={explorer.refKey}
+                        concluded={explorer.dayProgress.concluded}
+                        remaining={explorer.dayProgress.remaining}
+                        dayKey={explorer.dayProgress.dayKey}
+                        canJustify={explorer.canJustify}
+                        when={explorer.isOpenDay ? "hoje" : "nesse dia"}
+                      />
+                    )
+                  ) : explorer.stats.people.length === 0 ? (
+                    <p className="text-xs text-foreground-subtle">Sem turnos cobrados nesse período.</p>
+                  ) : (
+                    <PeriodPeoplePanel key={`${explorer.period}-${explorer.refKey}`} people={explorer.stats.people} refKey={explorer.refKey} />
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
         ) : (
