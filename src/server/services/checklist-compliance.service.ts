@@ -371,11 +371,20 @@ async function computeCompliancePeriodStats(from: Date, toInclusive: Date): Prom
   };
 }
 
-export type TodayProgressEntry = { id: string; name: string; done: number; required: number; noAccess: boolean };
+export type TodayProgressEntry = {
+  id: string;
+  name: string;
+  areaName: string | null;
+  done: number;
+  required: number;
+  noAccess: boolean;
+  /** Equipamentos que ainda faltam hoje (vazio quando concluiu). */
+  missing: { id: string; code: string }[];
+};
 
 /** Andamento de HOJE (informativo — NÃO entra na % de aderência, que é sempre até D-1): de quem está escalado
  * e é cobrado por checklist, quem já concluiu tudo e quem ainda falta. */
-async function computeTodayProgress(): Promise<{ concluded: TodayProgressEntry[]; remaining: TodayProgressEntry[] }> {
+async function computeTodayProgress(): Promise<{ dayKey: string; concluded: TodayProgressEntry[]; remaining: TodayProgressEntry[] }> {
   const today = addDays(lastClosedDay(), 1);
   const tomorrow = addDays(today, 1);
   const [collaborators, notes, requiredByArea] = await Promise.all([
@@ -422,13 +431,21 @@ async function computeTodayProgress(): Promise<{ concluded: TodayProgressEntry[]
       ...(c.userId ? (doneByUser.get(c.userId) ?? []) : []),
       ...justifiedItemIds(justificationsByKey.get(`${c.id}|${todayKey}`)),
     ]);
-    const done = required.filter((e) => doneIds.has(e.id)).length;
-    const entry = { id: c.id, name: c.name, done, required: required.length, noAccess: !c.userId };
-    (done === required.length ? concluded : remaining).push(entry);
+    const missing = required.filter((e) => !doneIds.has(e.id)).map((e) => ({ id: e.id, code: e.code }));
+    const entry: TodayProgressEntry = {
+      id: c.id,
+      name: c.name,
+      areaName: c.area?.name ?? null,
+      done: required.length - missing.length,
+      required: required.length,
+      noAccess: !c.userId,
+      missing,
+    };
+    (missing.length === 0 ? concluded : remaining).push(entry);
   }
   concluded.sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
   remaining.sort((a, b) => b.required - b.done - (a.required - a.done) || a.name.localeCompare(b.name, "pt-BR"));
-  return { concluded, remaining };
+  return { dayKey: todayKey, concluded, remaining };
 }
 
 /** Visão geral (ontem + mês corrente, sempre até D-1) de quantos colaboradores com checklist obrigatório
@@ -447,7 +464,7 @@ export async function getChecklistComplianceDashboard(user: CurrentUser, params:
     computeTodayProgress(),
   ]);
 
-  return { date: dayStart, today, month, todayProgress };
+  return { date: dayStart, today, month, todayProgress, canJustify: canJustifyChecklist(user) };
 }
 
 export type DayExecutionAnswer = {
@@ -581,9 +598,10 @@ export function canJustifyChecklist(user: CurrentUser): boolean {
  * cumprido, o item passa a entrar como concluído na aderência. */
 export async function justifyChecklistItem(
   user: CurrentUser,
-  input: { collaboratorId: string; dayKey: string; itemId: string; reason: ChecklistJustificationReason; note: string },
+  input: { collaboratorId: string; dayKey: string; itemIds: string[]; reason: ChecklistJustificationReason; note: string },
 ) {
   if (!canJustifyChecklist(user)) throw new ForbiddenError();
+  if (input.itemIds.length === 0) throw new Error("Escolha ao menos um equipamento.");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.dayKey)) throw new Error("Data inválida.");
   const note = input.note.trim();
   if (note.length < 3) throw new Error("Explique o motivo em poucas palavras.");
@@ -598,23 +616,23 @@ export async function justifyChecklistItem(
   }
   // Só dá pra justificar o que era realmente exigido dele.
   const { items } = getRequiredItemsForCollaborator(collaborator, await getRequiredEquipmentByArea());
-  if (!items.some((i) => i.id === input.itemId)) throw new Error("Esse item não era exigido desse colaborador.");
+  const requiredIds = new Set(items.map((i) => i.id));
+  if (input.itemIds.some((id) => !requiredIds.has(id))) throw new Error("Esse item não era exigido desse colaborador.");
 
-  const saved = await db.checklistItemJustification.upsert({
-    where: {
-      collaboratorId_dayKey_itemId: { collaboratorId: input.collaboratorId, dayKey: input.dayKey, itemId: input.itemId },
-    },
-    update: { reason: input.reason, note, createdById: user.id },
-    create: { ...input, note, createdById: user.id },
-  });
-  await recordAudit({
-    userId: user.id,
-    action: "CREATE",
-    entityType: "ChecklistItemJustification",
-    entityId: saved.id,
-    newValue: { collaboratorId: input.collaboratorId, dayKey: input.dayKey, itemId: input.itemId, reason: input.reason, note },
-  });
-  return saved;
+  for (const itemId of new Set(input.itemIds)) {
+    const saved = await db.checklistItemJustification.upsert({
+      where: { collaboratorId_dayKey_itemId: { collaboratorId: input.collaboratorId, dayKey: input.dayKey, itemId } },
+      update: { reason: input.reason, note, createdById: user.id },
+      create: { collaboratorId: input.collaboratorId, dayKey: input.dayKey, itemId, reason: input.reason, note, createdById: user.id },
+    });
+    await recordAudit({
+      userId: user.id,
+      action: "CREATE",
+      entityType: "ChecklistItemJustification",
+      entityId: saved.id,
+      newValue: { collaboratorId: input.collaboratorId, dayKey: input.dayKey, itemId, reason: input.reason, note },
+    });
+  }
 }
 
 /** Desfaz uma justificativa de item (o equipamento volta a constar como faltando). */

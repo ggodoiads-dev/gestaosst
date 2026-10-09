@@ -20,16 +20,18 @@ export function JustifyChecklistItemDialog({
   collaboratorId,
   collaboratorName,
   dayKey,
-  itemId,
+  itemIds,
   itemLabel,
+  triggerLabel,
   currentReason,
   currentNote,
 }: {
   collaboratorId: string;
   collaboratorName: string;
   dayKey: string;
-  itemId: string;
+  itemIds: string[];
   itemLabel: string;
+  triggerLabel?: string;
   currentReason?: ChecklistJustificationReason | null;
   currentNote?: string | null;
 }) {
@@ -47,7 +49,7 @@ export function JustifyChecklistItemDialog({
     }
     setError(null);
     startTransition(async () => {
-      const res = await justifyChecklistItemAction({ collaboratorId, dayKey, itemId, reason, note });
+      const res = await justifyChecklistItemAction({ collaboratorId, dayKey, itemIds, reason, note });
       if (!res.ok) {
         setError(res.error);
         return;
@@ -59,7 +61,7 @@ export function JustifyChecklistItemDialog({
 
   function handleRemove() {
     startTransition(async () => {
-      const res = await removeChecklistItemJustificationAction({ collaboratorId, dayKey, itemId });
+      const res = await removeChecklistItemJustificationAction({ collaboratorId, dayKey, itemId: itemIds[0] });
       if (!res.ok) {
         setError(res.error);
         return;
@@ -72,7 +74,7 @@ export function JustifyChecklistItemDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <Button size="sm" variant={currentReason ? "ghost" : "secondary"} onClick={() => setOpen(true)}>
-        {currentReason ? "Editar justificativa" : "Justificar e concluir"}
+        {currentReason ? "Editar justificativa" : (triggerLabel ?? "Justificar e concluir")}
       </Button>
       <DialogContent className="max-w-sm">
         <DialogHeader>
@@ -104,7 +106,7 @@ export function JustifyChecklistItemDialog({
           {error && <p className="text-sm text-danger">{error}</p>}
         </DialogBody>
         <DialogFooter>
-          {currentReason && (
+          {currentReason && itemIds.length === 1 && (
             <Button type="button" variant="ghost" onClick={handleRemove} loading={pending}>
               Desfazer
             </Button>

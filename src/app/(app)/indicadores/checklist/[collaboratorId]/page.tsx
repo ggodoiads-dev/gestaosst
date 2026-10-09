@@ -110,7 +110,7 @@ export default async function ChecklistDoColaboradorPage({
                         collaboratorId={detail.collaborator.id}
                         collaboratorName={detail.collaborator.name}
                         dayKey={dayKey}
-                        itemId={e.id}
+                        itemIds={[e.id]}
                         itemLabel={e.code}
                         currentReason={e.note?.reason ?? null}
                         currentNote={e.note?.note ?? null}
@@ -143,7 +143,7 @@ export default async function ChecklistDoColaboradorPage({
                         collaboratorId={detail.collaborator.id}
                         collaboratorName={detail.collaborator.name}
                         dayKey={dayKey}
-                        itemId={e.id}
+                        itemIds={[e.id]}
                         itemLabel={e.code}
                         currentReason={e.justification.reason}
                         currentNote={e.justification.note}

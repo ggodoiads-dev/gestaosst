@@ -16,7 +16,7 @@ function revalidate(collaboratorId: string) {
 export async function justifyChecklistItemAction(input: {
   collaboratorId: string;
   dayKey: string;
-  itemId: string;
+  itemIds: string[];
   reason: ChecklistJustificationReason;
   note: string;
 }): Promise<ChecklistItemJustificationResult> {
@@ -27,7 +27,7 @@ export async function justifyChecklistItemAction(input: {
     return { ok: true };
   } catch (error) {
     if (error instanceof ForbiddenError) return { ok: false, error: error.message };
-    if (error instanceof Error && /Explique|Data inválida|não era exigido/.test(error.message)) {
+    if (error instanceof Error && /Explique|Data inválida|não era exigido|Escolha ao menos/.test(error.message)) {
       return { ok: false, error: error.message };
     }
     console.error("[checklist-justification] falha ao justificar item:", error);

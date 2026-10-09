@@ -37,6 +37,7 @@ import { formatDate, parseDateOnly } from "@/lib/dates";
 import { ChecklistComplianceCollaboratorPicker } from "./checklist-compliance-collaborator-picker";
 import { ProductivityGoalDialog, DeleteProductivityGoalButton } from "./productivity-goal-dialog";
 import { ProductivityCalendarClient } from "./productivity-calendar-client";
+import { TodayProgressPanel } from "./today-progress-panel";
 
 const MONTH_LABELS = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
@@ -247,47 +248,12 @@ export default async function IndicadoresPage({
                 {checklistDashboard.todayProgress.concluded.length + checklistDashboard.todayProgress.remaining.length === 0 ? (
                   <p className="text-xs text-foreground-subtle">Ninguém cobrado por checklist está escalado hoje.</p>
                 ) : (
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <div className="flex flex-col gap-1.5">
-                      <p className="text-xs font-semibold text-success">
-                        Já concluíram hoje ({checklistDashboard.todayProgress.concluded.length})
-                      </p>
-                      {checklistDashboard.todayProgress.concluded.length === 0 ? (
-                        <p className="text-xs text-foreground-subtle">Ninguém ainda.</p>
-                      ) : (
-                        <ul className="flex flex-col gap-1 text-sm">
-                          {checklistDashboard.todayProgress.concluded.map((c) => (
-                            <li key={c.id} className="flex items-center gap-1.5">
-                              <span className="text-success">✓</span>{" "}
-                              <Link href={`/indicadores/checklist/${c.id}`} className="hover:underline">{c.name}</Link>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-                    <div className="flex flex-col gap-1.5">
-                      <p className="text-xs font-semibold text-warning">
-                        Ainda falta ({checklistDashboard.todayProgress.remaining.length})
-                      </p>
-                      {checklistDashboard.todayProgress.remaining.length === 0 ? (
-                        <p className="text-xs text-foreground-subtle">Todos concluíram.</p>
-                      ) : (
-                        <ul className="flex flex-col gap-1 text-sm">
-                          {checklistDashboard.todayProgress.remaining.map((c) => (
-                            <li key={c.id} className="flex items-center justify-between gap-2">
-                              <span>
-                                <Link href={`/indicadores/checklist/${c.id}`} className="hover:underline">{c.name}</Link>
-                                {c.noAccess && <span className="text-xs text-foreground-subtle"> (sem acesso ao sistema)</span>}
-                              </span>
-                              <span className="text-xs text-foreground-subtle">
-                                {c.done}/{c.required}
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-                  </div>
+                  <TodayProgressPanel
+                    concluded={checklistDashboard.todayProgress.concluded}
+                    remaining={checklistDashboard.todayProgress.remaining}
+                    dayKey={checklistDashboard.todayProgress.dayKey}
+                    canJustify={checklistDashboard.canJustify}
+                  />
                 )}
               </div>
             </CardContent>
