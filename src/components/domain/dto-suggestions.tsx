@@ -133,7 +133,8 @@ export function DtoSuggestions({
 
   const eligible = items.filter((i) => i.eligible);
   const cooling = items.filter((i) => !i.eligible);
-  const never = eligible.filter((i) => i.daysSince === null).length;
+  const newHires = eligible.filter((i) => i.isNewHire).length;
+  const never = eligible.filter((i) => i.daysSince === null && !i.isNewHire).length;
   const areas = useMemo(() => [...new Set(items.map((i) => i.areaName).filter((a): a is string => !!a))].sort(), [items]);
 
   const matches = (i: DtoSuggestion) =>
@@ -162,6 +163,7 @@ export function DtoSuggestions({
             <span className={cn("text-2xl font-semibold tabular-nums leading-none", t.tone)}>{t.value}</span>
             <span className="text-xs text-foreground-subtle">
               {t.label}
+              {t.key === "sugeridos" && newHires > 0 && ` · ${newHires} novo(s)`}
               {t.key === "sugeridos" && never > 0 && ` · ${never} nunca avaliado(s)`}
             </span>
           </button>
@@ -169,8 +171,8 @@ export function DtoSuggestions({
       </div>
 
       <p className="text-xs text-foreground-subtle">
-        Colaboradores ativos no SIGO, de quem está há mais tempo sem DTO. Quem foi avaliado só pode ser avaliado de novo depois de{" "}
-        {cooldownDays} dias.
+        Colaboradores ativos no SIGO. Os novos (menos de 60 dias de casa) vêm primeiro, depois quem nunca foi avaliado e quem está
+        há mais tempo sem DTO. Quem foi avaliado só pode ser avaliado de novo depois de {cooldownDays} dias.
       </p>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -217,7 +219,14 @@ export function DtoSuggestions({
                   {initials(i.name)}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-foreground">{formatPersonName(i.name)}</p>
+                  <p className="flex flex-wrap items-center gap-x-2 text-sm font-medium text-foreground">
+                    <span className="truncate">{formatPersonName(i.name)}</span>
+                    {i.isNewHire && (
+                      <span className="rounded bg-info-soft px-1.5 py-0.5 text-[11px] font-semibold text-info">
+                        Novo · {i.tenureDays} dia(s) de casa
+                      </span>
+                    )}
+                  </p>
                   <p className="truncate text-xs text-foreground-subtle">
                     {[i.areaName, i.functionName && formatPersonName(i.functionName)].filter(Boolean).join(" · ") || "Sem área"}
                   </p>

@@ -1583,8 +1583,9 @@ model DtoEvaluation {
   importedAt     DateTime @default(now())
   importedById   String
 
-  collaborator Collaborator @relation(fields: [collaboratorId], references: [id])
-  importedBy   User         @relation("DtoEvaluationImportedBy", fields: [importedById], references: [id])
+  collaborator     Collaborator         @relation(fields: [collaboratorId], references: [id])
+  importedBy       User                 @relation("DtoEvaluationImportedBy", fields: [importedById], references: [id])
+  actionSuggestion DtoActionSuggestion?
 
   @@index([collaboratorId])
   @@index([date])
@@ -1605,4 +1606,16 @@ model DtoJustification {
   createdBy    User         @relation("DtoJustificationCreatedBy", fields: [createdById], references: [id])
 
   @@index([collaboratorId, date])
+}
+
+/// Ações sugeridas pelo Rico (IA) pra ajustar os pontos negativos ("Não") e as observações de um DTO.
+/// Geradas na primeira vez que o DTO é aberto e guardadas aqui; é sugestão, quem decide aplicar é a liderança.
+model DtoActionSuggestion {
+  id              String   @id @default(uuid())
+  dtoEvaluationId String   @unique
+  actions         Json
+  generatedAt     DateTime @default(now())
+  model           String?
+
+  dtoEvaluation DtoEvaluation @relation(fields: [dtoEvaluationId], references: [id], onDelete: Cascade)
 }

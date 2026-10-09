@@ -801,3 +801,72 @@ export async function executeRicoAction(
     return { ok: false, error: "Não foi possível concluir a ação." };
   }
 }
+
+export type DtoActionSuggestionItem = { title: string; detail: string; owner: string; deadline: string };
+
+export type DtoActionsContext = {
+  activity: string;
+  evaluatedRole: string | null;
+  scorePercent: number | null;
+  negatives: string[];
+  observations: { question: string; text: string }[];
+};
+
+const OWNERS = ["Liderança", "Colaborador", "RH", "SST", "Manutenção"];
+
+/**
+ * Ações sugeridas pelo Rico pra ajustar os pontos negativos (itens "Não") e as observações de um DTO. Chamada
+ * única, sem ferramentas, resposta em JSON. Best-effort: sem chave de IA ou em qualquer falha, devolve null —
+ * quem chamou mostra que não foi possível gerar agora. É sugestão: nada é criado no sistema.
+ */
+export async function generateDtoActions(context: DtoActionsContext): Promise<DtoActionSuggestionItem[] | null> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return null;
+  if (context.negatives.length === 0 && context.observations.length === 0) return [];
+
+  const description = [
+    `Atividade observada: ${context.activity}.`,
+    context.evaluatedRole ? `Cargo do avaliado: ${context.evaluatedRole}.` : null,
+    context.scorePercent !== null ? `Conformidade geral do DTO: ${context.scorePercent}%.` : null,
+    context.negatives.length > 0
+      ? `Itens avaliados como NÃO CONFORME:\n${context.negatives.map((n, i) => `${i + 1}. ${n}`).join("\n")}`
+      : "Nenhum item avaliado como não conforme.",
+    context.observations.length > 0
+      ? `Observações escritas pelo avaliador:\n${context.observations.map((o) => `- (${o.question}) ${o.text}`).join("\n")}`
+      : null,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+
+  try {
+    const client = new OpenAI({ apiKey });
+    const response = await client.chat.completions.create({
+      model: MODEL,
+      max_tokens: 700,
+      response_format: { type: "json_object" },
+      messages: [
+        {
+          role: "system",
+          content: `${SYSTEM_PROMPT}\n\nVocê está ajudando a liderança a corrigir os pontos negativos de um DTO (observação de atividade em campo) numa operação de armazém/logística. Proponha de 2 a 5 ações práticas, específicas e curtas que ataquem DIRETAMENTE os itens não conformes e as observações recebidas — nada genérico e nada que não tenha relação com o que foi passado. Se houver observações do avaliador, considere-as. Responda SOMENTE um JSON no formato {"actions":[{"title":"...","detail":"...","owner":"...","deadline":"..."}]}, em português do Brasil. "title": até 80 caracteres, começando com verbo. "detail": 1 a 2 frases dizendo como fazer. "owner": exatamente um de ${OWNERS.join(", ")}. "deadline": curto, ex: "Imediato", "7 dias", "30 dias". Não invente fatos além dos passados.`,
+        },
+        { role: "user", content: description },
+      ],
+    });
+    const raw = response.choices[0]?.message.content;
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { actions?: Partial<DtoActionSuggestionItem>[] };
+    const actions = (parsed.actions ?? [])
+      .filter((a) => typeof a.title === "string" && a.title.trim() && typeof a.detail === "string")
+      .slice(0, 6)
+      .map((a) => ({
+        title: a.title!.trim().slice(0, 140),
+        detail: a.detail!.trim().slice(0, 400),
+        owner: OWNERS.includes(String(a.owner)) ? String(a.owner) : "Liderança",
+        deadline: String(a.deadline ?? "").trim().slice(0, 30) || "—",
+      }));
+    return actions.length > 0 ? actions : null;
+  } catch (error) {
+    console.error("[rico] falha ao gerar ações do DTO:", error);
+    return null;
+  }
+}

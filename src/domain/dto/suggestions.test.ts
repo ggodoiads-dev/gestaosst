@@ -25,3 +25,14 @@ describe("dtoCooldown", () => {
     expect(dtoCooldown(noon("2025-07-30"), "2026-10-09").eligible).toBe(true);
   });
 });
+
+import { tenureDays } from "./suggestions";
+
+describe("tenureDays", () => {
+  it("conta os dias de casa", () => {
+    expect(tenureDays(new Date("2026-09-01T00:00:00Z"), "2026-10-09")).toBe(38);
+  });
+  it("sem data de admissão não dá pra saber", () => {
+    expect(tenureDays(null, "2026-10-09")).toBeNull();
+  });
+});

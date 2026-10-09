@@ -7,7 +7,9 @@ import { PERMISSIONS } from "@/domain/shared/permissions";
 import { formatInTimeZone } from "date-fns-tz";
 import { APP_TIMEZONE } from "@/lib/dates";
 import { normalizeText, parseDtoWorkbook, type DtoAnswer, type DtoRawRow } from "@/domain/dto/parse";
-import { DTO_COOLDOWN_DAYS, DTO_JUSTIFICATION_REASON, dtoCooldown } from "@/domain/dto/suggestions";
+import { DTO_COOLDOWN_DAYS, DTO_JUSTIFICATION_REASON, DTO_NEW_HIRE_DAYS, dtoCooldown, tenureDays } from "@/domain/dto/suggestions";
+import { classifyAnswer } from "@/domain/dto/answers";
+import { generateDtoActions, type DtoActionSuggestionItem } from "@/server/services/rico.service";
 
 /** Ver os DTOs: quem gerencia OU quem só pode visualizar (Auditor). Importar exige `DTO_MANAGE`. */
 function requireDtoView(user: CurrentUser): void {
@@ -178,6 +180,9 @@ export type DtoSuggestion = {
   daysSince: number | null;
   eligible: boolean;
   eligibleOn: Date | null;
+  tenureDays: number | null;
+  /** Menos de 60 dias de casa: prioridade pro primeiro DTO. */
+  isNewHire: boolean;
 };
 
 /** Sugestões de DTO: colaboradores ativos no SIGO, do mais tempo sem DTO pro menos. Quem nunca foi avaliado vem
@@ -220,6 +225,7 @@ export async function getDtoSuggestions(user: CurrentUser) {
     const just = lastJust.get(c.id) ?? null;
     const lastEffectiveDate = [dto?.date, just?.date].filter((d): d is Date => !!d).sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
     const cooldown = dtoCooldown(lastEffectiveDate, todayKey);
+    const tenure = tenureDays(c.admissionDate, todayKey);
     return {
       collaboratorId: c.id,
       name: c.name,
@@ -234,11 +240,16 @@ export async function getDtoSuggestions(user: CurrentUser) {
       daysSince: cooldown.daysSince,
       eligible: cooldown.eligible,
       eligibleOn: cooldown.eligibleOn,
+      tenureDays: tenure,
+      isNewHire: tenure !== null && tenure >= 0 && tenure < DTO_NEW_HIRE_DAYS,
     };
   });
 
-  // Nunca avaliados primeiro (os mais antigos na casa antes), depois quem está há mais tempo sem DTO.
+  // Prioridade: 1) novos (< 60 dias de casa), os mais perto de completar 60 dias primeiro; 2) nunca avaliados (os mais
+  // antigos na casa antes); 3) quem está há mais tempo sem DTO.
   items.sort((a, b) => {
+    if (a.isNewHire !== b.isNewHire) return a.isNewHire ? -1 : 1;
+    if (a.isNewHire && b.isNewHire) return (b.tenureDays ?? 0) - (a.tenureDays ?? 0) || a.name.localeCompare(b.name, "pt-BR");
     if (a.daysSince === null && b.daysSince !== null) return -1;
     if (b.daysSince === null && a.daysSince !== null) return 1;
     if (a.daysSince === null && b.daysSince === null) {
@@ -289,4 +300,50 @@ export async function removeDtoJustification(user: CurrentUser, id: string) {
     entityId: id,
     previousValue: { collaboratorId: existing.collaboratorId, date: existing.date, reason: existing.reason, note: existing.note },
   });
+}
+
+export type DtoActionsResult = { actions: DtoActionSuggestionItem[]; generatedAt: Date | null; cached: boolean };
+
+/** Ações sugeridas pelo Rico pra ajustar os pontos negativos e as observações de um DTO. A primeira abertura gera e
+ * guarda; as próximas leem do banco (só a gestão pode pedir pra gerar de novo). Quem vê: gestão/Auditor ou o próprio
+ * avaliado. */
+export async function getDtoActions(user: CurrentUser, dtoId: string, options: { regenerate?: boolean } = {}): Promise<DtoActionsResult> {
+  const dto = await db.dtoEvaluation.findUniqueOrThrow({ where: { id: dtoId } });
+  const canSeeAll = hasPermission(user, PERMISSIONS.DTO_MANAGE) || hasPermission(user, PERMISSIONS.DTO_VIEW);
+  if (!canSeeAll) {
+    const own = await db.collaborator.findUnique({ where: { userId: user.id }, select: { id: true } });
+    if (own?.id !== dto.collaboratorId) throw new ForbiddenError();
+  }
+  const regenerate = !!options.regenerate && hasPermission(user, PERMISSIONS.DTO_MANAGE);
+
+  if (!regenerate) {
+    const cached = await db.dtoActionSuggestion.findUnique({ where: { dtoEvaluationId: dtoId } }).catch(() => null);
+    if (cached) return { actions: cached.actions as DtoActionSuggestionItem[], generatedAt: cached.generatedAt, cached: true };
+  }
+
+  const answers = (dto.answers as DtoAnswer[]) ?? [];
+  const negatives = answers.filter((a) => classifyAnswer(a.a) === "no").map((a) => a.q);
+  const observations = answers.filter((a) => classifyAnswer(a.a) === "text").map((a) => ({ question: a.q, text: a.a }));
+  if (negatives.length === 0 && observations.length === 0) return { actions: [], generatedAt: null, cached: false };
+
+  const actions = await generateDtoActions({
+    activity: dto.activity,
+    evaluatedRole: dto.evaluatedRole,
+    scorePercent: dto.scorePercent,
+    negatives,
+    observations,
+  });
+  if (!actions) throw new Error("O Rico não conseguiu gerar as ações agora.");
+
+  const saved = await db.dtoActionSuggestion
+    .upsert({
+      where: { dtoEvaluationId: dtoId },
+      update: { actions, generatedAt: new Date(), model: "gpt-4o" },
+      create: { dtoEvaluationId: dtoId, actions, model: "gpt-4o" },
+    })
+    .catch((error) => {
+      console.error("[dto] não foi possível guardar as ações do Rico:", error);
+      return null;
+    });
+  return { actions, generatedAt: saved?.generatedAt ?? new Date(), cached: false };
 }

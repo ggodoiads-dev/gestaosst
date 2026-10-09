@@ -1,13 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { MessageSquareText, Search } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Loader2, MessageSquareText, Search, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from "@/components/ui/dialog";
 import { formatDate } from "@/lib/dates";
 import { formatPersonName, initials } from "@/lib/format-name";
 import { classifyAnswer } from "@/domain/dto/answers";
+import { getDtoActionsAction } from "@/server/actions/dto.actions";
 import type { DtoItem } from "@/server/services/dto.service";
 
 function normalize(text: string) {
@@ -24,6 +25,67 @@ function splitAnswers(answers: DtoItem["answers"]) {
     checks: answers.filter((a) => classifyAnswer(a.a) !== "text"),
     observations: answers.filter((a) => classifyAnswer(a.a) === "text"),
   };
+}
+
+type RicoAction = { title: string; detail: string; owner: string; deadline: string };
+
+/** Ações sugeridas pelo Rico pros pontos negativos e observações do DTO (gera na 1ª abertura e guarda). */
+function RicoActions({ dtoId, hasIssues }: { dtoId: string; hasIssues: boolean }) {
+  const [state, setState] = useState<{ status: "idle" | "loading" | "done" | "error"; actions: RicoAction[]; error?: string }>({
+    status: hasIssues ? "loading" : "idle",
+    actions: [],
+  });
+
+  useEffect(() => {
+    if (!hasIssues) return;
+    let cancelled = false;
+    void getDtoActionsAction(dtoId).then((res) => {
+      if (cancelled) return;
+      setState(res.ok ? { status: "done", actions: res.actions } : { status: "error", actions: [], error: res.error });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [dtoId, hasIssues]);
+
+  if (!hasIssues) return null;
+
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+        <Sparkles className="size-4 text-accent" /> Ações sugeridas pelo Rico
+      </p>
+      {state.status === "loading" && (
+        <p className="flex items-center gap-2 text-xs text-foreground-subtle">
+          <Loader2 className="size-3.5 animate-spin" /> O Rico está analisando os pontos negativos...
+        </p>
+      )}
+      {state.status === "error" && <p className="text-xs text-foreground-subtle">{state.error}</p>}
+      {state.status === "done" && state.actions.length === 0 && (
+        <p className="text-xs text-foreground-subtle">Sem pontos negativos para ajustar.</p>
+      )}
+      {state.status === "done" && state.actions.length > 0 && (
+        <>
+          <ol className="flex flex-col gap-2">
+            {state.actions.map((a, i) => (
+              <li key={i} className="rounded-lg border border-accent/30 bg-accent-soft px-3 py-2.5">
+                <p className="text-sm font-medium text-foreground">
+                  {i + 1}. {a.title}
+                </p>
+                <p className="mt-0.5 text-sm text-foreground-muted">{a.detail}</p>
+                <p className="mt-1 flex flex-wrap gap-2 text-xs text-foreground-subtle">
+                  <span>Responsável: {a.owner}</span>
+                  <span>·</span>
+                  <span>Prazo: {a.deadline}</span>
+                </p>
+              </li>
+            ))}
+          </ol>
+          <p className="text-[11px] text-foreground-subtle">Sugestão gerada por IA — a liderança avalia e decide o que aplicar.</p>
+        </>
+      )}
+    </div>
+  );
 }
 
 function DtoDetail({ item, open, onOpenChange, showCollaborator }: { item: DtoItem; open: boolean; onOpenChange: (o: boolean) => void; showCollaborator: boolean }) {
@@ -97,6 +159,7 @@ function DtoDetail({ item, open, onOpenChange, showCollaborator }: { item: DtoIt
               ))}
             </div>
           )}
+          <RicoActions dtoId={item.id} hasIssues={item.noCount > 0 || observations.length > 0} />
         </DialogBody>
       </DialogContent>
     </Dialog>

@@ -4,6 +4,9 @@ export const DTO_COOLDOWN_DAYS = 60;
 /** Justificativa padrão: o DTO foi feito, mas por liderança que não é monitorada na unidade (não está no SIGO/DMPeople). */
 export const DTO_JUSTIFICATION_REASON = "Já realizado por liderança não monitorada na unidade";
 
+/** Quem tem menos que isso de casa é prioridade pro primeiro DTO. */
+export const DTO_NEW_HIRE_DAYS = 60;
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 function dayNumber(date: Date): number {
@@ -25,4 +28,10 @@ export function dtoCooldown(lastEffective: Date | null, todayKey: string, cooldo
     eligible: daysSince >= cooldownDays,
     eligibleOn: new Date((dayNumber(lastEffective) + cooldownDays) * DAY_MS + 12 * 60 * 60 * 1000),
   };
+}
+
+/** Dias de casa em `todayKey` (AAAA-MM-DD). `null` se a data de admissão não é conhecida. */
+export function tenureDays(admissionDate: Date | null, todayKey: string): number | null {
+  if (!admissionDate) return null;
+  return keyDayNumber(todayKey) - dayNumber(admissionDate);
 }

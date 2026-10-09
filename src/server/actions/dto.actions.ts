@@ -71,3 +71,20 @@ export async function removeDtoJustificationAction(id: string): Promise<DtoJusti
     return { ok: false, error: "Não foi possível desfazer. Tente de novo." };
   }
 }
+
+export type DtoActionsActionResult =
+  | { ok: true; actions: { title: string; detail: string; owner: string; deadline: string }[]; generatedAt: string | null }
+  | { ok: false; error: string };
+
+export async function getDtoActionsAction(dtoId: string, regenerate = false): Promise<DtoActionsActionResult> {
+  try {
+    const user = await requireUser();
+    const result = await dtoService.getDtoActions(user, dtoId, { regenerate });
+    return { ok: true, actions: result.actions, generatedAt: result.generatedAt ? result.generatedAt.toISOString() : null };
+  } catch (error) {
+    if (error instanceof ForbiddenError) return { ok: false, error: error.message };
+    if (error instanceof Error && /Rico não conseguiu/.test(error.message)) return { ok: false, error: error.message };
+    console.error("[dto] falha ao obter ações do Rico:", error);
+    return { ok: false, error: "Não foi possível obter as ações agora." };
+  }
+}
