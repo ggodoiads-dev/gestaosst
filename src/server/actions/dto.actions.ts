@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { requireUser, requirePermission, ForbiddenError } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
 import * as dtoService from "@/server/services/dto.service";
@@ -32,9 +33,11 @@ export type DtoCommitResult = { ok: true; created: number; skipped: number } | {
 export async function commitDtoImportAction(rows: DtoImportRow[]): Promise<DtoCommitResult> {
   try {
     const user = await requireUser();
-    const result = await dtoService.commitDtoImport(user, rows);
+    const { createdIds, ...result } = await dtoService.commitDtoImport(user, rows);
     revalidatePath("/dto");
     revalidatePath("/meu-perfil");
+    // O Rico monta as ações dos DTOs novos em segundo plano, pra já aparecerem em Planos de Ação.
+    if (createdIds.length > 0) after(() => dtoService.generateActionsForDtos(createdIds));
     return { ok: true, ...result };
   } catch (error) {
     if (error instanceof ForbiddenError) return { ok: false, error: error.message };

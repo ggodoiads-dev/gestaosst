@@ -62,3 +62,50 @@ export function planDtoCalendar(args: { fromKey: string; toKey: string; perDay: 
   }
   return plan;
 }
+
+/** Liderança que pode fazer o DTO: quem "faz a chamada" daquela área/turno/pessoa (mesma configuração de Usuários e
+ * Permissões), e que trabalha no dia. */
+export type PlannerLeader = {
+  id: string;
+  name: string;
+  /** Colaborador ligado ao usuário (pra uma liderança nunca avaliar a si mesma). */
+  ownCollaboratorId: string | null;
+  areaIds: Set<string>;
+  turnoIds: Set<string>;
+  collaboratorIds: Set<string>;
+  works: (dayKey: string) => boolean;
+};
+
+export type PersonScope = { id: string; areaId: string | null; turnoId: string | null };
+
+/** Mesmo critério da chamada: área (e, se o líder tem turnos definidos, só esses turnos) ou pessoa escolhida a dedo. */
+export function leaderCovers(leader: PlannerLeader, person: PersonScope): boolean {
+  if (leader.ownCollaboratorId === person.id) return false;
+  if (leader.collaboratorIds.has(person.id)) return true;
+  if (person.areaId && leader.areaIds.has(person.areaId)) {
+    return leader.turnoIds.size === 0 || (person.turnoId !== null && leader.turnoIds.has(person.turnoId));
+  }
+  return false;
+}
+
+/** Escolhe a liderança de cada DTO planejado: entre as que cobrem a pessoa e trabalham no dia, a que tem menos DTOs
+ * atribuídos até ali (distribui a carga). Chave do resultado: `${dayKey}|${personId}`; `null` = nenhuma liderança serve. */
+export function assignLeaders(
+  plan: Map<string, PlannedSlot[]>,
+  persons: Map<string, PersonScope>,
+  leaders: PlannerLeader[],
+): Map<string, { id: string; name: string } | null> {
+  const load = new Map(leaders.map((l) => [l.id, 0]));
+  const result = new Map<string, { id: string; name: string } | null>();
+  for (const dayKey of [...plan.keys()].sort()) {
+    for (const slot of plan.get(dayKey)!) {
+      const person = persons.get(slot.id);
+      const options = person ? leaders.filter((l) => leaderCovers(l, person) && l.works(dayKey)) : [];
+      options.sort((a, b) => (load.get(a.id) ?? 0) - (load.get(b.id) ?? 0) || a.name.localeCompare(b.name, "pt-BR"));
+      const chosen = options[0] ?? null;
+      if (chosen) load.set(chosen.id, (load.get(chosen.id) ?? 0) + 1);
+      result.set(`${dayKey}|${slot.id}`, chosen ? { id: chosen.id, name: chosen.name } : null);
+    }
+  }
+  return result;
+}

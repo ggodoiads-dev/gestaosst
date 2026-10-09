@@ -66,7 +66,7 @@ export function DtoCalendar({ calendar }: { calendar: Calendar }) {
 
       <p className="text-xs text-foreground-subtle">
         Distribuição automática a partir de hoje entre os {calendar.eligibleTotal} colaboradores ativos que são avaliados (ADM/liderança fora): cada um
-        no dia em que trabalha, respeitando os 60 dias entre DTOs. Ordem: novos, nunca avaliados e quem está há mais tempo sem DTO.
+        no dia em que trabalha, respeitando os 60 dias entre DTOs, e com a liderança da área/turno dele (quem faz a chamada dele) que trabalha nesse dia, dividindo a carga entre elas. Ordem: novos, nunca avaliados e quem está há mais tempo sem DTO.
       </p>
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
@@ -113,6 +113,9 @@ export function DtoCalendar({ calendar }: { calendar: Calendar }) {
                     : p.kind === "nunca"
                       ? KIND_LABEL.nunca
                       : `Há ${p.daysSince} dias sem DTO`}
+                </p>
+                <p className={cn("truncate text-[11px]", p.leaderName ? "text-foreground-muted" : "text-danger")}>
+                  {p.leaderName ? `Com: ${formatPersonName(p.leaderName)}` : "Sem liderança definida"}
                 </p>
               </div>
             ))}

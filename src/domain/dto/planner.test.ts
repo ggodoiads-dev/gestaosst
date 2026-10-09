@@ -51,3 +51,42 @@ describe("planDtoCalendar", () => {
     expect(plan.get("2026-10-14")![0].id).toBe("folguista");
   });
 });
+
+import { assignLeaders, leaderCovers, type PlannerLeader } from "./planner";
+
+function leader(id: string, over: Partial<PlannerLeader> = {}): PlannerLeader {
+  return { id, name: id, ownCollaboratorId: null, areaIds: new Set(), turnoIds: new Set(), collaboratorIds: new Set(), works: () => true, ...over };
+}
+
+describe("lideranças", () => {
+  const person = { id: "p1", areaId: "areaA", turnoId: "t1" };
+
+  it("cobre por área, respeitando os turnos do líder quando ele tem", () => {
+    expect(leaderCovers(leader("l", { areaIds: new Set(["areaA"]) }), person)).toBe(true);
+    expect(leaderCovers(leader("l", { areaIds: new Set(["areaA"]), turnoIds: new Set(["t2"]) }), person)).toBe(false);
+    expect(leaderCovers(leader("l", { areaIds: new Set(["areaA"]), turnoIds: new Set(["t1"]) }), person)).toBe(true);
+    expect(leaderCovers(leader("l", { areaIds: new Set(["areaB"]) }), person)).toBe(false);
+  });
+
+  it("cobre pessoa escolhida a dedo, mas nunca a si mesmo", () => {
+    expect(leaderCovers(leader("l", { collaboratorIds: new Set(["p1"]) }), person)).toBe(true);
+    expect(leaderCovers(leader("l", { areaIds: new Set(["areaA"]), ownCollaboratorId: "p1" }), person)).toBe(false);
+  });
+
+  it("distribui a carga entre as lideranças e respeita quem trabalha no dia", () => {
+    const plan = new Map([["2026-10-12", [{ id: "p1", kind: "tempo" as const, tenureDays: null, daysSince: 90 }, { id: "p2", kind: "tempo" as const, tenureDays: null, daysSince: 80 }]]]);
+    const persons = new Map([
+      ["p1", { id: "p1", areaId: "areaA", turnoId: null }],
+      ["p2", { id: "p2", areaId: "areaA", turnoId: null }],
+    ]);
+    const leaders = [leader("ana", { areaIds: new Set(["areaA"]) }), leader("bia", { areaIds: new Set(["areaA"]) }), leader("folga", { areaIds: new Set(["areaA"]), works: () => false })];
+    const result = assignLeaders(plan, persons, leaders);
+    expect([result.get("2026-10-12|p1")?.id, result.get("2026-10-12|p2")?.id].sort()).toEqual(["ana", "bia"]);
+  });
+
+  it("sem liderança que sirva, fica sem líder", () => {
+    const plan = new Map([["2026-10-12", [{ id: "p1", kind: "nunca" as const, tenureDays: null, daysSince: null }]]]);
+    const result = assignLeaders(plan, new Map([["p1", { id: "p1", areaId: "areaX", turnoId: null }]]), [leader("ana", { areaIds: new Set(["areaA"]) })]);
+    expect(result.get("2026-10-12|p1")).toBeNull();
+  });
+});

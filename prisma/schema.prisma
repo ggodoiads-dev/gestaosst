@@ -106,6 +106,7 @@ model User {
   absenceInterviewsConcluded      AbsenceInterview[]           @relation("AbsenceInterviewConcludedBy")
   dtoEvaluationsImported          DtoEvaluation[]              @relation("DtoEvaluationImportedBy")
   dtoJustificationsMade           DtoJustification[]           @relation("DtoJustificationCreatedBy")
+  dtoActionsCompleted             DtoAction[]                  @relation("DtoActionCompletedBy")
   collaboratorActivitiesGranted   CollaboratorActivity[]       @relation("CollaboratorActivityGrantedBy")
   collaboratorEquipmentsGranted   CollaboratorEquipment[]      @relation("CollaboratorEquipmentCreatedBy")
   warningsCreated                 Warning[]                    @relation("WarningCreatedBy")
@@ -1587,6 +1588,7 @@ model DtoEvaluation {
   collaborator     Collaborator         @relation(fields: [collaboratorId], references: [id])
   importedBy       User                 @relation("DtoEvaluationImportedBy", fields: [importedById], references: [id])
   actionSuggestion DtoActionSuggestion?
+  actions          DtoAction[]
 
   @@index([collaboratorId])
   @@index([date])
@@ -1619,4 +1621,27 @@ model DtoActionSuggestion {
   model           String?
 
   dtoEvaluation DtoEvaluation @relation(fields: [dtoEvaluationId], references: [id], onDelete: Cascade)
+}
+
+/// Ação corretiva de um DTO (nascida das sugestões do Rico pros pontos negativos). Aparece em Planos de Ação, na aba
+/// "Ações de DTO", com prazo e status — usa o mesmo conjunto de status dos itens de plano de ação de NC.
+model DtoAction {
+  id              String           @id @default(uuid())
+  dtoEvaluationId String
+  title           String
+  detail          String
+  ownerRole       String
+  deadlineLabel   String
+  dueDate         DateTime
+  status          ActionItemStatus @default(PENDENTE)
+  completedAt     DateTime?
+  completedById   String?
+  createdAt       DateTime         @default(now())
+
+  dtoEvaluation DtoEvaluation @relation(fields: [dtoEvaluationId], references: [id], onDelete: Cascade)
+  completedBy   User?         @relation("DtoActionCompletedBy", fields: [completedById], references: [id])
+
+  @@index([dtoEvaluationId])
+  @@index([status])
+  @@index([dueDate])
 }

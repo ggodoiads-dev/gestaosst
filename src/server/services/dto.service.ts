@@ -9,6 +9,7 @@ import { APP_TIMEZONE } from "@/lib/dates";
 import { normalizeText, parseDtoWorkbook, type DtoAnswer, type DtoRawRow } from "@/domain/dto/parse";
 import { DTO_COOLDOWN_DAYS, DTO_JUSTIFICATION_REASON, DTO_NEW_HIRE_DAYS, dtoCooldown, tenureDays } from "@/domain/dto/suggestions";
 import { classifyAnswer } from "@/domain/dto/answers";
+import { syncDtoActionRows } from "@/server/services/dto-action.service";
 import { generateDtoActions, type DtoActionSuggestionItem } from "@/server/services/rico.service";
 
 /** Ver os DTOs: quem gerencia OU quem só pode visualizar (Auditor). Importar exige `DTO_MANAGE`. */
@@ -125,14 +126,17 @@ export async function buildDtoImportPreview(user: CurrentUser, rawRows: DtoRawRo
 }
 
 /** Grava só as linhas marcadas "create" (confere de novo que o colaborador existe). */
-export async function commitDtoImport(user: CurrentUser, rows: DtoImportRow[]): Promise<{ created: number; skipped: number }> {
+export async function commitDtoImport(
+  user: CurrentUser,
+  rows: DtoImportRow[],
+): Promise<{ created: number; skipped: number; createdIds: string[] }> {
   requirePermission(user, PERMISSIONS.DTO_MANAGE);
   const candidates = rows.filter((r) => r.action === "create" && r.collaboratorId);
   const valid = new Set(
     (await db.collaborator.findMany({ where: { id: { in: candidates.map((r) => r.collaboratorId!) } }, select: { id: true } })).map((c) => c.id),
   );
   const toCreate = candidates.filter((r) => valid.has(r.collaboratorId!));
-  if (toCreate.length === 0) return { created: 0, skipped: rows.length };
+  if (toCreate.length === 0) return { created: 0, skipped: rows.length, createdIds: [] };
 
   const result = await db.dtoEvaluation.createMany({
     data: toCreate.map((r) => ({
@@ -163,7 +167,10 @@ export async function commitDtoImport(user: CurrentUser, rows: DtoImportRow[]): 
     entityId: crypto.randomUUID(),
     newValue: { created: result.count, total: rows.length },
   });
-  return { created: result.count, skipped: rows.length - result.count };
+  const createdIds = (
+    await db.dtoEvaluation.findMany({ where: { externalKey: { in: toCreate.map((r) => r.externalKey) } }, select: { id: true } })
+  ).map((d) => d.id);
+  return { created: result.count, skipped: rows.length - result.count, createdIds };
 }
 
 export type DtoSuggestion = {
@@ -305,21 +312,18 @@ export async function removeDtoJustification(user: CurrentUser, id: string) {
 
 export type DtoActionsResult = { actions: DtoActionSuggestionItem[]; generatedAt: Date | null; cached: boolean };
 
-/** Ações sugeridas pelo Rico pra ajustar os pontos negativos e as observações de um DTO. A primeira abertura gera e
- * guarda; as próximas leem do banco (só a gestão pode pedir pra gerar de novo). Quem vê: gestão/Auditor ou o próprio
- * avaliado. */
-export async function getDtoActions(user: CurrentUser, dtoId: string, options: { regenerate?: boolean } = {}): Promise<DtoActionsResult> {
+/** Gera (ou lê do cache) as ações do Rico de um DTO e garante que elas existam no Plano de Ações. Sem checagem de
+ * acesso: quem chama já decidiu que pode (tela do DTO ou importação). */
+async function ensureDtoActions(dtoId: string, regenerate: boolean): Promise<DtoActionsResult> {
   const dto = await db.dtoEvaluation.findUniqueOrThrow({ where: { id: dtoId } });
-  const canSeeAll = hasPermission(user, PERMISSIONS.DTO_MANAGE) || hasPermission(user, PERMISSIONS.DTO_VIEW);
-  if (!canSeeAll) {
-    const own = await db.collaborator.findUnique({ where: { userId: user.id }, select: { id: true } });
-    if (own?.id !== dto.collaboratorId) throw new ForbiddenError();
-  }
-  const regenerate = !!options.regenerate && hasPermission(user, PERMISSIONS.DTO_MANAGE);
 
   if (!regenerate) {
     const cached = await db.dtoActionSuggestion.findUnique({ where: { dtoEvaluationId: dtoId } }).catch(() => null);
-    if (cached) return { actions: cached.actions as DtoActionSuggestionItem[], generatedAt: cached.generatedAt, cached: true };
+    if (cached) {
+      const cachedActions = cached.actions as DtoActionSuggestionItem[];
+      await syncDtoActionRows(dtoId, cachedActions); // cobre sugestões geradas antes do Plano de Ações existir
+      return { actions: cachedActions, generatedAt: cached.generatedAt, cached: true };
+    }
   }
 
   const answers = (dto.answers as DtoAnswer[]) ?? [];
@@ -346,5 +350,31 @@ export async function getDtoActions(user: CurrentUser, dtoId: string, options: {
       console.error("[dto] não foi possível guardar as ações do Rico:", error);
       return null;
     });
+  await syncDtoActionRows(dtoId, actions);
   return { actions, generatedAt: saved?.generatedAt ?? new Date(), cached: false };
 }
+
+/** Ações sugeridas pelo Rico pra um DTO. A primeira abertura (ou a importação) gera e guarda; as próximas leem do banco
+ * (só a gestão pode pedir pra gerar de novo). Quem vê: gestão/Auditor ou o próprio avaliado. */
+export async function getDtoActions(user: CurrentUser, dtoId: string, options: { regenerate?: boolean } = {}): Promise<DtoActionsResult> {
+  const dto = await db.dtoEvaluation.findUniqueOrThrow({ where: { id: dtoId }, select: { collaboratorId: true } });
+  const canSeeAll = hasPermission(user, PERMISSIONS.DTO_MANAGE) || hasPermission(user, PERMISSIONS.DTO_VIEW);
+  if (!canSeeAll) {
+    const own = await db.collaborator.findUnique({ where: { userId: user.id }, select: { id: true } });
+    if (own?.id !== dto.collaboratorId) throw new ForbiddenError();
+  }
+  return ensureDtoActions(dtoId, !!options.regenerate && hasPermission(user, PERMISSIONS.DTO_MANAGE));
+}
+
+/** Depois de uma importação: gera, uma a uma, as ações dos DTOs novos (best-effort, em segundo plano) pra já aparecerem
+ * no Plano de Ações sem ninguém precisar abrir cada DTO. */
+export async function generateActionsForDtos(dtoIds: string[]): Promise<void> {
+  for (const id of dtoIds) {
+    try {
+      await ensureDtoActions(id, false);
+    } catch (error) {
+      console.error("[dto] não foi possível gerar as ações do DTO", id, error);
+    }
+  }
+}
+

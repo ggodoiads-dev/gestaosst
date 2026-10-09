@@ -7,7 +7,7 @@ import { hasPermission, ForbiddenError } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
 import { APP_TIMEZONE } from "@/lib/dates";
 import { getCollaboratorDayStatus } from "@/domain/schedule/schedule-calendar";
-import { planDtoCalendar } from "@/domain/dto/planner";
+import { assignLeaders, planDtoCalendar, type PlannerLeader } from "@/domain/dto/planner";
 
 /**
  * Calendário semanal de DTO: de segunda a sexta, quem deve receber DTO em cada dia. Parte de hoje e distribui os
@@ -42,6 +42,8 @@ export type DtoCalendarPerson = {
   kind: "novo" | "nunca" | "tempo";
   tenureDays: number | null;
   daysSince: number | null;
+  /** Liderança que deve fazer o DTO com essa pessoa (null = nenhuma liderança definida pra ela). */
+  leaderName: string | null;
 };
 
 export type DtoCalendarDone = {
@@ -76,12 +78,14 @@ export async function getDtoCalendar(user: CurrentUser, params: { weekKey?: stri
   const weekDays = [0, 1, 2, 3, 4].map((i) => keyOf(addDays(dateFromKey(weekStart), i)));
   const weekEnd = weekDays[4];
 
-  const [collaborators, evaluations, justifications, notes] = await Promise.all([
+  const [collaborators, evaluations, justifications, notes, leaderUsers] = await Promise.all([
     db.collaborator.findMany({
       where: { active: true, OR: [{ functionId: null }, { function: { dtoExempt: false } }] },
       select: {
         id: true,
         name: true,
+        areaId: true,
+        turnoId: true,
         admissionDate: true,
         scheduleStartDate: true,
         area: { select: { name: true } },
@@ -97,6 +101,20 @@ export async function getDtoCalendar(user: CurrentUser, params: { weekKey?: stri
     db.scheduleDayNote.findMany({
       where: { date: { gte: dateFromKey(todayKey < weekStart ? todayKey : weekStart), lte: addDays(dateFromKey(weekEnd), 1) } },
       select: { collaboratorId: true, date: true, overrideStatus: true },
+    }),
+    // Lideranças = quem "faz chamada" (escopo por área/turno/pessoa em Usuários e Permissões).
+    db.user.findMany({
+      where: { active: true, canRollCall: true },
+      select: {
+        id: true,
+        name: true,
+        userRollCallAreas: { select: { areaId: true } },
+        userRollCallTurnos: { select: { turnoId: true } },
+        userRollCallCollaborators: { select: { collaboratorId: true } },
+        collaboratorProfile: {
+          select: { id: true, scheduleStartDate: true, turno: { select: { startDate: true, scheduleType: { select: { workDays: true, restDays: true } } } } },
+        },
+      },
     }),
   ]);
 
@@ -131,6 +149,21 @@ export async function getDtoCalendar(user: CurrentUser, params: { weekKey?: stri
       works: (dayKey: string) => worksOn(c, dayKey),
     })),
   });
+  const leaders: PlannerLeader[] = leaderUsers.map((u) => ({
+    id: u.id,
+    name: u.name,
+    ownCollaboratorId: u.collaboratorProfile?.id ?? null,
+    areaIds: new Set(u.userRollCallAreas.map((a) => a.areaId)),
+    turnoIds: new Set(u.userRollCallTurnos.map((t) => t.turnoId)),
+    collaboratorIds: new Set(u.userRollCallCollaborators.map((c) => c.collaboratorId)),
+    // Sem escala cadastrada pra liderança: conta como dia útil.
+    works: (dayKey: string) => (u.collaboratorProfile?.turno ? getCollaboratorDayStatus(dateFromKey(dayKey), u.collaboratorProfile) === "TRABALHO" : true),
+  }));
+  const leaderBySlot = assignLeaders(
+    slots,
+    new Map(collaborators.map((c) => [c.id, { id: c.id, areaId: c.areaId, turnoId: c.turnoId }])),
+    leaders,
+  );
   const byId = new Map(collaborators.map((c) => [c.id, c]));
   const planByDay = new Map<string, DtoCalendarPerson[]>();
   for (const [dayKey, list] of slots) {
@@ -146,6 +179,7 @@ export async function getDtoCalendar(user: CurrentUser, params: { weekKey?: stri
           kind: slot.kind,
           tenureDays: slot.tenureDays,
           daysSince: slot.daysSince,
+          leaderName: leaderBySlot.get(`${dayKey}|${slot.id}`)?.name ?? null,
         };
       }),
     );
