@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { APP_TIMEZONE, formatDate, formatDateTime, parseDateOnly } from "@/lib/dates";
 import { attachmentUrl } from "@/lib/attachment-url";
+import { DayJumpInput } from "@/components/domain/day-jump-input";
 import { JustifyChecklistItemDialog } from "@/components/domain/justify-checklist-item-dialog";
 
 const RESULT_TONE: Record<string, "success" | "info" | "warning" | "danger"> = {
@@ -69,6 +70,7 @@ export default async function ChecklistDoColaboradorPage({
             <Button size="icon" variant="secondary" asChild>
               <Link href={`?dia=${next}`} aria-label="Próximo dia"><ChevronRight className="size-4" /></Link>
             </Button>
+            <DayJumpInput value={dayKey} max={todayKey} />
           </div>
         }
       />
@@ -155,7 +157,12 @@ export default async function ChecklistDoColaboradorPage({
         )}
 
         <div className="flex flex-col gap-2">
-          <p className="text-sm font-semibold text-foreground">Checklists respondidos ({detail.executions.length})</p>
+          <p className="text-sm font-semibold text-foreground">
+            Checklists respondidos ({detail.executions.length}
+            {new Set(detail.executions.map((e) => e.equipmentCode)).size !== detail.executions.length &&
+              ` envios em ${new Set(detail.executions.map((e) => e.equipmentCode)).size} equipamentos`}
+            )
+          </p>
           {detail.executions.length === 0 && (
             <p className="text-sm text-foreground-subtle">Nenhum checklist finalizado neste dia.</p>
           )}

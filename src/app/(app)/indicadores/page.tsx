@@ -468,9 +468,12 @@ export default async function IndicadoresPage({
                               className="flex flex-col gap-1.5 rounded-lg border border-border bg-surface px-4 py-3 text-sm"
                             >
                               <div className="flex items-center justify-between gap-3">
-                                <span className="font-medium text-foreground">
+                                <Link
+                                  href={`/indicadores/checklist/${checklistRangeReport.collaborator.id}?dia=${localDateKey(d.date)}`}
+                                  className="font-medium text-foreground hover:underline"
+                                >
                                   {WEEKDAY_LABELS[d.date.getDay()]} — {formatDate(d.date)}
-                                </span>
+                                </Link>
                                 <Badge tone={!isWork ? "neutral" : !hasRequired ? "neutral" : d.future ? "info" : incomplete ? "danger" : "success"}>
                                   {!isWork ? "Folga" : !hasRequired ? "Sem checklist na área" : d.future ? "Em aberto" : complete ? "Completo" : "Pendente"}
                                 </Badge>
