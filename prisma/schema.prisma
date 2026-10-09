@@ -104,6 +104,7 @@ model User {
   absenceInterviewsRequested      AbsenceInterview[]           @relation("AbsenceInterviewRequestedBy")
   absenceInterviewsAnswered       AbsenceInterview[]           @relation("AbsenceInterviewAnsweredBy")
   absenceInterviewsConcluded      AbsenceInterview[]           @relation("AbsenceInterviewConcludedBy")
+  dtoEvaluationsImported          DtoEvaluation[]              @relation("DtoEvaluationImportedBy")
   collaboratorActivitiesGranted   CollaboratorActivity[]       @relation("CollaboratorActivityGrantedBy")
   collaboratorEquipmentsGranted   CollaboratorEquipment[]      @relation("CollaboratorEquipmentCreatedBy")
   warningsCreated                 Warning[]                    @relation("WarningCreatedBy")
@@ -890,6 +891,7 @@ model Collaborator {
   equipmentDamagesResponsible EquipmentDamage[]
   guardianReports             GuardianReport[]
   rollCallLeaders             UserRollCallCollaborator[]
+  dtoEvaluations              DtoEvaluation[]
 
   @@index([areaId])
   @@index([functionId])
@@ -1554,4 +1556,34 @@ model AbsenceInterview {
 
   @@index([collaboratorId])
   @@index([status])
+}
+
+/// DTO (observação de atividade) exportado do DMPeople. Só entram avaliações de colaboradores que existem no SIGO;
+/// o avaliador (liderança) fica só como texto, pra continuar salvo mesmo que ele saia da empresa.
+model DtoEvaluation {
+  id             String   @id @default(uuid())
+  externalKey    String   @unique
+  collaboratorId String
+  date           DateTime
+  evaluatedName  String
+  evaluatedRole  String?
+  evaluatorName  String?
+  evaluatorRole  String?
+  leaderName     String?
+  company        String?
+  operation      String?
+  activity       String
+  answers        Json
+  yesCount       Int      @default(0)
+  noCount        Int      @default(0)
+  naCount        Int      @default(0)
+  scorePercent   Int?
+  importedAt     DateTime @default(now())
+  importedById   String
+
+  collaborator Collaborator @relation(fields: [collaboratorId], references: [id])
+  importedBy   User         @relation("DtoEvaluationImportedBy", fields: [importedById], references: [id])
+
+  @@index([collaboratorId])
+  @@index([date])
 }

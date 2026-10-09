@@ -207,6 +207,12 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
   if (p.has(PERMISSIONS.GUARDIAN_MANAGE)) {
     sst.push({ href: "/guardian/importar", label: "Importar Guardian", icon: "qualificationImport" });
   }
+  if (p.has(PERMISSIONS.DTO_MANAGE) || p.has(PERMISSIONS.DTO_VIEW)) {
+    sst.push({ href: "/dto", label: "DTO", icon: "checklistCompliance" });
+  }
+  if (p.has(PERMISSIONS.DTO_MANAGE)) {
+    sst.push({ href: "/dto/importar", label: "Importar DTO", icon: "qualificationImport" });
+  }
   if (sst.length > 0) groups.push({ key: "sst", title: "Segurança", items: sst });
 
   const rh: NavItem[] = [];

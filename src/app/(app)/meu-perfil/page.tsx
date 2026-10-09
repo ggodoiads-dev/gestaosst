@@ -9,6 +9,8 @@ import { getCollaboratorPhoto } from "@/server/services/collaborator.service";
 import { listMyGuardianReports } from "@/server/services/guardian.service";
 import { listMyInterviews } from "@/server/services/absence-interview.service";
 import { listMyWarningDocuments } from "@/server/services/absence-followup.service";
+import { listMyDtos } from "@/server/services/dto.service";
+import { DtoList } from "@/components/domain/dto-list";
 import { GuardianReportRow } from "./guardian-report-row";
 import { ProfilePhotoUploader } from "./profile-photo-uploader";
 import { ProgressRing, toneForPercent } from "./progress-ring";
@@ -84,9 +86,10 @@ export default async function MeuPerfilPage({ searchParams }: { searchParams: Pr
     loadMonth(user, collaborator.id, month),
     ...historyKeys.map((k) => (k === month ? Promise.resolve(null) : loadMonth(user, collaborator.id, k))),
   ]);
-  const [myInterviews, myWarningDocuments] = await Promise.all([
+  const [myInterviews, myWarningDocuments, myDtos] = await Promise.all([
     listMyInterviews(user).catch(() => []),
     listMyWarningDocuments(user).catch(() => []),
+    listMyDtos(user).catch(() => []),
   ]);
   const historyData = historyKeys.map((k, i) => ({ month: k, data: k === month ? selected : history[i] }));
 
@@ -314,6 +317,22 @@ export default async function MeuPerfilPage({ searchParams }: { searchParams: Pr
                   </Badge>
                 );
               })}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>
+                <span className="flex items-center gap-2"><ClipboardCheck className="size-4" /> Meus DTOs ({myDtos.length})</span>
+              </CardTitle>
+              <CardDescription>Observações de atividade feitas com você pela liderança. Toque para ver as respostas.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {myDtos.length === 0 ? (
+                <p className="text-sm text-foreground-subtle">Nenhum DTO registrado até agora.</p>
+              ) : (
+                <DtoList items={myDtos} showCollaborator={false} />
+              )}
             </CardContent>
           </Card>
 
