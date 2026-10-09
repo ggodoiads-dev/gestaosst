@@ -147,7 +147,7 @@ function EquipmentStatusCard({ summary }: { summary: GestaoSummary }) {
 type ChecklistComplianceDashboard = NonNullable<Awaited<ReturnType<typeof getChecklistComplianceDashboard>>>;
 
 function PersonChecklistCard({ dashboard }: { dashboard: ChecklistComplianceDashboard }) {
-  const { today } = dashboard;
+  const { today, todayProgress: progress } = dashboard;
   // `today` é o último dia FECHADO (ontem): aderência é sempre D-1, por colaborador.
   const pct = compliancePercent(today);
   const noAccessCount = today.collaboratorsIncomplete.filter((c) => c.noAccess).length;
@@ -185,6 +185,36 @@ function PersonChecklistCard({ dashboard }: { dashboard: ChecklistComplianceDash
             )}
           </>
         )}
+        <div className="flex flex-col gap-1.5 border-t border-border pt-3">
+          <p className="text-xs font-semibold text-foreground">Hoje — andamento</p>
+          {progress.concluded.length + progress.remaining.length === 0 ? (
+            <p className="text-xs text-foreground-subtle">Ninguém cobrado por checklist está escalado hoje.</p>
+          ) : (
+            <>
+              <p className="text-xs text-foreground-subtle">
+                {progress.concluded.length} de {progress.concluded.length + progress.remaining.length} já concluíram
+              </p>
+              {progress.concluded.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {progress.concluded.slice(0, 8).map((c) => (
+                    <Badge key={c.id} tone="success">✓ {c.name}</Badge>
+                  ))}
+                  {progress.concluded.length > 8 && <Badge tone="neutral">+{progress.concluded.length - 8}</Badge>}
+                </div>
+              )}
+              {progress.remaining.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {progress.remaining.slice(0, 6).map((c) => (
+                    <Badge key={c.id} tone="warning">
+                      {c.name} {c.done}/{c.required}
+                    </Badge>
+                  ))}
+                  {progress.remaining.length > 6 && <Badge tone="neutral">+{progress.remaining.length - 6}</Badge>}
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </CardContent>
       <CardFooter className="justify-end py-2.5">
         <Link href="/indicadores" className="text-xs font-medium text-accent hover:underline">
