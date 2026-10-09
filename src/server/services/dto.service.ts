@@ -4,7 +4,10 @@ import { recordAudit } from "@/server/services/audit";
 import type { CurrentUser } from "@/server/auth/current-user";
 import { requirePermission, hasPermission, ForbiddenError } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
+import { formatInTimeZone } from "date-fns-tz";
+import { APP_TIMEZONE } from "@/lib/dates";
 import { normalizeText, parseDtoWorkbook, type DtoAnswer, type DtoRawRow } from "@/domain/dto/parse";
+import { DTO_COOLDOWN_DAYS, DTO_JUSTIFICATION_REASON, dtoCooldown } from "@/domain/dto/suggestions";
 
 /** Ver os DTOs: quem gerencia OU quem só pode visualizar (Auditor). Importar exige `DTO_MANAGE`. */
 function requireDtoView(user: CurrentUser): void {
@@ -159,4 +162,131 @@ export async function commitDtoImport(user: CurrentUser, rows: DtoImportRow[]): 
     newValue: { created: result.count, total: rows.length },
   });
   return { created: result.count, skipped: rows.length - result.count };
+}
+
+export type DtoSuggestion = {
+  collaboratorId: string;
+  name: string;
+  areaName: string | null;
+  functionName: string | null;
+  admissionDate: Date | null;
+  lastDtoDate: Date | null;
+  lastDtoActivity: string | null;
+  justification: { id: string; date: Date; note: string | null; reason: string } | null;
+  /** Último DTO ou justificativa — a data que conta pra carência. */
+  lastEffectiveDate: Date | null;
+  daysSince: number | null;
+  eligible: boolean;
+  eligibleOn: Date | null;
+};
+
+/** Sugestões de DTO: colaboradores ativos no SIGO, do mais tempo sem DTO pro menos. Quem nunca foi avaliado vem
+ * primeiro. Quem teve um DTO (ou uma justificativa) há menos de 60 dias está em carência: não é sugerido ainda. */
+export async function getDtoSuggestions(user: CurrentUser) {
+  requireDtoView(user);
+  const todayKey = formatInTimeZone(new Date(), APP_TIMEZONE, "yyyy-MM-dd");
+
+  const [collaborators, evaluations, justifications] = await Promise.all([
+    db.collaborator.findMany({
+      where: { active: true },
+      select: {
+        id: true,
+        name: true,
+        admissionDate: true,
+        area: { select: { name: true } },
+        function: { select: { name: true } },
+      },
+    }),
+    db.dtoEvaluation.findMany({
+      orderBy: { date: "desc" },
+      select: { collaboratorId: true, date: true, activity: true },
+    }),
+    // Tabela pode ainda não existir no banco (migração pendente): sem justificativas, a lista segue funcionando.
+    db.dtoJustification
+      .findMany({ orderBy: { date: "desc" }, select: { id: true, collaboratorId: true, date: true, note: true, reason: true } })
+      .catch((error) => {
+        console.error("[dto] justificativas indisponíveis:", error);
+        return [] as { id: string; collaboratorId: string; date: Date; note: string | null; reason: string }[];
+      }),
+  ]);
+
+  const lastDto = new Map<string, { date: Date; activity: string }>();
+  for (const e of evaluations) if (!lastDto.has(e.collaboratorId)) lastDto.set(e.collaboratorId, { date: e.date, activity: e.activity });
+  const lastJust = new Map<string, (typeof justifications)[number]>();
+  for (const j of justifications) if (!lastJust.has(j.collaboratorId)) lastJust.set(j.collaboratorId, j);
+
+  const items: DtoSuggestion[] = collaborators.map((c) => {
+    const dto = lastDto.get(c.id) ?? null;
+    const just = lastJust.get(c.id) ?? null;
+    const lastEffectiveDate = [dto?.date, just?.date].filter((d): d is Date => !!d).sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
+    const cooldown = dtoCooldown(lastEffectiveDate, todayKey);
+    return {
+      collaboratorId: c.id,
+      name: c.name,
+      areaName: c.area?.name ?? null,
+      functionName: c.function?.name ?? null,
+      admissionDate: c.admissionDate,
+      lastDtoDate: dto?.date ?? null,
+      lastDtoActivity: dto?.activity ?? null,
+      // Só mostra a justificativa se ela é o que está segurando a pessoa (é mais recente que o último DTO).
+      justification: just && (!dto || just.date >= dto.date) ? just : null,
+      lastEffectiveDate,
+      daysSince: cooldown.daysSince,
+      eligible: cooldown.eligible,
+      eligibleOn: cooldown.eligibleOn,
+    };
+  });
+
+  // Nunca avaliados primeiro (os mais antigos na casa antes), depois quem está há mais tempo sem DTO.
+  items.sort((a, b) => {
+    if (a.daysSince === null && b.daysSince !== null) return -1;
+    if (b.daysSince === null && a.daysSince !== null) return 1;
+    if (a.daysSince === null && b.daysSince === null) {
+      return (a.admissionDate?.getTime() ?? Infinity) - (b.admissionDate?.getTime() ?? Infinity) || a.name.localeCompare(b.name, "pt-BR");
+    }
+    return (b.daysSince ?? 0) - (a.daysSince ?? 0) || a.name.localeCompare(b.name, "pt-BR");
+  });
+
+  return { cooldownDays: DTO_COOLDOWN_DAYS, todayKey, items, canJustify: hasPermission(user, PERMISSIONS.DTO_MANAGE) };
+}
+
+/** Registra que o colaborador já teve um DTO feito por liderança não monitorada na unidade. Conta como DTO feito
+ * na data informada (não pode ser futura) pra regra dos 60 dias. */
+export async function justifyDto(user: CurrentUser, input: { collaboratorId: string; dayKey: string; note: string | null }) {
+  requirePermission(user, PERMISSIONS.DTO_MANAGE);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.dayKey)) throw new Error("Data inválida.");
+  const todayKey = formatInTimeZone(new Date(), APP_TIMEZONE, "yyyy-MM-dd");
+  if (input.dayKey > todayKey) throw new Error("A data não pode ser no futuro.");
+  const [y, m, d] = input.dayKey.split("-").map(Number);
+
+  const collaborator = await db.collaborator.findUniqueOrThrow({ where: { id: input.collaboratorId }, select: { id: true } });
+  const created = await db.dtoJustification.create({
+    data: {
+      collaboratorId: collaborator.id,
+      date: new Date(Date.UTC(y, m - 1, d, 12)),
+      reason: DTO_JUSTIFICATION_REASON,
+      note: input.note?.trim() || null,
+      createdById: user.id,
+    },
+  });
+  await recordAudit({
+    userId: user.id,
+    action: "CREATE",
+    entityType: "DtoJustification",
+    entityId: created.id,
+    newValue: { collaboratorId: collaborator.id, dayKey: input.dayKey, reason: DTO_JUSTIFICATION_REASON, note: input.note },
+  });
+}
+
+export async function removeDtoJustification(user: CurrentUser, id: string) {
+  requirePermission(user, PERMISSIONS.DTO_MANAGE);
+  const existing = await db.dtoJustification.findUniqueOrThrow({ where: { id } });
+  await db.dtoJustification.delete({ where: { id } });
+  await recordAudit({
+    userId: user.id,
+    action: "DELETE",
+    entityType: "DtoJustification",
+    entityId: id,
+    previousValue: { collaboratorId: existing.collaboratorId, date: existing.date, reason: existing.reason, note: existing.note },
+  });
 }

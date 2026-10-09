@@ -105,6 +105,7 @@ model User {
   absenceInterviewsAnswered       AbsenceInterview[]           @relation("AbsenceInterviewAnsweredBy")
   absenceInterviewsConcluded      AbsenceInterview[]           @relation("AbsenceInterviewConcludedBy")
   dtoEvaluationsImported          DtoEvaluation[]              @relation("DtoEvaluationImportedBy")
+  dtoJustificationsMade           DtoJustification[]           @relation("DtoJustificationCreatedBy")
   collaboratorActivitiesGranted   CollaboratorActivity[]       @relation("CollaboratorActivityGrantedBy")
   collaboratorEquipmentsGranted   CollaboratorEquipment[]      @relation("CollaboratorEquipmentCreatedBy")
   warningsCreated                 Warning[]                    @relation("WarningCreatedBy")
@@ -892,6 +893,7 @@ model Collaborator {
   guardianReports             GuardianReport[]
   rollCallLeaders             UserRollCallCollaborator[]
   dtoEvaluations              DtoEvaluation[]
+  dtoJustifications           DtoJustification[]
 
   @@index([areaId])
   @@index([functionId])
@@ -1586,4 +1588,21 @@ model DtoEvaluation {
 
   @@index([collaboratorId])
   @@index([date])
+}
+
+/// Justificativa de DTO: o colaborador já teve um DTO feito por liderança que não é monitorada na unidade (fora do
+/// DMPeople/SIGO). Conta como "DTO feito" na data informada pra regra dos 60 dias de carência.
+model DtoJustification {
+  id             String   @id @default(uuid())
+  collaboratorId String
+  date           DateTime
+  reason         String
+  note           String?
+  createdById    String
+  createdAt      DateTime @default(now())
+
+  collaborator Collaborator @relation(fields: [collaboratorId], references: [id])
+  createdBy    User         @relation("DtoJustificationCreatedBy", fields: [createdById], references: [id])
+
+  @@index([collaboratorId, date])
 }

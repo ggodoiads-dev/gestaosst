@@ -42,3 +42,32 @@ export async function commitDtoImportAction(rows: DtoImportRow[]): Promise<DtoCo
     return { ok: false, error: "Não foi possível concluir a importação." };
   }
 }
+
+export type DtoJustifyResult = { ok: true } | { ok: false; error: string };
+
+export async function justifyDtoAction(input: { collaboratorId: string; dayKey: string; note: string | null }): Promise<DtoJustifyResult> {
+  try {
+    const user = await requireUser();
+    await dtoService.justifyDto(user, input);
+    revalidatePath("/dto");
+    return { ok: true };
+  } catch (error) {
+    if (error instanceof ForbiddenError) return { ok: false, error: error.message };
+    if (error instanceof Error && /Data inválida|futuro/.test(error.message)) return { ok: false, error: error.message };
+    console.error("[dto] falha ao justificar:", error);
+    return { ok: false, error: "Não foi possível salvar a justificativa. Tente de novo." };
+  }
+}
+
+export async function removeDtoJustificationAction(id: string): Promise<DtoJustifyResult> {
+  try {
+    const user = await requireUser();
+    await dtoService.removeDtoJustification(user, id);
+    revalidatePath("/dto");
+    return { ok: true };
+  } catch (error) {
+    if (error instanceof ForbiddenError) return { ok: false, error: error.message };
+    console.error("[dto] falha ao desfazer justificativa:", error);
+    return { ok: false, error: "Não foi possível desfazer. Tente de novo." };
+  }
+}
