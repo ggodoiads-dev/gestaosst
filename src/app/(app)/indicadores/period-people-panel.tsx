@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Search } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatPersonName } from "@/lib/format-name";
 import type { PeriodPerson } from "@/server/services/checklist-compliance.service";
 
 function normalize(text: string) {
@@ -67,7 +68,7 @@ export function PeriodPeoplePanel({ people, refKey }: { people: PeriodPerson[]; 
                   href={`/indicadores?collaboratorId=${p.id}&period=mes&ref=${refKey}#checklist-por-colaborador`}
                   className="min-w-0 truncate hover:underline"
                 >
-                  {p.name}
+                  {formatPersonName(p.name)}
                   {p.areaName && <span className="text-xs text-foreground-subtle"> · {p.areaName}</span>}
                   {p.noAccess && <span className="text-xs text-foreground-subtle"> (sem acesso ao sistema)</span>}
                 </Link>
