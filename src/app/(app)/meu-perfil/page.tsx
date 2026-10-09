@@ -7,6 +7,8 @@ import { getCollaboratorTimeClockAdherence } from "@/server/services/time-clock.
 import { getChecklistComplianceRange } from "@/server/services/checklist-compliance.service";
 import { getCollaboratorPhoto } from "@/server/services/collaborator.service";
 import { listMyGuardianReports } from "@/server/services/guardian.service";
+import { listMyInterviews } from "@/server/services/absence-interview.service";
+import { listMyWarningDocuments } from "@/server/services/absence-followup.service";
 import { GuardianReportRow } from "./guardian-report-row";
 import { ProfilePhotoUploader } from "./profile-photo-uploader";
 import { ProgressRing, toneForPercent } from "./progress-ring";
@@ -81,6 +83,10 @@ export default async function MeuPerfilPage({ searchParams }: { searchParams: Pr
     getCollaboratorPhoto(collaborator.id),
     loadMonth(user, collaborator.id, month),
     ...historyKeys.map((k) => (k === month ? Promise.resolve(null) : loadMonth(user, collaborator.id, k))),
+  ]);
+  const [myInterviews, myWarningDocuments] = await Promise.all([
+    listMyInterviews(user).catch(() => []),
+    listMyWarningDocuments(user).catch(() => []),
   ]);
   const historyData = historyKeys.map((k, i) => ({ month: k, data: k === month ? selected : history[i] }));
 
@@ -310,6 +316,59 @@ export default async function MeuPerfilPage({ searchParams }: { searchParams: Pr
               })}
             </CardContent>
           </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>
+                <span className="flex items-center gap-2"><ClipboardCheck className="size-4" /> Minhas entrevistas de ABS ({myInterviews.length})</span>
+              </CardTitle>
+              <CardDescription>Entrevistas de absenteísmo (faltas e atestados). Só você e o RH veem.</CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-2">
+              {myInterviews.length === 0 && <p className="text-sm text-foreground-subtle">Nenhuma entrevista até agora.</p>}
+              {myInterviews.map((i) => (
+                <Link
+                  key={i.id}
+                  href={`/minhas-entrevistas/${i.id}`}
+                  className="flex items-center justify-between gap-2 rounded-md border border-border px-3 py-2 text-sm hover:bg-surface-muted"
+                >
+                  <span>
+                    {i.note.status === "ATESTADO" ? "Atestado" : "Falta"} em {formatDate(i.note.date)}
+                  </span>
+                  <Badge tone={i.status === "SOLICITADA" ? "warning" : i.status === "RESPONDIDA" ? "info" : "success"}>
+                    {i.status === "SOLICITADA" ? "Responder" : i.status === "RESPONDIDA" ? "Enviada" : "Concluída"}
+                  </Badge>
+                </Link>
+              ))}
+            </CardContent>
+          </Card>
+
+          {myWarningDocuments.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>
+                  <span className="flex items-center gap-2"><ShieldCheck className="size-4" /> Documentos de advertência</span>
+                </CardTitle>
+                <CardDescription>Anexados pelo RH às suas faltas.</CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-2">
+                {myWarningDocuments.map((doc) => (
+                  <div key={doc.id} className="rounded-md border border-border px-3 py-2 text-sm">
+                    <p className="font-medium">Falta de {formatDate(doc.date)}</p>
+                    <ul className="mt-1 flex flex-col gap-1">
+                      {doc.attachments.map((a) => (
+                        <li key={a.id}>
+                          <a href={attachmentUrl(a.path)} target="_blank" rel="noreferrer" className="text-xs text-accent hover:underline">
+                            {a.filename}
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
 
           <Card>
             <CardHeader>

@@ -2,6 +2,8 @@ import { AlertOctagon } from "lucide-react";
 import { requireUser } from "@/server/auth/current-user";
 import { getMyCollaboratorProfile } from "@/server/services/productivity.service";
 import { listMyWarnings } from "@/server/services/warning.service";
+import { listMyWarningDocuments } from "@/server/services/absence-followup.service";
+import { attachmentUrl } from "@/lib/attachment-url";
 import { PageHeader, PageBody } from "@/components/domain/page-header";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { formatDate } from "@/lib/dates";
@@ -26,6 +28,7 @@ export default async function MinhasAdvertenciasPage() {
   }
 
   const warnings = await listMyWarnings(user);
+  const documents = await listMyWarningDocuments(user).catch(() => []);
 
   return (
     <>
@@ -56,6 +59,30 @@ export default async function MinhasAdvertenciasPage() {
             ))}
           </CardContent>
         </Card>
+
+        {documents.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Documentos anexados pelo RH</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-2.5">
+              {documents.map((doc) => (
+                <div key={doc.id} className="rounded-md border border-border px-3 py-2.5 text-sm">
+                  <p className="font-medium">Falta de {formatDate(doc.date)}</p>
+                  <ul className="mt-1 flex flex-col gap-1">
+                    {doc.attachments.map((a) => (
+                      <li key={a.id}>
+                        <a href={attachmentUrl(a.path)} target="_blank" rel="noreferrer" className="text-xs text-accent hover:underline">
+                          {a.filename}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
       </PageBody>
     </>
   );

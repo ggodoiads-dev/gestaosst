@@ -22,6 +22,7 @@ export default async function PendenciasAdvertenciaPage() {
         <PendingFollowUpList
           items={notes.map((note) => ({
             noteId: note.id,
+            attachments: note.attachments,
             kind: note.status === "ATESTADO" ? "ATESTADO" : "FALTA",
             interview: interviews.get(note.id) ?? null,
             collaboratorId: note.collaboratorId,

@@ -344,7 +344,7 @@ export function listPendingAbsenceFollowUps(user: CurrentUser) {
         { status: "ATESTADO", absenceInterviewDone: false },
       ],
     },
-    include: { collaborator: true },
+    include: { collaborator: true, attachments: { select: { id: true, filename: true, path: true }, orderBy: { uploadedAt: "desc" } } },
     orderBy: { date: "desc" },
   });
 }

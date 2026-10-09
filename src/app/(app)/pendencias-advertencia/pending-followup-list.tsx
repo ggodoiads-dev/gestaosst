@@ -11,10 +11,12 @@ import { Button } from "@/components/ui/button";
 import { markWarningAppliedAction, markAbsenceInterviewDoneAction } from "@/server/actions/schedule.actions";
 import { requestAbsenceInterviewAction } from "@/server/actions/absence-interview.actions";
 import { CreateWarningDialog } from "@/app/(app)/colaboradores/[id]/warning-dialog";
+import { DeleteNoteButton, WarningDocuments } from "./followup-tools";
 
 export type FollowUpItem = {
   noteId: string;
   kind: "FALTA" | "ATESTADO";
+  attachments: { id: string; filename: string; path: string }[];
   interview: { id: string; status: "SOLICITADA" | "RESPONDIDA" | "CONCLUIDA" } | null;
   collaboratorId: string;
   collaboratorName: string;
@@ -75,11 +77,20 @@ function FollowUpCard({ item }: { item: FollowUpItem }) {
         <InterviewStep item={item} pending={pending} run={run} />
       </div>
 
-      {item.kind === "FALTA" && !item.warningApplied && (
-        <div className="flex justify-end border-t border-border pt-3">
-          <CreateWarningDialog collaboratorId={item.collaboratorId} />
+      {item.kind === "FALTA" && (
+        <div className="flex flex-col gap-2 border-t border-border pt-3">
+          <p className="text-xs font-medium text-foreground-subtle">Documento da advertência (o colaborador vê o que você anexar)</p>
+          <WarningDocuments noteId={item.noteId} attachments={item.attachments} canAttach />
         </div>
       )}
+
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3">
+        <DeleteNoteButton
+          noteId={item.noteId}
+          label={`${item.kind === "ATESTADO" ? "Atestado" : "Falta"} de ${formatPersonName(item.collaboratorName)} em ${item.weekday}, ${item.dateLabel}`}
+        />
+        {item.kind === "FALTA" && !item.warningApplied && <CreateWarningDialog collaboratorId={item.collaboratorId} />}
+      </div>
     </div>
   );
 }
