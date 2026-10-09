@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Search } from "lucide-react";
+import { MessageSquareText, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from "@/components/ui/dialog";
@@ -19,7 +19,15 @@ function scoreTone(score: number | null): "success" | "warning" | "danger" | "ne
   return score >= 90 ? "success" : score >= 70 ? "warning" : "danger";
 }
 
+function splitAnswers(answers: DtoItem["answers"]) {
+  return {
+    checks: answers.filter((a) => classifyAnswer(a.a) !== "text"),
+    observations: answers.filter((a) => classifyAnswer(a.a) === "text"),
+  };
+}
+
 function DtoDetail({ item, open, onOpenChange, showCollaborator }: { item: DtoItem; open: boolean; onOpenChange: (o: boolean) => void; showCollaborator: boolean }) {
+  const { checks, observations } = splitAnswers(item.answers);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
@@ -62,23 +70,33 @@ function DtoDetail({ item, open, onOpenChange, showCollaborator }: { item: DtoIt
             </span>
           </div>
 
-          <ul className="flex flex-col divide-y divide-border rounded-lg border border-border">
-            {item.answers.map((a, i) => {
-              const kind = classifyAnswer(a.a);
-              return (
-                <li key={i} className="flex items-start justify-between gap-3 px-3 py-2">
-                  <span className="text-foreground">{a.q}</span>
-                  {kind === "text" ? (
-                    <span className="max-w-[55%] shrink-0 text-right text-foreground-muted">{a.a}</span>
-                  ) : (
+          {checks.length > 0 && (
+            <ul className="flex flex-col divide-y divide-border rounded-lg border border-border">
+              {checks.map((a, i) => {
+                const kind = classifyAnswer(a.a);
+                return (
+                  <li key={i} className="flex items-start justify-between gap-3 px-3 py-2">
+                    <span className="text-foreground">{a.q}</span>
                     <Badge tone={kind === "yes" ? "success" : kind === "no" ? "danger" : "neutral"} className="shrink-0">
                       {kind === "yes" ? "Sim" : kind === "no" ? "Não" : "N/A"}
                     </Badge>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+
+          {observations.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <p className="text-sm font-semibold text-foreground">Observações ({observations.length})</p>
+              {observations.map((a, i) => (
+                <div key={i} className="rounded-lg border border-warning/40 bg-warning-soft px-3 py-2.5">
+                  <p className="text-xs text-foreground-subtle">{a.q}</p>
+                  <p className="mt-0.5 whitespace-pre-wrap text-sm text-foreground">{a.a}</p>
+                </div>
+              ))}
+            </div>
+          )}
         </DialogBody>
       </DialogContent>
     </Dialog>
@@ -163,6 +181,12 @@ export function DtoList({
                   {i.evaluatorName && ` · por ${formatPersonName(i.evaluatorName)}`}
                 </span>
               </span>
+              {splitAnswers(i.answers).observations.length > 0 && (
+                <span className="flex shrink-0 items-center gap-1 text-xs text-warning" title="Tem observações">
+                  <MessageSquareText className="size-3.5" />
+                  {splitAnswers(i.answers).observations.length}
+                </span>
+              )}
               <Badge tone={scoreTone(i.scorePercent)}>{i.scorePercent === null ? "—" : `${i.scorePercent}%`}</Badge>
             </button>
           ))}
