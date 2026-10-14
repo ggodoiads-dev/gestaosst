@@ -57,3 +57,6 @@ next-env.d.ts
 
 .vercel
 .env*
+
+# prova de autoria (fica só com o titular, nunca vai pro repositório)
+/registro-autoria/
