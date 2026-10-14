@@ -30,9 +30,14 @@ export async function uploadDtoSpreadsheetAction(formData: FormData): Promise<Dt
 
 export type DtoCommitResult = { ok: true; created: number; skipped: number } | { ok: false; error: string };
 
-export async function commitDtoImportAction(rows: DtoImportRow[]): Promise<DtoCommitResult> {
+/** Recebe o MESMO arquivo da prévia e refaz a leitura no servidor (não devolve as linhas pelo navegador: estourava o limite de corpo). */
+export async function commitDtoImportAction(formData: FormData): Promise<DtoCommitResult> {
   try {
     const user = await requireUser();
+    requirePermission(user, PERMISSIONS.DTO_MANAGE);
+    const file = formData.get("file");
+    if (!(file instanceof File) || file.size === 0) return { ok: false, error: "Arquivo não encontrado. Envie a planilha de novo." };
+    const rows = await dtoService.buildDtoImportPreview(user, dtoService.parseDtoSpreadsheet(Buffer.from(await file.arrayBuffer())));
     const { createdIds, ...result } = await dtoService.commitDtoImport(user, rows);
     revalidatePath("/dto");
     revalidatePath("/meu-perfil");

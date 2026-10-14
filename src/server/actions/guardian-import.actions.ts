@@ -35,9 +35,16 @@ export async function uploadGuardianSpreadsheetAction(formData: FormData): Promi
 
 export type CommitResult = { ok: true; created: number; skipped: number } | { ok: false; error: string };
 
-export async function commitGuardianImportAction(rows: GuardianImportRow[]): Promise<CommitResult> {
+/** Recebe o MESMO arquivo da prévia e refaz a leitura no servidor: antes o navegador devolvia todas as linhas já lidas
+ * (com a linha original inteira de cada uma), o que estourava o limite de corpo da requisição em planilhas maiores. */
+export async function commitGuardianImportAction(formData: FormData): Promise<CommitResult> {
   try {
     const user = await requireUser();
+    requirePermission(user, PERMISSIONS.GUARDIAN_MANAGE);
+    const file = formData.get("file");
+    if (!(file instanceof File) || file.size === 0) return { ok: false, error: "Arquivo não encontrado. Envie a planilha de novo." };
+    const rawRows = await guardianImportService.parseGuardianWorkbook(Buffer.from(await file.arrayBuffer()));
+    const rows = await guardianImportService.buildGuardianImportPreview(user, rawRows);
     const result = await guardianImportService.commitGuardianImport(user, rows);
     revalidatePath("/guardian");
     return { ok: true, ...result };

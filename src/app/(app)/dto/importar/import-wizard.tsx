@@ -16,6 +16,7 @@ export function ImportWizard() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [rows, setRows] = useState<DtoImportRow[] | null>(null);
+  const [file, setFile] = useState<File | null>(null);
   const [committing, startCommit] = useTransition();
   const [result, setResult] = useState<{ created: number; skipped: number } | null>(null);
 
@@ -31,13 +32,16 @@ export function ImportWizard() {
       return;
     }
     setRows(res.rows);
+    setFile(file);
     if (inputRef.current) inputRef.current.value = "";
   }
 
   function handleCommit() {
-    if (!rows) return;
+    if (!rows || !file) return;
     startCommit(async () => {
-      const res = await commitDtoImportAction(rows);
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await commitDtoImportAction(formData);
       if (!res.ok) {
         toast.error(res.error);
         return;

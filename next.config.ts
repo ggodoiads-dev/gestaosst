@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Padrão do Next é 1 MB: importações de planilha (e fotos) estouravam. O limite da Vercel é 4,5 MB por requisição.
+  experimental: { serverActions: { bodySizeLimit: "4mb" } },
   async redirects() {
     return [
       {
