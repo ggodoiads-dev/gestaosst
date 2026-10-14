@@ -42,7 +42,8 @@ export default async function RealizarChecklistPage({
   const user = await requireUser();
   requirePermission(user, PERMISSIONS.CHECKLIST_EXECUTE);
   const { area: selectedAreaId } = await searchParams;
-  const board = await listChecklistBoardForUser(user);
+  // Checklist é por pessoa: aqui conta só o que EU concluí hoje, não o que outras pessoas fizeram.
+  const board = await listChecklistBoardForUser(user, { mine: true });
 
   const equipmentItems = board.filter(isEquipmentItem);
   const areaChecklistItems = board.filter(isAreaItem);

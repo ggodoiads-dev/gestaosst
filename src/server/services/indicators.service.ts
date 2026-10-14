@@ -57,7 +57,8 @@ function summarizeBoard(board: Board) {
 }
 
 export async function getColaboradorSummary(user: CurrentUser) {
-  const { previstos, realizados, pendentes, atrasados, emAndamento } = summarizeBoard(await listChecklistBoardForUser(user));
+  // Resumo pessoal (checklist é por pessoa): só o que eu fiz hoje.
+  const { previstos, realizados, pendentes, atrasados, emAndamento } = summarizeBoard(await listChecklistBoardForUser(user, { mine: true }));
   return { previstos, realizados, pendentes, atrasados, emAndamento };
 }
 

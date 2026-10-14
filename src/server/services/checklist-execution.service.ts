@@ -46,7 +46,7 @@ export type ChecklistBoardItem = ChecklistBoardEquipmentItem | ChecklistBoardAre
  */
 export async function listChecklistBoardForUser(
   user: CurrentUser,
-  filters: { areaId?: string } = {},
+  filters: { areaId?: string; /** Só o que EU fiz/estou fazendo hoje (checklist é por pessoa) — pra tela de quem executa. Sem isso, conta o que qualquer pessoa fez (visão de supervisão). */ mine?: boolean } = {},
 ): Promise<ChecklistBoardItem[]> {
   // Só lista a situação do dia — também alimenta os indicadores e o início, que perfis só-leitura
   // (Auditor) precisam abrir. Iniciar/responder um checklist continua exigindo CHECKLIST_EXECUTE
@@ -110,7 +110,12 @@ export async function listChecklistBoardForUser(
 
     const [inProgress, completedToday] = await Promise.all([
       db.checklistExecution.findFirst({
-        where: { equipmentId: equipment.id, checklistVersionId: version.id, status: "EM_ANDAMENTO" },
+        where: {
+          equipmentId: equipment.id,
+          checklistVersionId: version.id,
+          status: "EM_ANDAMENTO",
+          ...(filters.mine ? { executedById: user.id } : {}),
+        },
       }),
       db.checklistExecution.findFirst({
         where: {
@@ -118,6 +123,7 @@ export async function listChecklistBoardForUser(
           checklistVersionId: version.id,
           status: "CONCLUIDO",
           finishedAt: { gte: startOfDay },
+          ...(filters.mine ? { executedById: user.id } : {}),
         },
         orderBy: { finishedAt: "desc" },
       }),
@@ -206,8 +212,34 @@ export async function getAreaChecklistContext(user: CurrentUser, areaId: string)
     orderBy: { code: "asc" },
   });
 
+  const startOfDay = startOfTodayInAppTimezone(new Date());
+
   const items = await Promise.all(
     equipments.map(async (equipment) => {
+      // Checklist é por pessoa: se EU já concluí este equipamento hoje, ele aparece concluído (sem abrir outra execução).
+      if (equipment.status !== "BLOQUEADO") {
+        const mine = await db.checklistExecution.findFirst({
+          where: {
+            equipmentId: equipment.id,
+            checklistVersionId: version.id,
+            executedById: user.id,
+            status: "CONCLUIDO",
+            finishedAt: { gte: startOfDay },
+          },
+          include: { answers: { include: { attachments: true } } },
+          orderBy: { finishedAt: "desc" },
+        });
+        if (mine) {
+          const answer = mine.answers.find((a) => a.questionId === question.id) ?? null;
+          return {
+            equipment,
+            executionId: mine.id,
+            blocked: false as const,
+            finished: true,
+            existingAnswer: answer ? { value: answer.value, comment: answer.comment, hasPhoto: answer.attachments.length > 0 } : null,
+          };
+        }
+      }
       const ctx = await getExecutionContext(user, equipment.id);
       if (ctx.blocked) {
         return { equipment, executionId: null, blocked: true as const, finished: false, existingAnswer: null };
@@ -276,8 +308,9 @@ export async function getExecutionContext(user: CurrentUser, equipmentId: string
     return { equipment, template: assignment!.template, version, execution: null, blocked: true as const };
   }
 
+  // Checklist é por pessoa: retoma só a execução em andamento DESTE usuário (a de outra pessoa não é dele).
   let execution = await db.checklistExecution.findFirst({
-    where: { equipmentId, checklistVersionId: version.id, status: "EM_ANDAMENTO" },
+    where: { equipmentId, checklistVersionId: version.id, status: "EM_ANDAMENTO", executedById: user.id },
     include: { answers: { include: { attachments: true } } },
   });
 
