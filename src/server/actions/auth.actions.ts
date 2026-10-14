@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { authenticateUser } from "@/server/services/auth.service";
 import { createSession, destroySession } from "@/server/auth/session";
 import { recordAudit } from "@/server/services/audit";
+import { clearLoginFailures, isLoginBlocked, recordLoginFailure } from "@/server/auth/login-throttle";
 
 const loginSchema = z.object({
   email: z.string().trim().email("Informe um e-mail válido."),
@@ -28,9 +29,15 @@ export async function loginAction(
     return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
   }
 
+  // Muitas tentativas erradas: bloqueia por alguns minutos sem nem conferir a senha.
+  if (await isLoginBlocked(parsed.data.email)) {
+    return { error: "Muitas tentativas de acesso. Aguarde 15 minutos e tente de novo." };
+  }
+
   const result = await authenticateUser(parsed.data.email, parsed.data.password);
 
   if (!result.ok) {
+    await recordLoginFailure(parsed.data.email);
     const message =
       result.error === "USUARIO_INATIVO"
         ? "Este usuário está inativo. Procure o administrador do sistema."
@@ -38,6 +45,7 @@ export async function loginAction(
     return { error: message };
   }
 
+  await clearLoginFailures(parsed.data.email);
   await createSession(result.userId);
   await recordAudit({
     userId: result.userId,

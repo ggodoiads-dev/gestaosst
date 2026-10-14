@@ -1646,3 +1646,16 @@ model DtoAction {
   @@index([status])
   @@index([dueDate])
 }
+
+/// Tentativas de login (só as falhas importam): base do bloqueio temporário contra adivinhação de senha.
+/// Guarda o e-mail em minúsculas e um hash do endereço de origem (nunca o IP puro).
+model LoginAttempt {
+  id        String   @id @default(uuid())
+  emailKey  String
+  ipHash    String?
+  success   Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([emailKey, createdAt])
+  @@index([ipHash, createdAt])
+}
