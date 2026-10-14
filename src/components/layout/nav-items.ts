@@ -302,5 +302,8 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
   }
   if (admin.length > 0) groups.push({ key: "admin", title: "Administração", items: admin });
 
+  // Todo usuário logado pode ler os termos de uso e a titularidade do sistema.
+  groups.push({ key: "sobre", title: "Sobre", items: [{ href: "/termos-de-uso", label: "Termos de Uso e Licença", icon: "audit" }] });
+
   return groups;
 }

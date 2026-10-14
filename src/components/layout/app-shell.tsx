@@ -328,7 +328,7 @@ export function AppShell({
 
         <main className="flex-1 min-w-0 pb-24 lg:pb-0">
           {children}
-          <CopyrightNotice className="px-4 pb-6 pt-2" />
+          <CopyrightNotice className="px-4 pb-6 pt-2" href="/termos-de-uso" />
         </main>
       </div>
 
