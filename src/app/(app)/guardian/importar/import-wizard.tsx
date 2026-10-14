@@ -18,7 +18,7 @@ export function ImportWizard() {
   const [rows, setRows] = useState<GuardianImportRow[] | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [committing, startCommit] = useTransition();
-  const [result, setResult] = useState<{ created: number; skipped: number } | null>(null);
+  const [result, setResult] = useState<{ created: number; updated: number; skipped: number } | null>(null);
 
   async function handleFile(file: File) {
     setUploading(true);
@@ -46,13 +46,14 @@ export function ImportWizard() {
         toast.error(res.error);
         return;
       }
-      setResult({ created: res.created, skipped: res.skipped });
-      toast.success(`${res.created} relato(s) importado(s).`);
+      setResult({ created: res.created, updated: res.updated, skipped: res.skipped });
+      toast.success(`${res.created} relato(s) importado(s)${res.updated > 0 ? `, ${res.updated} reatribuído(s)` : ""}.`);
     });
   }
 
   const toCreate = rows?.filter((r) => r.action === "create") ?? [];
   const duplicates = rows?.filter((r) => r.action === "skip-duplicate") ?? [];
+  const reassigned = rows?.filter((r) => r.action === "update-reporter") ?? [];
   const notLog20 = rows?.filter((r) => r.action === "skip-not-log20") ?? [];
 
   return (
@@ -89,10 +90,14 @@ export function ImportWizard() {
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 text-sm">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-4 text-sm">
               <div className="rounded-md border border-border px-3 py-2.5">
                 <p className="text-xs text-foreground-subtle">Novos — serão importados</p>
                 <p className="text-lg font-semibold text-success tabular-nums">{toCreate.length}</p>
+              </div>
+              <div className="rounded-md border border-border px-3 py-2.5">
+                <p className="text-xs text-foreground-subtle">Crédito corrigido (observado por outra pessoa)</p>
+                <p className="text-lg font-semibold text-warning tabular-nums">{reassigned.length}</p>
               </div>
               <div className="rounded-md border border-border px-3 py-2.5">
                 <p className="text-xs text-foreground-subtle">Já importados antes</p>
@@ -131,12 +136,12 @@ export function ImportWizard() {
 
             {result ? (
               <p className="flex items-center gap-1.5 text-sm text-success">
-                <CheckCircle2 className="size-4" /> {result.created} relato(s) importado(s) com sucesso.
+                <CheckCircle2 className="size-4" /> {result.created} relato(s) importado(s) com sucesso{result.updated > 0 ? ` e ${result.updated} com o crédito corrigido` : ""}.
               </p>
             ) : (
-              <Button onClick={handleCommit} loading={committing} disabled={toCreate.length === 0} className="self-start">
+              <Button onClick={handleCommit} loading={committing} disabled={toCreate.length === 0 && reassigned.length === 0} className="self-start">
                 {committing && <Loader2 className="size-4 animate-spin" />}
-                Confirmar importação ({toCreate.length})
+                Confirmar importação ({toCreate.length + reassigned.length})
               </Button>
             )}
           </CardContent>

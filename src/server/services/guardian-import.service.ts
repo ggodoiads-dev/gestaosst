@@ -158,6 +158,10 @@ function parseNewFormatSheet(grid: string[][], headerRowIdx: number): GuardianRa
     reporterExternalId: col("ID do Reportador"),
     reporterEmail: col("E-mail do Reportador"),
     reporterCompany: col("Empresa do Reportador"),
+    observedByOther: col("Observado por outra pessoa?"),
+    observerName: col("Nome do Observador"),
+    observerExternalId: col("ID do Observador"),
+    observerCompany: col("Empresa do Observador"),
     safetyCategory: col("Categoria de segurança"),
     safetySubCategory: col("Sub Categoria de segurança"),
     environmentCategory: col("Categoria de ambiente"),
@@ -180,7 +184,12 @@ function parseNewFormatSheet(grid: string[][], headerRowIdx: number): GuardianRa
       if (h && row[i]) raw[h] = row[i];
     });
 
-    const reporterName = cell(row, idx.reporterName);
+    // "Observado por outra pessoa? = Sim": a conta é do titular (Reportador), mas quem OBSERVOU a situação é outra
+    // pessoa (Observador) — o relato é dela e conta pra ela, não pro dono da conta. Sem nome de observador não dá
+    // pra atribuir a ninguém, então segue com o titular.
+    const observedByOther = normalize(cell(row, idx.observedByOther) ?? "") === "sim";
+    const observerName = observedByOther ? cell(row, idx.observerName) : null;
+    const reporterName = observerName ?? cell(row, idx.reporterName);
     rows.push({
       type,
       guardianId,
@@ -194,9 +203,10 @@ function parseNewFormatSheet(grid: string[][], headerRowIdx: number): GuardianRa
       location: null,
       equipment: cell(row, idx.equipment),
       reporterName,
-      reporterExternalId: cell(row, idx.reporterExternalId),
-      reporterEmail: cell(row, idx.reporterEmail),
-      reporterCompany: cell(row, idx.reporterCompany),
+      reporterExternalId: observerName ? cell(row, idx.observerExternalId) : cell(row, idx.reporterExternalId),
+      // O export não traz e-mail do observador.
+      reporterEmail: observerName ? null : cell(row, idx.reporterEmail),
+      reporterCompany: observerName ? cell(row, idx.observerCompany) : cell(row, idx.reporterCompany),
       isAnonymous: !reporterName,
       raw,
     });
@@ -276,7 +286,8 @@ export type GuardianImportRow = GuardianRawRow & {
   reporterCollaboratorId: string | null;
   reporterCollaboratorName: string | null;
   alreadyImported: boolean;
-  action: "create" | "skip-not-log20" | "skip-duplicate";
+  /** `update-reporter`: relato já importado cujo crédito muda (ex: foi observado por outra pessoa). */
+  action: "create" | "skip-not-log20" | "skip-duplicate" | "update-reporter";
 };
 
 /** Casa cada linha com um colaborador da LOG20 (por CPF, com fallback por nome) e marca quem já
@@ -288,7 +299,10 @@ export async function buildGuardianImportPreview(user: CurrentUser, rawRows: Gua
 
   const [collaborators, existing] = await Promise.all([
     db.collaborator.findMany({ select: { id: true, name: true, cpf: true } }),
-    db.guardianReport.findMany({ where: { guardianId: { in: rawRows.map((r) => r.guardianId) } }, select: { guardianId: true } }),
+    db.guardianReport.findMany({
+      where: { guardianId: { in: rawRows.map((r) => r.guardianId) } },
+      select: { guardianId: true, reporterCollaboratorId: true },
+    }),
   ]);
 
   const byCpf = new Map<string, { id: string; name: string }>();
@@ -298,16 +312,18 @@ export async function buildGuardianImportPreview(user: CurrentUser, rawRows: Gua
     if (cpfDigits) byCpf.set(cpfDigits, c);
     byName.set(normalize(c.name), c);
   }
-  const existingIds = new Set(existing.map((e) => e.guardianId));
+  const existingByGuardianId = new Map(existing.map((e) => [e.guardianId, e.reporterCollaboratorId]));
 
   return rawRows.map((row) => {
     const cpfDigits = onlyDigits(row.reporterExternalId);
     const matched = (cpfDigits && byCpf.get(cpfDigits)) || (row.reporterName ? byName.get(normalize(row.reporterName)) : undefined);
-    const alreadyImported = existingIds.has(row.guardianId);
+    const alreadyImported = existingByGuardianId.has(row.guardianId);
 
     let action: GuardianImportRow["action"] = "create";
-    if (alreadyImported) action = "skip-duplicate";
-    else if (!matched) action = "skip-not-log20";
+    if (alreadyImported) {
+      // Já importado: só mexe se o crédito mudou (reimportar a planilha corrige relatos atribuídos ao titular errado).
+      action = (existingByGuardianId.get(row.guardianId) ?? null) !== (matched?.id ?? null) ? "update-reporter" : "skip-duplicate";
+    } else if (!matched) action = "skip-not-log20";
 
     return {
       ...row,
@@ -319,45 +335,67 @@ export async function buildGuardianImportPreview(user: CurrentUser, rawRows: Gua
   });
 }
 
-/** Grava só as linhas marcadas "create" — as outras já foram filtradas no preview. */
-export async function commitGuardianImport(user: CurrentUser, rows: GuardianImportRow[]): Promise<{ created: number; skipped: number }> {
+/** Grava as linhas marcadas "create" e reatribui as "update-reporter" (relato que já existia mas era creditado à pessoa
+ * errada). Reatribuir pra ninguém (observador fora da LOG20) deixa o relato guardado, só sem contar pra nenhum colaborador. */
+export async function commitGuardianImport(
+  user: CurrentUser,
+  rows: GuardianImportRow[],
+): Promise<{ created: number; updated: number; skipped: number }> {
   requirePermission(user, PERMISSIONS.GUARDIAN_MANAGE);
 
   const toCreate = rows.filter((r) => r.action === "create" && r.reporterCollaboratorId);
-  if (toCreate.length === 0) return { created: 0, skipped: rows.length };
+  const toUpdate = rows.filter((r) => r.action === "update-reporter");
 
-  const result = await db.guardianReport.createMany({
-    data: toCreate.map((r) => ({
-      guardianId: r.guardianId,
-      type: r.type,
-      categoryName: r.categoryName,
-      description: r.description,
-      occurredAt: r.occurredAt,
-      reportedAt: r.reportedAt,
-      unit: r.unit,
-      area: r.area,
-      subArea: r.subArea,
-      location: r.location,
-      equipment: r.equipment,
-      reporterName: r.reporterName,
-      reporterExternalId: r.reporterExternalId,
-      reporterEmail: r.reporterEmail,
-      reporterCompany: r.reporterCompany,
-      reporterCollaboratorId: r.reporterCollaboratorId,
-      isAnonymous: r.isAnonymous,
-      raw: JSON.stringify(r.raw),
-      importedById: user.id,
-    })),
-    skipDuplicates: true,
-  });
+  let created = 0;
+  if (toCreate.length > 0) {
+    const result = await db.guardianReport.createMany({
+      data: toCreate.map((r) => ({
+        guardianId: r.guardianId,
+        type: r.type,
+        categoryName: r.categoryName,
+        description: r.description,
+        occurredAt: r.occurredAt,
+        reportedAt: r.reportedAt,
+        unit: r.unit,
+        area: r.area,
+        subArea: r.subArea,
+        location: r.location,
+        equipment: r.equipment,
+        reporterName: r.reporterName,
+        reporterExternalId: r.reporterExternalId,
+        reporterEmail: r.reporterEmail,
+        reporterCompany: r.reporterCompany,
+        reporterCollaboratorId: r.reporterCollaboratorId,
+        isAnonymous: r.isAnonymous,
+        raw: JSON.stringify(r.raw),
+        importedById: user.id,
+      })),
+      skipDuplicates: true,
+    });
+    created = result.count;
+  }
+
+  for (const r of toUpdate) {
+    await db.guardianReport.update({
+      where: { guardianId: r.guardianId },
+      data: {
+        reporterCollaboratorId: r.reporterCollaboratorId,
+        reporterName: r.reporterName,
+        reporterExternalId: r.reporterExternalId,
+        reporterEmail: r.reporterEmail,
+        reporterCompany: r.reporterCompany,
+        isAnonymous: r.isAnonymous,
+      },
+    });
+  }
 
   await recordAudit({
     userId: user.id,
     action: "CREATE",
     entityType: "GuardianImport",
     entityId: crypto.randomUUID(),
-    newValue: { created: result.count, total: rows.length },
+    newValue: { created, reassigned: toUpdate.length, total: rows.length },
   });
 
-  return { created: result.count, skipped: rows.length - result.count };
+  return { created, updated: toUpdate.length, skipped: rows.length - created - toUpdate.length };
 }
