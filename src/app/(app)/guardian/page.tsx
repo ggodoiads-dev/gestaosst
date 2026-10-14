@@ -15,6 +15,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, TableEmp
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { GuardianReportTableRow } from "./guardian-report-table-row";
+import { GuardianChampions } from "./guardian-champions";
 
 function monthLabel(month: string): string {
   const [y, m] = month.split("-").map(Number);
@@ -141,17 +142,7 @@ export default async function GuardianPage({ searchParams }: { searchParams: Pro
               </div>
             )}
 
-            {adherence.topReporters.length > 0 && (
-              <div className="flex flex-col gap-1.5">
-                <p className="text-xs font-medium text-foreground-subtle">Quem mais relatou no mês</p>
-                {adherence.topReporters.map((r) => (
-                  <div key={r.collaboratorId} className="flex items-center justify-between rounded-md border border-border px-3 py-2 text-sm">
-                    {canOpenProfiles ? <Link href={`/colaboradores/${r.collaboratorId}`} className="text-accent hover:underline">{r.name}</Link> : <span>{r.name}</span>}
-                    <span className="tabular-nums text-foreground-subtle">{r.count} relato(s)</span>
-                  </div>
-                ))}
-              </div>
-            )}
+            <GuardianChampions ranking={adherence.ranking} canOpenProfiles={canOpenProfiles} monthLabel={monthLabel(month)} />
 
             {adherence.notReported.length > 0 && (
               <details open className="rounded-md border border-border px-3 py-2 text-sm">

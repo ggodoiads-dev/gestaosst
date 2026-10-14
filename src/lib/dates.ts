@@ -42,6 +42,18 @@ export function formatDate(date: Date | string | null | undefined): string {
   });
 }
 
+/** Data/hora gravadas "como estão" na planilha de origem (ex: Guardian), guardadas com os números do relógio em UTC.
+ * Mostrar em Brasília subtraía 3 horas (00:15 virava 21:15 do dia anterior) — aqui sai exatamente o que está na planilha. */
+export function formatWallClockDateTime(date: Date | string | null | undefined): string {
+  if (!date) return "—";
+  return safeFormat(date, () => formatInTimeZone(new Date(date), "UTC", "dd/MM/yyyy HH:mm", { locale: ptBR }));
+}
+
+export function formatWallClockDate(date: Date | string | null | undefined): string {
+  if (!date) return "—";
+  return safeFormat(date, () => formatInTimeZone(new Date(date), "UTC", "dd/MM/yyyy", { locale: ptBR }));
+}
+
 export function formatTime(date: Date | string | null | undefined): string {
   if (!date) return "—";
   return safeFormat(date, () => formatInTimeZone(new Date(date), APP_TIMEZONE, "HH:mm", { locale: ptBR }));

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from "@/components/ui/dialog";
-import { formatDate, formatDateTime } from "@/lib/dates";
+import { formatWallClockDateTime } from "@/lib/dates";
 import { GUARDIAN_TYPE_LABELS } from "@/domain/guardian/labels";
 import type { GuardianReportType } from "@/generated/prisma/enums";
 
@@ -65,11 +65,11 @@ export function GuardianReportDialog({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <p className="text-xs text-foreground-subtle">Ocorreu em</p>
-              <p>{report.occurredAt ? formatDateTime(report.occurredAt) : "—"}</p>
+              <p>{report.occurredAt ? formatWallClockDateTime(report.occurredAt) : "—"}</p>
             </div>
             <div>
               <p className="text-xs text-foreground-subtle">Relatado em</p>
-              <p>{report.reportedAt ? formatDateTime(report.reportedAt) : "—"}</p>
+              <p>{report.reportedAt ? formatWallClockDateTime(report.reportedAt) : "—"}</p>
             </div>
             <div>
               <p className="text-xs text-foreground-subtle">Unidade</p>
@@ -112,7 +112,7 @@ export function GuardianReportRow({ report }: { report: GuardianReportItem }) {
       >
         <div className="min-w-0">
           <p className="truncate">{report.categoryName ?? GUARDIAN_TYPE_LABELS[report.type]}</p>
-          <p className="text-xs text-foreground-subtle">{report.occurredAt ? formatDate(report.occurredAt) : "—"}</p>
+          <p className="text-xs text-foreground-subtle">{report.occurredAt ? formatWallClockDateTime(report.occurredAt) : "—"}</p>
         </div>
         <Badge tone="info">{GUARDIAN_TYPE_LABELS[report.type]}</Badge>
       </button>

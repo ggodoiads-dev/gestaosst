@@ -87,7 +87,8 @@ function combineDateTime(dateRaw: string | null, timeRaw: string | null): Date |
     min = Number(t[2]);
     ss = t[3] ? Number(t[3]) : 0;
   }
-  return new Date(Number(yyyy), Number(mm) - 1, Number(dd), hh, min, ss);
+  // Os números do relógio da planilha viram os campos UTC do Date (independe do fuso do servidor) e são exibidos assim.
+  return new Date(Date.UTC(Number(yyyy), Number(mm) - 1, Number(dd), hh, min, ss));
 }
 
 /** Só dígitos — pra comparar CPF/ID Ambev independente de pontuação (alguns exports usam

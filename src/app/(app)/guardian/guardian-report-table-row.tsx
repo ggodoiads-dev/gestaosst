@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { TableRow, TableCell } from "@/components/ui/table";
-import { formatDate } from "@/lib/dates";
+import { formatWallClockDateTime } from "@/lib/dates";
 import { GUARDIAN_TYPE_LABELS } from "@/domain/guardian/labels";
 import { GuardianReportDialog, type GuardianReportItem } from "../meu-perfil/guardian-report-row";
 
@@ -41,7 +41,7 @@ export function GuardianReportTableRow({
             "—"
           )}
         </TableCell>
-        <TableCell className="text-foreground-subtle">{report.occurredAt ? formatDate(report.occurredAt) : "—"}</TableCell>
+        <TableCell className="text-foreground-subtle">{report.occurredAt ? formatWallClockDateTime(report.occurredAt) : "—"}</TableCell>
         <TableCell className="text-foreground-subtle">{report.area ?? "—"}</TableCell>
         <TableCell className="text-foreground-subtle truncate max-w-xs">{report.categoryName ?? "—"}</TableCell>
       </TableRow>

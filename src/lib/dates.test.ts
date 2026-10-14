@@ -27,3 +27,13 @@ describe("startOfTodayInAppTimezone", () => {
     expect(startOfTodayInAppTimezone(new Date("2026-10-08T01:00:00.000Z")).toISOString()).toBe("2026-10-07T03:00:00.000Z");
   });
 });
+
+import { formatWallClockDate, formatWallClockDateTime } from "./dates";
+
+describe("data/hora como está na planilha (Guardian)", () => {
+  it("mostra o relógio da planilha, sem subtrair o fuso (00:15 não vira 21:15 do dia anterior)", () => {
+    const stored = new Date(Date.UTC(2026, 9, 9, 0, 15, 35));
+    expect(formatWallClockDateTime(stored)).toBe("09/10/2026 00:15");
+    expect(formatWallClockDate(stored)).toBe("09/10/2026");
+  });
+});

@@ -35,7 +35,8 @@ export type GuardianAdherence = {
   notReportedCount: number;
   adherencePercent: number;
   byType: { type: GuardianReportType; count: number }[];
-  topReporters: { collaboratorId: string; name: string; count: number }[];
+  /** Todos que relataram no mês, do que mais relatou pro que menos (com o turno, pro ranking por turno). */
+  ranking: { collaboratorId: string; name: string; count: number; turnoName: string | null }[];
   notReported: { collaboratorId: string; name: string; turnoName: string | null }[];
 };
 
@@ -153,6 +154,7 @@ export async function getGuardianAdherence(
 
   const s = summarizeMonth(month, collaborators, reports);
   const nameById = new Map(collaborators.map((c) => [c.id, c.name]));
+  const turnoById = new Map(collaborators.map((c) => [c.id, c.turnoName]));
   const reportedCount = s.countByCollaborator.size;
 
   const selected: GuardianAdherence = {
@@ -162,10 +164,14 @@ export async function getGuardianAdherence(
     notReportedCount: s.inMonth.length - reportedCount,
     adherencePercent: s.inMonth.length > 0 ? Math.round((reportedCount / s.inMonth.length) * 100) : 0,
     byType: Array.from(s.byType.entries()).map(([type, count]) => ({ type, count })),
-    topReporters: Array.from(s.countByCollaborator.entries())
-      .map(([collaboratorId, count]) => ({ collaboratorId, name: nameById.get(collaboratorId) ?? "?", count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 10),
+    ranking: Array.from(s.countByCollaborator.entries())
+      .map(([collaboratorId, count]) => ({
+        collaboratorId,
+        name: nameById.get(collaboratorId) ?? "?",
+        count,
+        turnoName: turnoById.get(collaboratorId) ?? null,
+      }))
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "pt-BR")),
     notReported: s.inMonth
       .filter((c) => !s.countByCollaborator.has(c.id))
       .map((c) => ({ collaboratorId: c.id, name: c.name, turnoName: c.turnoName }))
