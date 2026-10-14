@@ -13,6 +13,9 @@ const plexSans = IBM_Plex_Sans({
 
 export const metadata: Metadata = {
   title: "SIGO — Sistema Interno de Gestão Organizacional",
+  authors: [{ name: "Gustavo Felipe Godoi" }],
+  creator: "Gustavo Felipe Godoi",
+  other: { copyright: "© 2026 Gustavo Felipe Godoi. Todos os direitos reservados." },
   description:
     "Segurança do trabalho, equipamentos, RH e demais módulos de gestão interna em um único sistema.",
 };

@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import { Suspense } from "react";
 import { LoginForm } from "./login-form";
+import Link from "next/link";
+import { SIGO_COPYRIGHT_LINE } from "@/lib/legal";
 
 export const metadata: Metadata = {
   title: "Entrar — SIGO · Sistema Interno de Gestão Organizacional",
@@ -39,6 +41,15 @@ export default function LoginPage() {
         </div>
 
         <p className="mt-6 text-center text-xs text-white/45">Acesso restrito a colaboradores autorizados.</p>
+        <p className="mt-2 text-center text-[11px] leading-relaxed text-white/40">
+          {SIGO_COPYRIGHT_LINE}
+          <br />
+          Ao acessar, você concorda com os{" "}
+          <Link href="/termos" className="underline underline-offset-2 hover:text-white/70">
+            Termos de Uso e Licença
+          </Link>
+          .
+        </p>
       </div>
     </div>
   );

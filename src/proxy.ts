@@ -3,7 +3,7 @@ import { jwtVerify } from "jose";
 import { db } from "@/server/db";
 
 const SESSION_COOKIE = "app_session";
-const PUBLIC_PATHS = ["/login"];
+const PUBLIC_PATHS = ["/login", "/termos"];
 
 /**
  * `/q/[token]` é o resolvedor de QR Code impresso em equipamentos e na ficha do colaborador —

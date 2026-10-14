@@ -58,6 +58,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { logoutAction } from "@/server/actions/auth.actions";
+import { CopyrightNotice } from "@/components/domain/copyright-notice";
 import type { NavGroup, NavIconKey } from "@/components/layout/nav-items";
 import { ROLE_LABELS, type RoleKeyValue } from "@/domain/shared/permissions";
 import { GlobalSearch } from "@/components/domain/global-search";
@@ -325,7 +326,10 @@ export function AppShell({
           </div>
         </header>
 
-        <main className="flex-1 min-w-0 pb-24 lg:pb-0">{children}</main>
+        <main className="flex-1 min-w-0 pb-24 lg:pb-0">
+          {children}
+          <CopyrightNotice className="px-4 pb-6 pt-2" />
+        </main>
       </div>
 
       <RicoFloatingWidget />
