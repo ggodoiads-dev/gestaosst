@@ -48,6 +48,16 @@ export default async function GuardianPage({ searchParams }: { searchParams: Pro
 
   const isCurrentMonth = month === nowMonth;
 
+  // Quem ainda não relatou, agrupado por turno (turnos em ordem; "sem turno" por último).
+  const notReportedByTurno = Array.from(
+    adherence.notReported.reduce((map, c) => {
+      map.set(c.turnoName, [...(map.get(c.turnoName) ?? []), c]);
+      return map;
+    }, new Map<string | null, typeof adherence.notReported>()),
+  )
+    .map(([turno, people]) => ({ turno, people }))
+    .sort((a, b) => (a.turno === null ? 1 : b.turno === null ? -1 : a.turno.localeCompare(b.turno, "pt-BR", { numeric: true })));
+
   return (
     <>
       <PageHeader
@@ -144,19 +154,31 @@ export default async function GuardianPage({ searchParams }: { searchParams: Pro
             )}
 
             {adherence.notReported.length > 0 && (
-              <details className="rounded-md border border-border px-3 py-2 text-sm">
+              <details open className="rounded-md border border-border px-3 py-2 text-sm">
                 <summary className="cursor-pointer text-xs font-medium text-foreground-subtle">
-                  Quem ainda não relatou neste mês ({adherence.notReported.length})
+                  Quem ainda não relatou neste mês ({adherence.notReported.length}) — por turno
                 </summary>
-                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
-                  {adherence.notReported.map((c) => (
-                    canOpenProfiles ? (
-                      <Link key={c.collaboratorId} href={`/colaboradores/${c.collaboratorId}`} className="text-accent hover:underline">
-                        {c.name}
-                      </Link>
-                    ) : (
-                      <span key={c.collaboratorId}>{c.name}</span>
-                    )
+                <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+                  {notReportedByTurno.map((group) => (
+                    <div key={group.turno ?? "sem-turno"} className="rounded-lg border border-border bg-surface-muted p-3">
+                      <p className="mb-2 flex items-center justify-between text-xs font-semibold text-foreground">
+                        <span>{group.turno ? `Turno ${group.turno}` : "Sem turno definido"}</span>
+                        <span className="rounded bg-warning-soft px-1.5 py-0.5 text-warning tabular-nums">{group.people.length}</span>
+                      </p>
+                      <ul className="flex flex-col gap-1">
+                        {group.people.map((c) => (
+                          <li key={c.collaboratorId}>
+                            {canOpenProfiles ? (
+                              <Link href={`/colaboradores/${c.collaboratorId}`} className="text-accent hover:underline">
+                                {c.name}
+                              </Link>
+                            ) : (
+                              <span>{c.name}</span>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
                   ))}
                 </div>
               </details>

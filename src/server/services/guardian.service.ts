@@ -36,7 +36,7 @@ export type GuardianAdherence = {
   adherencePercent: number;
   byType: { type: GuardianReportType; count: number }[];
   topReporters: { collaboratorId: string; name: string; count: number }[];
-  notReported: { collaboratorId: string; name: string }[];
+  notReported: { collaboratorId: string; name: string; turnoName: string | null }[];
 };
 
 export type GuardianMonthSummary = {
@@ -72,6 +72,7 @@ function monthKeyOf(date: Date): string {
 type CollaboratorForAdherence = {
   id: string;
   name: string;
+  turnoName: string | null;
   active: boolean;
   admissionDate: Date | null;
   createdAt: Date;
@@ -117,9 +118,11 @@ export async function getGuardianAdherence(
   requireGuardianView(user);
 
   const [collaborators, rawReports] = await Promise.all([
-    db.collaborator.findMany({
-      select: { id: true, name: true, active: true, admissionDate: true, createdAt: true, inactivatedAt: true },
-    }),
+    db.collaborator
+      .findMany({
+        select: { id: true, name: true, active: true, admissionDate: true, createdAt: true, inactivatedAt: true, turno: { select: { name: true } } },
+      })
+      .then((rows) => rows.map(({ turno, ...c }) => ({ ...c, turnoName: turno?.name ?? null }))),
     db.guardianReport.findMany({
       where: { reporterCollaboratorId: { not: null } },
       select: { type: true, reporterCollaboratorId: true, occurredAt: true, reportedAt: true },
@@ -165,7 +168,7 @@ export async function getGuardianAdherence(
       .slice(0, 10),
     notReported: s.inMonth
       .filter((c) => !s.countByCollaborator.has(c.id))
-      .map((c) => ({ collaboratorId: c.id, name: c.name }))
+      .map((c) => ({ collaboratorId: c.id, name: c.name, turnoName: c.turnoName }))
       .sort((a, b) => a.name.localeCompare(b.name)),
   };
 
