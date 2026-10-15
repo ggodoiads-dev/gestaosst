@@ -84,7 +84,12 @@ type CollaboratorForAdherence = {
  * até o fim do mês e não tinha sido desligado antes do começo dele. É isso que mantém a "memória"
  * dos meses fechados — um desligamento de hoje não muda a adesão de setembro. Desligado sem data
  * de desligamento (cadastro antigo) só conta se ainda estiver ativo. */
-function wasActiveDuring(c: CollaboratorForAdherence, start: Date, end: Date, isCurrentMonth: boolean): boolean {
+function wasActiveDuring(
+  c: Pick<CollaboratorForAdherence, "active" | "admissionDate" | "createdAt" | "inactivatedAt">,
+  start: Date,
+  end: Date,
+  isCurrentMonth: boolean,
+): boolean {
   const joined = c.admissionDate ?? c.createdAt;
   if (joined >= end) return false;
   if (c.active) return true;
@@ -181,15 +186,23 @@ export async function getGuardianAdherence(
   return { selected, history };
 }
 
-/** Relatos de um mês (pela data da ocorrência), mais recentes primeiro. */
-export function listGuardianReportsOfMonth(user: CurrentUser, month: string) {
+/** Relatos de um mês (pela data da ocorrência), mais recentes primeiro. Mostra só os de quem conta naquele mês — a mesma
+ * regra da adesão e do ranking: no mês corrente, quem já foi desligado sai da lista; num mês fechado, quem estava na casa
+ * naquele mês continua (o histórico não muda). Relato sem colaborador da LOG20 creditado também não entra. */
+export async function listGuardianReportsOfMonth(user: CurrentUser, month: string) {
   requireGuardianView(user);
   const { start, end } = monthRange(month);
-  return db.guardianReport.findMany({
-    where: { OR: [{ occurredAt: { gte: start, lt: end } }, { occurredAt: null, reportedAt: { gte: start, lt: end } }] },
-    include: { reporterCollaborator: { select: { id: true, name: true } } },
-    orderBy: { occurredAt: "desc" },
-  });
+  const [reports, collaborators] = await Promise.all([
+    db.guardianReport.findMany({
+      where: { OR: [{ occurredAt: { gte: start, lt: end } }, { occurredAt: null, reportedAt: { gte: start, lt: end } }] },
+      include: { reporterCollaborator: { select: { id: true, name: true } } },
+      orderBy: { occurredAt: "desc" },
+    }),
+    db.collaborator.findMany({ select: { id: true, active: true, admissionDate: true, createdAt: true, inactivatedAt: true } }),
+  ]);
+  const isCurrent = month === currentMonthKey();
+  const counted = new Set(collaborators.filter((c) => wasActiveDuring(c, start, end, isCurrent)).map((c) => c.id));
+  return reports.filter((r) => r.reporterCollaboratorId !== null && counted.has(r.reporterCollaboratorId));
 }
 
 /** Relatos que EU fiz como relator — nunca os que fui "relatado" (decisão do negócio: o Meu
