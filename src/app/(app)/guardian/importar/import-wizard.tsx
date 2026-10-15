@@ -55,6 +55,14 @@ export function ImportWizard() {
   const duplicates = rows?.filter((r) => r.action === "skip-duplicate") ?? [];
   const reassigned = rows?.filter((r) => r.action === "update-reporter") ?? [];
   const notLog20 = rows?.filter((r) => r.action === "skip-not-log20") ?? [];
+  const ambiguous = rows?.filter((r) => r.action === "skip-ambiguous") ?? [];
+  // Nomes que não casaram (com quantos relatos cada) — pra conferir se alguém da LOG20 ficou de fora por nome diferente.
+  const countByName = (list: GuardianImportRow[]) => {
+    const map = new Map<string, number>();
+    for (const r of list) map.set(r.reporterName ?? "(sem nome)", (map.get(r.reporterName ?? "(sem nome)") ?? 0) + 1);
+    return [...map.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "pt-BR"));
+  };
+  const notLog20Names = countByName(notLog20);
 
   return (
     <div className="flex flex-col gap-5">
@@ -108,6 +116,36 @@ export function ImportWizard() {
                 <p className="text-lg font-semibold text-foreground-subtle tabular-nums">{notLog20.length}</p>
               </div>
             </div>
+
+            {ambiguous.length > 0 && (
+              <div className="rounded-md border border-warning/40 bg-warning-soft px-3 py-2.5 text-sm">
+                <p className="font-medium text-warning">Nome serve para mais de uma pessoa — não foi creditado a ninguém ({ambiguous.length} relato(s))</p>
+                <ul className="mt-1 flex flex-col gap-0.5 text-xs text-foreground">
+                  {[...new Map(ambiguous.map((r) => [r.reporterName, r.ambiguousWith])).entries()].map(([name, withWho]) => (
+                    <li key={name}>
+                      <strong>{name}</strong> pode ser: {(withWho ?? []).join(" · ")}
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-1 text-xs text-foreground-subtle">Para resolver, deixe o nome de cada colaborador mais distinto no cadastro ou peça o relato com CPF/ID.</p>
+              </div>
+            )}
+
+            {notLog20Names.length > 0 && (
+              <details className="rounded-md border border-border px-3 py-2 text-sm">
+                <summary className="cursor-pointer text-xs font-medium text-foreground-subtle">
+                  Quem ficou de fora por não ser da LOG20 ({notLog20Names.length} nome(s)) — confira se não é alguém nosso com o nome escrito diferente
+                </summary>
+                <ul className="mt-2 grid grid-cols-1 gap-x-6 gap-y-0.5 text-xs sm:grid-cols-2">
+                  {notLog20Names.map(([name, count]) => (
+                    <li key={name} className="flex justify-between gap-2">
+                      <span>{name}</span>
+                      <span className="tabular-nums text-foreground-subtle">{count}</span>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
 
             {toCreate.length > 0 && (
               <div className="max-h-96 overflow-y-auto rounded-md border border-border">

@@ -6,6 +6,7 @@ import type { CurrentUser } from "@/server/auth/current-user";
 import { requirePermission } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
 import { normalize } from "@/lib/spreadsheet-import";
+import { matchCollaboratorByName } from "@/domain/guardian/name-match";
 import type { GuardianReportType } from "@/generated/prisma/enums";
 
 /** Nome exato de cada aba na exportação do Guardian (Ambev) -> tipo interno. Formato fixo de um
@@ -288,7 +289,9 @@ export type GuardianImportRow = GuardianRawRow & {
   reporterCollaboratorName: string | null;
   alreadyImported: boolean;
   /** `update-reporter`: relato já importado cujo crédito muda (ex: foi observado por outra pessoa). */
-  action: "create" | "skip-not-log20" | "skip-duplicate" | "update-reporter";
+  action: "create" | "skip-not-log20" | "skip-duplicate" | "update-reporter" | "skip-ambiguous";
+  /** Se o nome casou com mais de um colaborador: quem são (pra RH ajustar o cadastro). */
+  ambiguousWith?: string[];
 };
 
 /** Casa cada linha com um colaborador da LOG20 (por CPF, com fallback por nome) e marca quem já
@@ -299,7 +302,7 @@ export async function buildGuardianImportPreview(user: CurrentUser, rawRows: Gua
   requirePermission(user, PERMISSIONS.GUARDIAN_MANAGE);
 
   const [collaborators, existing] = await Promise.all([
-    db.collaborator.findMany({ select: { id: true, name: true, cpf: true } }),
+    db.collaborator.findMany({ select: { id: true, name: true, cpf: true, active: true } }),
     db.guardianReport.findMany({
       where: { guardianId: { in: rawRows.map((r) => r.guardianId) } },
       select: { guardianId: true, reporterCollaboratorId: true },
@@ -307,21 +310,26 @@ export async function buildGuardianImportPreview(user: CurrentUser, rawRows: Gua
   ]);
 
   const byCpf = new Map<string, { id: string; name: string }>();
-  const byName = new Map<string, { id: string; name: string }>();
   for (const c of collaborators) {
     const cpfDigits = onlyDigits(c.cpf);
     if (cpfDigits) byCpf.set(cpfDigits, c);
-    byName.set(normalize(c.name), c);
   }
   const existingByGuardianId = new Map(existing.map((e) => [e.guardianId, e.reporterCollaboratorId]));
 
   return rawRows.map((row) => {
     const cpfDigits = onlyDigits(row.reporterExternalId);
-    const matched = (cpfDigits && byCpf.get(cpfDigits)) || (row.reporterName ? byName.get(normalize(row.reporterName)) : undefined);
+    // CPF/ID primeiro; depois o nome — o Guardian costuma abreviar ("LUCAS BUENO"), então o nome casa com o cadastro mesmo
+    // quando está completo lá. Nome que serve pra mais de uma pessoa não é creditado a ninguém (fica "ambíguo").
+    const byId = cpfDigits ? byCpf.get(cpfDigits) : undefined;
+    const nameMatch = byId || !row.reporterName ? null : matchCollaboratorByName(row.reporterName, collaborators);
+    const matched = byId ?? (nameMatch?.status === "matched" ? nameMatch.collaborator : undefined);
+    const ambiguousWith = nameMatch?.status === "ambiguous" ? nameMatch.candidates.map((c) => c.name) : undefined;
     const alreadyImported = existingByGuardianId.has(row.guardianId);
 
     let action: GuardianImportRow["action"] = "create";
-    if (alreadyImported) {
+    if (ambiguousWith && !matched) {
+      action = "skip-ambiguous";
+    } else if (alreadyImported) {
       // Já importado: só mexe se o crédito mudou (reimportar a planilha corrige relatos atribuídos ao titular errado).
       action = (existingByGuardianId.get(row.guardianId) ?? null) !== (matched?.id ?? null) ? "update-reporter" : "skip-duplicate";
     } else if (!matched) action = "skip-not-log20";
@@ -332,6 +340,7 @@ export async function buildGuardianImportPreview(user: CurrentUser, rawRows: Gua
       reporterCollaboratorName: matched?.name ?? null,
       alreadyImported,
       action,
+      ambiguousWith,
     };
   });
 }
