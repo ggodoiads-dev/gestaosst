@@ -2,6 +2,14 @@ import "server-only";
 import { addDays, addMonths, startOfDay, startOfMonth } from "date-fns";
 import { db } from "@/server/db";
 import { getCollaboratorDayStatus } from "@/domain/schedule/schedule-calendar";
+
+/** Dia de trabalho de quem é cobrado. Sem turno/escala cadastrada não dá pra saber a folga: conta como dia útil (seg-sex),
+ * em vez de "nunca trabalha" — que fazia a pessoa sumir da cobrança e dos indicadores. */
+function dayStatusFor(date: Date, c: Parameters<typeof getCollaboratorDayStatus>[1]): "TRABALHO" | "FOLGA" {
+  if (c.turno) return getCollaboratorDayStatus(date, c);
+  const weekday = date.getDay();
+  return weekday >= 1 && weekday <= 5 ? "TRABALHO" : "FOLGA";
+}
 import type { CurrentUser } from "@/server/auth/current-user";
 import { requirePermission, hasPermission, ForbiddenError } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
@@ -71,6 +79,8 @@ function getRequiredItemsForCollaborator(
   collaborator: {
     areaId: string | null;
     requiresChecklist: boolean;
+    /** "Faz checklist?" — quem tem essa marcação também é cobrado. */
+    checklistEnabled?: boolean;
     function: { requiredChecklists: { templateId: string; template: { name: string } }[] } | null;
   },
   requiredByArea: Map<string, RequiredEquipment[]>,
@@ -79,7 +89,7 @@ function getRequiredItemsForCollaborator(
   if (functionTemplates.length > 0) {
     return { mode: "function", items: functionTemplates.map((r) => ({ id: r.templateId, code: r.template.name, name: r.template.name })) };
   }
-  if (!collaborator.requiresChecklist) {
+  if (!collaborator.requiresChecklist && !collaborator.checklistEnabled) {
     return { mode: "none", items: [] };
   }
   return { mode: "area", items: collaborator.areaId ? (requiredByArea.get(collaborator.areaId) ?? []) : [] };
@@ -163,7 +173,8 @@ function listEligibleCollaboratorsQuery() {
   return db.collaborator.findMany({
     where: {
       active: true,
-      OR: [{ requiresChecklist: true }, { function: { requiredChecklists: { some: {} } } }],
+      // "Faz checklist?" (login pra fazer checklist) OU "Precisa de checklist" OU função com checklist obrigatório.
+      OR: [{ checklistEnabled: true }, { requiresChecklist: true }, { function: { requiredChecklists: { some: {} } } }],
     },
     include: collaboratorWithFunctionInclude,
     orderBy: { name: "asc" },
@@ -219,7 +230,7 @@ async function buildCollaboratorChecklistDays(collaboratorId: string, from: Date
   for (let date = rangeStart; date < rangeEndExclusive; date = addDays(date, 1)) {
     const key = localDateKey(date);
     const note = notesByKey.get(key) ?? null;
-    const computed = getCollaboratorDayStatus(date, collaborator);
+    const computed = dayStatusFor(date, collaborator);
     const status = note ? note.overrideStatus : computed;
     const completedIds = new Set([
       ...(completedByDay.get(key) ?? []),
@@ -356,7 +367,7 @@ async function computeCompliancePeriodStats(from: Date, toInclusive: Date): Prom
     for (let date = rangeStart; date < rangeEndExclusive; date = addDays(date, 1)) {
       const dayKey = localDateKey(date);
       const note = notesByKey.get(`${c.id}|${dayKey}`);
-      const computed = getCollaboratorDayStatus(date, c);
+      const computed = dayStatusFor(date, c);
       const status = note ? note.overrideStatus : computed;
       if (status !== "TRABALHO") continue;
       scheduledAnyDay = true;
@@ -428,7 +439,7 @@ async function computeDayProgress(
     .filter(({ c, required }) => {
       if (required.length === 0) return false;
       const note = noteByCollab.get(c.id);
-      return (note ? note.overrideStatus : getCollaboratorDayStatus(today, c)) === "TRABALHO";
+      return (note ? note.overrideStatus : dayStatusFor(today, c)) === "TRABALHO";
     });
 
   const userIds = rows.filter(({ c }) => c.userId).map(({ c }) => c.userId!);
@@ -752,7 +763,7 @@ export async function getChecklistCoverageGaps(user: CurrentUser): Promise<Cover
   const unconfigured: CoverageGaps["unconfigured"] = [];
   const uncovered = new Map<string, number>();
   for (const c of all) {
-    const charged = c.requiresChecklist || (c.function?.requiredChecklists.length ?? 0) > 0;
+    const charged = c.checklistEnabled || c.requiresChecklist || (c.function?.requiredChecklists.length ?? 0) > 0;
     if (charged) {
       const { items } = getRequiredItemsForCollaborator(c, requiredByArea);
       if (items.length === 0) {
@@ -761,13 +772,6 @@ export async function getChecklistCoverageGaps(user: CurrentUser): Promise<Cover
           name: c.name,
           functionName: c.function?.name ?? null,
           reason: "não existe checklist configurado para a área ou a função dele",
-        });
-      } else if (!c.turno) {
-        unconfigured.push({
-          id: c.id,
-          name: c.name,
-          functionName: c.function?.name ?? null,
-          reason: "sem turno/escala cadastrada: nunca cai num dia de trabalho",
         });
       }
     } else if (!c.function?.dtoExempt) {
