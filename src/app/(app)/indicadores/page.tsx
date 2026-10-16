@@ -14,6 +14,7 @@ import {
   compliancePercent,
   getChecklistComplianceRange,
   getChecklistComplianceExplorer,
+  getChecklistCoverageGaps,
 } from "@/server/services/checklist-compliance.service";
 import {
   getProductivityDashboard,
@@ -136,6 +137,7 @@ export default async function IndicadoresPage({
   let collaborators: Awaited<ReturnType<typeof listActiveCollaboratorsForSupervision>> = [];
   let checklistDashboard: Awaited<ReturnType<typeof getChecklistComplianceDashboard>> | null = null;
   let explorer: Awaited<ReturnType<typeof getChecklistComplianceExplorer>> | null = null;
+  let coverageGaps: Awaited<ReturnType<typeof getChecklistCoverageGaps>> | null = null;
   let checklistRangeReport: Awaited<ReturnType<typeof getChecklistComplianceRange>> | null = null;
   let productivityDashboard: Awaited<ReturnType<typeof getProductivityDashboard>> | null = null;
   let productivityRangeReport: Awaited<ReturnType<typeof getProductivityRange>> | null = null;
@@ -148,6 +150,7 @@ export default async function IndicadoresPage({
   }
   if (canSeeChecklistCompliance) {
     checklistDashboard = await getChecklistComplianceDashboard(user);
+    coverageGaps = await getChecklistCoverageGaps(user).catch(() => null);
     const todayKeyBrt = formatInTimeZone(new Date(), APP_TIMEZONE, "yyyy-MM-dd");
     explorer = await getChecklistComplianceExplorer(user, {
       period: cp === "mes" || cp === "ano" ? cp : "dia",
@@ -251,6 +254,41 @@ export default async function IndicadoresPage({
                   </div>
                 );
               })}
+              {coverageGaps && (coverageGaps.unconfigured.length > 0 || coverageGaps.uncovered.length > 0) && (
+                <div className="flex flex-col gap-3 rounded-lg border border-warning/40 bg-warning-soft p-3 sm:col-span-2">
+                  <p className="text-sm font-semibold text-warning">Quem não está sendo cobrado por checklist</p>
+                  {coverageGaps.uncovered.length > 0 && (
+                    <div className="text-sm text-foreground">
+                      <p className="mb-1 text-xs text-foreground-subtle">
+                        Gente ativa sem nenhuma cobrança de checklist (ADM/liderança fora). Se algum desses precisa fazer, marque &quot;Precisa de
+                        checklist&quot; no colaborador ou configure o checklist obrigatório na função, e crie o modelo de checklist se ainda não existir:
+                      </p>
+                      <ul className="flex flex-wrap gap-2">
+                        {coverageGaps.uncovered.map((u) => (
+                          <li key={u.functionName} className="rounded-md bg-surface px-2.5 py-1 text-xs">
+                            <strong className="tabular-nums">{u.count}</strong> {u.functionName}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {coverageGaps.unconfigured.length > 0 && (
+                    <div className="text-sm text-foreground">
+                      <p className="mb-1 text-xs text-foreground-subtle">
+                        São cobrados, mas a cobrança não consegue funcionar (e por isso não entram na %):
+                      </p>
+                      <ul className="flex flex-col gap-0.5 text-xs">
+                        {coverageGaps.unconfigured.map((u) => (
+                          <li key={u.id}>
+                            <strong>{formatPersonName(u.name)}</strong>
+                            {u.functionName && <span className="text-foreground-subtle"> ({u.functionName})</span>} — {u.reason}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
               {explorer && (
                 <div className="flex flex-col gap-3 border-t border-border pt-4 sm:col-span-2">
                   <div className="flex flex-wrap items-center justify-between gap-2">

@@ -729,3 +729,54 @@ export async function getChecklistComplianceExplorer(
     canJustify: canJustifyChecklist(user),
   };
 }
+
+export type CoverageGaps = {
+  /** Cobrados por checklist, mas a cobrança não consegue funcionar pra eles. */
+  unconfigured: { id: string; name: string; functionName: string | null; reason: string }[];
+  /** Funções com gente ativa que NÃO é cobrada por nenhum checklist (ADM/liderança fora). */
+  uncovered: { functionName: string; count: number }[];
+};
+
+/**
+ * Onde a cobrança de checklist tem buraco: (1) quem é cobrado mas não tem checklist configurado (área sem checklist, ou sem
+ * escala) — a % ignora essas pessoas, então elas somem do indicador sem ninguém notar; (2) funções inteiras com gente ativa
+ * que nunca é cobrada (ex: ninguém marcou "Precisa de checklist" nem configurou a função).
+ */
+export async function getChecklistCoverageGaps(user: CurrentUser): Promise<CoverageGaps> {
+  requirePermission(user, PERMISSIONS.CHECKLIST_COMPLIANCE_VIEW);
+  const [all, requiredByArea] = await Promise.all([
+    db.collaborator.findMany({ where: { active: true }, include: collaboratorWithFunctionInclude, orderBy: { name: "asc" } }),
+    getRequiredEquipmentByArea(),
+  ]);
+
+  const unconfigured: CoverageGaps["unconfigured"] = [];
+  const uncovered = new Map<string, number>();
+  for (const c of all) {
+    const charged = c.requiresChecklist || (c.function?.requiredChecklists.length ?? 0) > 0;
+    if (charged) {
+      const { items } = getRequiredItemsForCollaborator(c, requiredByArea);
+      if (items.length === 0) {
+        unconfigured.push({
+          id: c.id,
+          name: c.name,
+          functionName: c.function?.name ?? null,
+          reason: "não existe checklist configurado para a área ou a função dele",
+        });
+      } else if (!c.turno) {
+        unconfigured.push({
+          id: c.id,
+          name: c.name,
+          functionName: c.function?.name ?? null,
+          reason: "sem turno/escala cadastrada: nunca cai num dia de trabalho",
+        });
+      }
+    } else if (!c.function?.dtoExempt) {
+      const key = c.function?.name ?? "(sem função)";
+      uncovered.set(key, (uncovered.get(key) ?? 0) + 1);
+    }
+  }
+  return {
+    unconfigured,
+    uncovered: [...uncovered.entries()].map(([functionName, count]) => ({ functionName, count })).sort((a, b) => b.count - a.count),
+  };
+}
