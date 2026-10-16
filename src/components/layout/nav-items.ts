@@ -168,6 +168,7 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
   const equipamentos: NavItem[] = [];
   if (p.has(PERMISSIONS.EQUIPMENT_VIEW)) {
     equipamentos.push({ href: "/equipamentos", label: "Equipamentos", icon: "equipment" });
+    equipamentos.push({ href: "/areas", label: "Áreas", icon: "building" });
   }
   if (p.has(PERMISSIONS.EQUIPMENT_MAINTENANCE)) {
     equipamentos.push({ href: "/manutencao", label: "Manutenção", icon: "maintenance" });
