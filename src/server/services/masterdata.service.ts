@@ -250,3 +250,76 @@ export async function updateEquipmentType(
   });
   return type;
 }
+
+export type AreaPublicDoc = { id: string; mimeType: string; filename: string; path: string; uploadedAt: Date };
+export type AreaActivityDocs = {
+  id: string;
+  name: string;
+  code: string | null;
+  pop: AreaPublicDoc | null;
+  arVr: AreaPublicDoc | null;
+  listaTreinamento: AreaPublicDoc | null;
+};
+export type AreaLeader = { name: string; turnos: string[] };
+
+/**
+ * Visão completa da área pro QR Code (visitante) e pra tela de Áreas: os documentos gerais da área, os documentos de CADA atividade
+ * ligada a ela (POP, AR/VR e Lista de Treinamento mais recentes de cada atividade, separados por atividade) e a liderança da área.
+ * Atividades da área = as ligadas pelo gestor na tela da atividade + a de mesmo nome da área (como já era). Liderança = quem "faz a
+ * chamada" daquela área (Usuários e Permissões), com os turnos dele quando tiver turnos definidos.
+ */
+export async function getAreaPublicOverview(area: { id: string; name: string }) {
+  const [ownDocs, matchedActivity, linked, leaders] = await Promise.all([
+    listAreaDocuments(area.id),
+    db.activity.findFirst({ where: { name: { equals: area.name, mode: "insensitive" } }, select: { id: true } }),
+    db.activityArea.findMany({ where: { areaId: area.id }, select: { activityId: true } }).catch(() => [] as { activityId: string }[]),
+    db.user.findMany({
+      where: { active: true, canRollCall: true, userRollCallAreas: { some: { areaId: area.id } } },
+      select: { name: true, userRollCallTurnos: { select: { turno: { select: { name: true } } } } },
+      orderBy: { name: "asc" },
+    }),
+  ]);
+
+  const activityIds = [...new Set([...(matchedActivity ? [matchedActivity.id] : []), ...linked.map((l) => l.activityId)])];
+  const activities =
+    activityIds.length > 0
+      ? await db.activity.findMany({
+          where: { id: { in: activityIds }, active: true },
+          select: {
+            id: true,
+            name: true,
+            code: true,
+            attachments: {
+              where: { context: "ATIVIDADE" },
+              select: { id: true, mimeType: true, filename: true, path: true, uploadedAt: true, docType: true },
+              orderBy: { uploadedAt: "desc" },
+            },
+          },
+          orderBy: { name: "asc" },
+        })
+      : [];
+
+  const latest = (docs: { docType: string | null; id: string; mimeType: string; filename: string; path: string; uploadedAt: Date }[], type: AreaDocType) =>
+    docs.find((d) => d.docType === type) ?? null;
+
+  const groups: AreaActivityDocs[] = activities.map((a) => ({
+    id: a.id,
+    name: a.name,
+    code: a.code,
+    pop: latest(a.attachments, "POP"),
+    arVr: latest(a.attachments, "AR_VR"),
+    listaTreinamento: latest(a.attachments, "LISTA_TREINAMENTO"),
+  }));
+
+  const own = {
+    pop: ownDocs.pop[0] ?? null,
+    arVr: ownDocs.arVr[0] ?? null,
+    listaTreinamento: ownDocs.listaTreinamento[0] ?? null,
+  };
+
+  return {
+    general: own.pop || own.arVr || own.listaTreinamento ? own : null,
+    activities: groups,
+    leaders: leaders.map((l): AreaLeader => ({ name: l.name, turnos: l.userRollCallTurnos.map((t) => t.turno.name).sort() })),
+  };
+}

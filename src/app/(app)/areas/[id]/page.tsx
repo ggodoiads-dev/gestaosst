@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { FileText, Printer } from "lucide-react";
 import { requireUser } from "@/server/auth/current-user";
 import { getAreaForView } from "@/server/services/area-view.service";
+import type { AreaPublicDoc } from "@/server/services/masterdata.service";
 import { generateAreaQrCode } from "@/server/services/qrcode.service";
 import { PageHeader, PageBody } from "@/components/domain/page-header";
 import { StatCard } from "@/components/domain/stat-card";
@@ -30,10 +31,14 @@ export default async function AreaDetailPage({ params }: { params: Promise<{ id:
     qrDataUrl = await generateAreaQrCode(area.qrToken, `${protocol}://${host}`);
   }
 
-  const docs = [
-    { label: "POP", doc: documents.pop },
-    { label: "AR/VR", doc: documents.arVr },
-    { label: "Lista de Treinamento", doc: documents.listaTreinamento },
+  const docTypes = (d: { pop: AreaPublicDoc | null; arVr: AreaPublicDoc | null; listaTreinamento: AreaPublicDoc | null }) => [
+    { label: "POP", doc: d.pop },
+    { label: "AR/VR", doc: d.arVr },
+    { label: "Lista de Treinamento", doc: d.listaTreinamento },
+  ];
+  const docGroups = [
+    ...documents.activities.map((a) => ({ key: a.id, title: a.name, docs: docTypes(a) })),
+    ...(documents.general ? [{ key: "geral", title: "Documentos gerais da área", docs: docTypes(documents.general) }] : []),
   ];
 
   return (
@@ -65,27 +70,54 @@ export default async function AreaDetailPage({ params }: { params: Promise<{ id:
 
           <Card>
             <CardHeader>
-              <CardTitle>Documentos da área</CardTitle>
-              <CardDescription>O mais recente de cada tipo — é o que aparece para quem escaneia o QR Code.</CardDescription>
+              <CardTitle>Liderança da área</CardTitle>
+              <CardDescription>Quem faz a chamada desta área. Aparece em destaque no QR Code.</CardDescription>
             </CardHeader>
-            <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              {docs.map(({ label, doc }) => (
-                <div key={label} className="rounded-lg border border-border p-3">
-                  <p className="text-xs font-semibold text-foreground-subtle">{label}</p>
-                  {doc ? (
-                    <a
-                      href={attachmentUrl(doc.path)}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="mt-1 flex items-center gap-1.5 text-sm text-accent hover:underline"
-                    >
-                      <FileText className="size-4 shrink-0" />
-                      <span className="truncate">{doc.filename}</span>
-                    </a>
-                  ) : (
-                    <p className="mt-1 text-sm text-foreground-subtle">Nenhum documento.</p>
-                  )}
-                  {doc && <p className="mt-0.5 text-[11px] text-foreground-subtle">Enviado em {formatDate(doc.uploadedAt)}</p>}
+            <CardContent>
+              {documents.leaders.length === 0 ? (
+                <p className="text-sm text-foreground-subtle">Nenhuma liderança configurada (Usuários e Permissões, “Faz chamada?”).</p>
+              ) : (
+                <ul className="flex flex-wrap gap-2">
+                  {documents.leaders.map((l) => (
+                    <li key={l.name} className="rounded-md border border-border bg-surface-muted px-3 py-1.5 text-sm">
+                      <span className="font-medium text-foreground">{l.name}</span>
+                      {l.turnos.length > 0 && <span className="text-foreground-subtle"> · Turno {l.turnos.join(" / ")}</span>}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Documentos por atividade</CardTitle>
+              <CardDescription>
+                O mais recente de cada tipo, separado por atividade — é o que aparece para quem escaneia o QR Code. As atividades da área
+                são escolhidas na tela da própria atividade.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3">
+              {docGroups.length === 0 && <p className="text-sm text-foreground-subtle">Nenhuma atividade ligada a esta área.</p>}
+              {docGroups.map((g) => (
+                <div key={g.key} className="rounded-lg border border-border p-3">
+                  <p className="text-sm font-semibold text-foreground">{g.title}</p>
+                  <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                    {g.docs.map(({ label, doc }) => (
+                      <div key={label}>
+                        <p className="text-[11px] font-semibold text-foreground-subtle">{label}</p>
+                        {doc ? (
+                          <a href={attachmentUrl(doc.path)} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-sm text-accent hover:underline">
+                            <FileText className="size-4 shrink-0" />
+                            <span className="truncate">{doc.filename}</span>
+                          </a>
+                        ) : (
+                          <p className="text-sm text-foreground-subtle">Não enviado.</p>
+                        )}
+                        {doc && <p className="text-[11px] text-foreground-subtle">Enviado em {formatDate(doc.uploadedAt)}</p>}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ))}
             </CardContent>

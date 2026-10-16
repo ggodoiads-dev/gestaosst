@@ -3,7 +3,7 @@ import { db } from "@/server/db";
 import type { CurrentUser } from "@/server/auth/current-user";
 import { requirePermission, ForbiddenError } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
-import { getAreaDocumentsForPublicView } from "@/server/services/masterdata.service";
+import { getAreaPublicOverview } from "@/server/services/masterdata.service";
 
 /** Áreas — SÓ LEITURA (mesmo padrão da lista de Equipamentos): quem tem acesso a equipamentos vê as áreas dele (todas, se tem
  * "ver todas as áreas"). Criar, editar e excluir áreas continua exclusivo do cadastro (Administração). */
@@ -58,6 +58,6 @@ export async function getAreaForView(user: CurrentUser, id: string) {
     },
   });
   if (!area) return null;
-  const documents = await getAreaDocumentsForPublicView({ id: area.id, name: area.name });
+  const documents = await getAreaPublicOverview({ id: area.id, name: area.name });
   return { area, collaboratorCount: area._count.collaborators, documents };
 }

@@ -6,7 +6,7 @@ import { db } from "@/server/db";
 import { getEquipmentPhoto } from "@/server/services/equipment.service";
 import { getCollaboratorPhoto } from "@/server/services/collaborator.service";
 import { getCollaboratorQualificationSummary, type CollaboratorQualificationSummary } from "@/server/services/qualification.service";
-import { getAreaDocumentsForPublicView } from "@/server/services/masterdata.service";
+import { getAreaPublicOverview, type AreaPublicDoc } from "@/server/services/masterdata.service";
 import { readFileBuffer } from "@/server/services/storage";
 import { qualificationStatus } from "@/lib/qualification-status";
 import { formatDate } from "@/lib/dates";
@@ -106,7 +106,7 @@ export default async function QrResolverPage({
   if (area) {
     const [collaborators, documents] = await Promise.all([
       db.collaborator.findMany({ where: { areaId: area.id, active: true }, orderBy: { name: "asc" } }),
-      getAreaDocumentsForPublicView(area),
+      getAreaPublicOverview(area),
     ]);
     const summaries = await Promise.all(
       collaborators.map(async (c) => {
@@ -119,9 +119,7 @@ export default async function QrResolverPage({
         <PublicAreaView
           area={area}
           entries={summaries}
-          pop={documents.pop}
-          arVr={documents.arVr}
-          listaTreinamento={documents.listaTreinamento}
+          overview={documents}
           baseUrl={baseUrl}
         />
       </PublicPageShell>
@@ -342,19 +340,28 @@ function PublicCollaboratorView({
   );
 }
 
+type AreaOverview = Awaited<ReturnType<typeof getAreaPublicOverview>>;
+
+function DocButton({ doc, label, baseUrl }: { doc: AreaPublicDoc | null; label: string; baseUrl: string }) {
+  if (!doc) {
+    return (
+      <span className="inline-flex items-center rounded-md border border-dashed border-border px-3 py-1.5 text-xs text-foreground-subtle">
+        {label} — não enviado
+      </span>
+    );
+  }
+  return <PublicAttachmentLink baseUrl={baseUrl} attachmentId={doc.id} mimeType={doc.mimeType} label={label} size="md" />;
+}
+
 function PublicAreaView({
   area,
   entries,
-  pop,
-  arVr,
-  listaTreinamento,
+  overview,
   baseUrl,
 }: {
   area: Area;
   entries: { collaborator: Collaborator; summary: QualificationSummary; photoUrl: string | null }[];
-  pop: { id: string; mimeType: string } | null;
-  arVr: { id: string; mimeType: string } | null;
-  listaTreinamento: { id: string; mimeType: string } | null;
+  overview: AreaOverview;
   baseUrl: string;
 }) {
   const aptos = entries.filter((e) => e.summary.apt);
@@ -367,40 +374,61 @@ function PublicAreaView({
         <p className="text-sm text-foreground-subtle">
           {entries.length} cadastrado(s) · {aptos.length} apto(s)
         </p>
-        {(pop || arVr || listaTreinamento) && (
-          <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
-            {pop && (
-              <PublicAttachmentLink
-                baseUrl={baseUrl}
-                attachmentId={pop.id}
-                mimeType={pop.mimeType}
-                label="Ver Procedimento (POP)"
-                size="md"
-              />
-            )}
-            {arVr && (
-              <PublicAttachmentLink
-                baseUrl={baseUrl}
-                attachmentId={arVr.id}
-                mimeType={arVr.mimeType}
-                label="Ver Avaliação de Risco"
-                size="md"
-              />
-            )}
-            {listaTreinamento && (
-              <PublicAttachmentLink
-                baseUrl={baseUrl}
-                attachmentId={listaTreinamento.id}
-                mimeType={listaTreinamento.mimeType}
-                label="Ver Lista de Treinamento"
-                size="md"
-              />
-            )}
-          </div>
+      </div>
+
+      {/* Liderança da área — cartão à parte, em destaque */}
+      <div className="rounded-lg border-2 border-accent/40 bg-accent-soft p-3">
+        <p className="text-xs font-semibold uppercase tracking-wide text-accent">Liderança da área</p>
+        {overview.leaders.length === 0 ? (
+          <p className="mt-1 text-sm text-foreground-subtle">Liderança não informada.</p>
+        ) : (
+          <ul className="mt-1.5 flex flex-col gap-1">
+            {overview.leaders.map((l) => (
+              <li key={l.name} className="flex flex-wrap items-center gap-2">
+                <span className="text-base font-semibold text-foreground">{l.name}</span>
+                {l.turnos.length > 0 && (
+                  <span className="rounded-full bg-surface px-2 py-0.5 text-[11px] font-medium text-foreground-subtle">
+                    Turno {l.turnos.join(" / ")}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
         )}
       </div>
 
+      {/* Documentos: um bloco por atividade, com POP, AR/VR e Lista de Treinamento de cada uma */}
+      {(overview.activities.length > 0 || overview.general) && (
+        <div className="flex flex-col gap-2.5">
+          <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Documentos por atividade</p>
+          {overview.activities.map((a) => (
+            <div key={a.id} className="rounded-md border border-border p-3">
+              <p className="font-medium text-foreground">
+                {a.name}
+                {a.code && <span className="ml-2 font-mono text-[11px] text-foreground-subtle">{a.code}</span>}
+              </p>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <DocButton doc={a.pop} label="POP" baseUrl={baseUrl} />
+                <DocButton doc={a.arVr} label="AR/VR" baseUrl={baseUrl} />
+                <DocButton doc={a.listaTreinamento} label="Lista de Treinamento" baseUrl={baseUrl} />
+              </div>
+            </div>
+          ))}
+          {overview.general && (
+            <div className="rounded-md border border-border p-3">
+              <p className="font-medium text-foreground">Documentos gerais da área</p>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <DocButton doc={overview.general.pop} label="POP" baseUrl={baseUrl} />
+                <DocButton doc={overview.general.arVr} label="AR/VR" baseUrl={baseUrl} />
+                <DocButton doc={overview.general.listaTreinamento} label="Lista de Treinamento" baseUrl={baseUrl} />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="flex flex-col gap-3">
+        <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Colaboradores</p>
         {entries.length === 0 && (
           <p className="text-center text-sm text-foreground-subtle">Nenhum colaborador cadastrado nessa área.</p>
         )}
