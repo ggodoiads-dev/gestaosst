@@ -177,24 +177,29 @@ export async function listAreaDocuments(areaId: string) {
   };
 }
 
-/** Documentos da área pro QR público, com fallback pra uma Atividade de MESMO NOME (normalizado,
+/** Documentos da área pro QR público: os da própria área + os das Atividades LIGADAS a ela (escolhidas na tela da atividade)
+ * + o fallback pra uma Atividade de MESMO NOME (normalizado,
  * sem diferenciar maiúscula/acento) — na operação já é comum documentar POP/AR-VR/Lista de
  * Treinamento em Atividades com o nome igual ao da área física (ex: "Reforma de Paletes"), então
  * em vez de pedir pra recadastrar tudo de novo em Área, mostra o mais recente entre os dois
  * lugares por tipo. Só casa por nome EXATO (não substring), pra nunca puxar documento de uma
  * atividade sem relação nenhuma com a área. */
 export async function getAreaDocumentsForPublicView(area: { id: string; name: string }) {
-  const [ownDocs, matchedActivity] = await Promise.all([
+  const [ownDocs, matchedActivity, linkedActivities] = await Promise.all([
     listAreaDocuments(area.id),
     db.activity.findFirst({ where: { name: { equals: area.name, mode: "insensitive" } }, select: { id: true } }),
+    // Atividades que o gestor ligou a esta área (em Atividades e Documentos). Tolera a tabela ainda não migrada.
+    db.activityArea.findMany({ where: { areaId: area.id, activity: { active: true } }, select: { activityId: true } }).catch(() => [] as { activityId: string }[]),
   ]);
 
-  const activityDocs = matchedActivity
-    ? await db.attachment.findMany({
-        where: { activityId: matchedActivity.id, context: "ATIVIDADE" },
-        orderBy: { uploadedAt: "desc" },
-      })
-    : [];
+  const activityIds = [...new Set([...(matchedActivity ? [matchedActivity.id] : []), ...linkedActivities.map((l) => l.activityId)])];
+  const activityDocs =
+    activityIds.length > 0
+      ? await db.attachment.findMany({
+          where: { activityId: { in: activityIds }, context: "ATIVIDADE" },
+          orderBy: { uploadedAt: "desc" },
+        })
+      : [];
 
   function latestOfType(docType: AreaDocType, ownOfType: { id: string; mimeType: string; uploadedAt: Date }[]) {
     const candidates = [...ownOfType, ...activityDocs.filter((d) => d.docType === docType)];

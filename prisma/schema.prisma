@@ -213,6 +213,7 @@ model Area {
   accidents          Accident[]
   checklistTemplates ChecklistTemplate[]
   attachments        Attachment[]
+  activityLinks      ActivityArea[]
 
   createdAt DateTime @default(now())
 
@@ -1257,6 +1258,7 @@ model Activity {
   productivityEntries   ProductivityEntry[]
   productivityGoals     ProductivityGoal[]
   collaboratorAptitudes CollaboratorActivity[]
+  areaLinks             ActivityArea[]
 }
 
 /// Aptidão de um colaborador pra realizar uma atividade (ex: "apto pra operar paleteira") —
@@ -1658,4 +1660,17 @@ model LoginAttempt {
 
   @@index([emailKey, createdAt])
   @@index([ipHash, createdAt])
+}
+
+/// Em quais áreas os documentos (POP, AR/VR, Lista de Treinamento) de uma atividade aparecem no QR Code público da área.
+/// Quem gerencia atividades escolhe as áreas na própria tela da atividade — sem precisar de acesso ao cadastro de áreas.
+model ActivityArea {
+  activityId String
+  areaId     String
+
+  activity Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  area     Area     @relation(fields: [areaId], references: [id], onDelete: Cascade)
+
+  @@id([activityId, areaId])
+  @@index([areaId])
 }

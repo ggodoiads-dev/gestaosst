@@ -1,5 +1,6 @@
 import { requireUser } from "@/server/auth/current-user";
-import { getActivityDetail } from "@/server/services/activity.service";
+import { getActivityAreaLinks, getActivityDetail } from "@/server/services/activity.service";
+import { ActivityAreasCard } from "../activity-areas-card";
 import { PageHeader, PageBody } from "@/components/domain/page-header";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +17,7 @@ export default async function AtividadeDetailPage({
   const { id } = await params;
   const user = await requireUser();
   const { activity, documents, popDocs, arVrDocs, listaTreinamentoDocs } = await getActivityDetail(user, id);
+  const areaLinks = await getActivityAreaLinks(user, id);
 
   return (
     <>
@@ -47,6 +49,8 @@ export default async function AtividadeDetailPage({
               />
             </CardContent>
           </Card>
+
+          <ActivityAreasCard activityId={activity.id} areas={areaLinks.areas} available={areaLinks.available} />
 
           {activity.description && (
             <Card>

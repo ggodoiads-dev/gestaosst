@@ -114,3 +114,11 @@ export async function uploadActivityDocumentAction(
     return { ok: false, error: "Não foi possível enviar o arquivo." };
   }
 }
+
+export async function setActivityAreasAction(activityId: string, areaIds: string[]): Promise<ActionResult> {
+  return toResult(async () => {
+    const user = await requireUser();
+    await activityService.setActivityAreas(user, activityId, areaIds);
+    revalidatePath(`/atividades/${activityId}`);
+  });
+}

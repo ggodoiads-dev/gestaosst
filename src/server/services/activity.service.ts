@@ -216,3 +216,40 @@ export async function attachActivityDocument(
     },
   });
 }
+
+export type ActivityAreaLink = { id: string; name: string; code: string; linked: boolean };
+
+/** Áreas ativas com a marca de quais já estão ligadas a esta atividade (os documentos dela aparecem no QR dessas áreas).
+ * `available: false` quando a tabela de ligação ainda não existe no banco. */
+export async function getActivityAreaLinks(user: CurrentUser, activityId: string): Promise<{ available: boolean; areas: ActivityAreaLink[] }> {
+  requirePermission(user, PERMISSIONS.ACTIVITY_MANAGE);
+  const areas = await db.area.findMany({ where: { active: true }, select: { id: true, name: true, code: true }, orderBy: { name: "asc" } });
+  try {
+    const links = await db.activityArea.findMany({ where: { activityId }, select: { areaId: true } });
+    const linked = new Set(links.map((l) => l.areaId));
+    return { available: true, areas: areas.map((a) => ({ ...a, linked: linked.has(a.id) })) };
+  } catch (error) {
+    console.error("[activity] ligação atividade-área indisponível:", error);
+    return { available: false, areas: areas.map((a) => ({ ...a, linked: false })) };
+  }
+}
+
+/** Define em quais áreas os documentos da atividade aparecem no QR Code público. */
+export async function setActivityAreas(user: CurrentUser, activityId: string, areaIds: string[]) {
+  requirePermission(user, PERMISSIONS.ACTIVITY_MANAGE);
+  await db.activity.findUniqueOrThrow({ where: { id: activityId }, select: { id: true } });
+  const valid = new Set((await db.area.findMany({ where: { id: { in: areaIds }, active: true }, select: { id: true } })).map((a) => a.id));
+  const wanted = [...new Set(areaIds)].filter((id) => valid.has(id));
+
+  await db.$transaction([
+    db.activityArea.deleteMany({ where: { activityId } }),
+    db.activityArea.createMany({ data: wanted.map((areaId) => ({ activityId, areaId })) }),
+  ]);
+  await recordAudit({
+    userId: user.id,
+    action: "UPDATE",
+    entityType: "ActivityArea",
+    entityId: activityId,
+    newValue: { areaIds: wanted },
+  });
+}
