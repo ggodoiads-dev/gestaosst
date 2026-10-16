@@ -49,7 +49,6 @@ export default async function AreasPage({ searchParams }: { searchParams: Promis
                           href={`/areas/${area.id}/qrcode/imprimir`}
                           target="_blank"
                           rel="noreferrer"
-                          onClick={(e) => e.stopPropagation()}
                           className="inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline"
                         >
                           <Printer className="size-3.5" /> Imprimir

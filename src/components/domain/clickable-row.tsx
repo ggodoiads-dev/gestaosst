@@ -11,7 +11,15 @@ export function ClickableRow({
 }: { href: string } & Omit<ComponentProps<typeof TableRow>, "clickable" | "onClick">) {
   const router = useRouter();
   return (
-    <TableRow clickable onClick={() => router.push(href)} {...props}>
+    <TableRow
+      clickable
+      onClick={(e) => {
+        // Clicou num link/botão dentro da linha (ex: "Imprimir"): deixa o link agir, sem navegar pra linha.
+        if ((e.target as HTMLElement).closest("a, button")) return;
+        router.push(href);
+      }}
+      {...props}
+    >
       {children}
     </TableRow>
   );
