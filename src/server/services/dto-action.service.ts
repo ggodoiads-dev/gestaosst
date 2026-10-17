@@ -54,11 +54,20 @@ export type DtoActionRow = {
 
 export async function listDtoActions(user: CurrentUser): Promise<DtoActionRow[]> {
   requireView(user);
+  const evaluation = { select: { collaboratorId: true, evaluatedName: true, activity: true, date: true } } as const;
   try {
-    const rows = await db.dtoAction.findMany({
-      include: { dtoEvaluation: { select: { collaboratorId: true, evaluatedName: true, activity: true, date: true } } },
-      orderBy: [{ dueDate: "asc" }],
-    });
+    // Se a coluna da justificativa de cancelamento ainda não existe no banco (migração pendente), ler TODAS as colunas falha e
+    // a aba inteira ficava vazia. Aí lê só o essencial: as ações continuam aparecendo, só sem o texto do cancelamento.
+    const rows = await db.dtoAction
+      .findMany({ include: { dtoEvaluation: evaluation }, orderBy: [{ dueDate: "asc" }] })
+      .catch(async () =>
+        (
+          await db.dtoAction.findMany({
+            select: { id: true, title: true, detail: true, ownerRole: true, dueDate: true, status: true, dtoEvaluation: evaluation },
+            orderBy: [{ dueDate: "asc" }],
+          })
+        ).map((r) => ({ ...r, cancelReason: null as string | null })),
+      );
     return rows.map((r) => ({
       id: r.id,
       title: r.title,
@@ -83,11 +92,18 @@ export async function setDtoActionStatus(user: CurrentUser, id: string, status: 
   if (status === "VENCIDA") throw new Error("Status inválido.");
   const cancelReason = status === "CANCELADA" ? (reason ?? "").trim() : null;
   if (status === "CANCELADA" && cancelReason!.length < 5) throw new Error("Explique por que está cancelando (justificativa obrigatória).");
-  const before = await db.dtoAction.findUniqueOrThrow({ where: { id } });
+  const before = await db.dtoAction.findUniqueOrThrow({ where: { id }, select: { status: true } });
   const done = status === "CONCLUIDA";
   await db.dtoAction.update({
     where: { id },
-    data: { status, completedAt: done ? new Date() : null, completedById: done ? user.id : null, cancelReason },
+    data: {
+      status,
+      completedAt: done ? new Date() : null,
+      completedById: done ? user.id : null,
+      // Só mexe na coluna da justificativa quando ela importa (cancelando, ou reabrindo algo cancelado).
+      ...(status === "CANCELADA" || before.status === "CANCELADA" ? { cancelReason } : {}),
+    },
+    select: { id: true },
   });
   await recordAudit({
     userId: user.id,
