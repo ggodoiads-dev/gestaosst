@@ -6,6 +6,7 @@ import type { CurrentUser } from "@/server/auth/current-user";
 import { requirePermission, hasPermission, ForbiddenError } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
 import { parseDeadlineDays } from "@/domain/dto/deadline";
+import { resolveOwnerNames } from "@/domain/dto/owners";
 import type { ActionItemStatus } from "@/generated/prisma/enums";
 
 /** Ações corretivas dos DTOs (sugeridas pelo Rico) — aparecem em Planos de Ação, na aba "Ações de DTO". */
@@ -43,6 +44,8 @@ export type DtoActionRow = {
   title: string;
   detail: string;
   ownerRole: string;
+  /** Quem é o responsável, por nome (o cargo sugerido pelo Rico traduzido em gente). Vazio = fica só o cargo. */
+  ownerNames: string[];
   dueDate: Date;
   status: ActionItemStatus;
   cancelReason: string | null;
@@ -54,7 +57,9 @@ export type DtoActionRow = {
 
 export async function listDtoActions(user: CurrentUser): Promise<DtoActionRow[]> {
   requireView(user);
-  const evaluation = { select: { collaboratorId: true, evaluatedName: true, activity: true, date: true } } as const;
+  const evaluation = {
+    select: { collaboratorId: true, evaluatedName: true, evaluatorName: true, leaderName: true, activity: true, date: true, collaborator: { select: { areaId: true } } },
+  } as const;
   try {
     // Se a coluna da justificativa de cancelamento ainda não existe no banco (migração pendente), ler TODAS as colunas falha e
     // a aba inteira ficava vazia. Aí lê só o essencial: as ações continuam aparecendo, só sem o texto do cancelamento.
@@ -68,11 +73,33 @@ export async function listDtoActions(user: CurrentUser): Promise<DtoActionRow[]>
           })
         ).map((r) => ({ ...r, cancelReason: null as string | null })),
       );
+    // Pessoas que respondem por SST/RH e quem lidera cada área — pra trocar o cargo sugerido pelo nome.
+    const [people, leaderUsers] = await Promise.all([
+      db.collaborator.findMany({ where: { active: true }, select: { name: true, function: { select: { name: true } } } }),
+      db.user.findMany({
+        where: { active: true, canRollCall: true },
+        select: { name: true, userRollCallAreas: { select: { areaId: true } } },
+      }),
+    ]);
+    const byFunction = (test: (name: string) => boolean) => people.filter((p) => p.function && test(p.function.name.toLowerCase())).map((p) => p.name);
+    const sstPeople = byFunction((n) => n.includes("segurança") || n.includes("seguranca"));
+    const hrPeople = byFunction((n) => /\brh\b|recursos humanos/.test(n));
+    const leadersByArea = new Map<string, string[]>();
+    for (const u of leaderUsers) for (const a of u.userRollCallAreas) leadersByArea.set(a.areaId, [...(leadersByArea.get(a.areaId) ?? []), u.name]);
+
     return rows.map((r) => ({
       id: r.id,
       title: r.title,
       detail: r.detail,
       ownerRole: r.ownerRole,
+      ownerNames: resolveOwnerNames(r.ownerRole, {
+        collaboratorName: r.dtoEvaluation.evaluatedName,
+        leaderName: r.dtoEvaluation.leaderName,
+        evaluatorName: r.dtoEvaluation.evaluatorName,
+        areaLeaders: (r.dtoEvaluation.collaborator.areaId && leadersByArea.get(r.dtoEvaluation.collaborator.areaId)) || [],
+        sstPeople,
+        hrPeople,
+      }),
       dueDate: r.dueDate,
       status: r.status,
       cancelReason: r.cancelReason,

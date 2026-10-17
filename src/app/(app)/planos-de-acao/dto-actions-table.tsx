@@ -189,7 +189,17 @@ export function DtoActionsTable({ rows, canManage }: { rows: DtoActionRow[]; can
                       DTO de {formatPersonName(r.collaboratorName)} — {r.activity} ({formatDate(r.dtoDate)})
                     </Link>
                     <span>·</span>
-                    <span>Responsável: {r.ownerRole}</span>
+                    <span>
+                      Responsável:{" "}
+                      {r.ownerNames.length > 0 ? (
+                        <>
+                          <strong className="font-medium text-foreground">{r.ownerNames.slice(0, 3).map(formatPersonName).join(" / ")}</strong>{" "}
+                          <span className="text-foreground-subtle">({r.ownerRole})</span>
+                        </>
+                      ) : (
+                        r.ownerRole
+                      )}
+                    </span>
                     <span>·</span>
                     <span className={cn(isOverdue && "font-medium text-danger")}>Prazo: {formatDate(r.dueDate)}</span>
                   </p>
