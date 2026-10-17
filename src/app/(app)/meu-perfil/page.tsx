@@ -11,6 +11,8 @@ import { listMyInterviews } from "@/server/services/absence-interview.service";
 import { listMyWarningDocuments } from "@/server/services/absence-followup.service";
 import { listMyDtos } from "@/server/services/dto.service";
 import { DtoList } from "@/components/domain/dto-list";
+import { PadrinhoCard } from "@/components/domain/padrinho-card";
+import { isPadrinhoQualification } from "@/domain/qualification/padrinho";
 import { GuardianReportRow } from "./guardian-report-row";
 import { ProfilePhotoUploader } from "./profile-photo-uploader";
 import { ProgressRing, toneForPercent } from "./progress-ring";
@@ -92,6 +94,11 @@ export default async function MeuPerfilPage({ searchParams }: { searchParams: Pr
     listMyDtos(user).catch(() => []),
   ]);
   const historyData = historyKeys.map((k, i) => ({ month: k, data: k === month ? selected : history[i] }));
+
+  const padrinhoRecord = qualifications.find((q) => isPadrinhoQualification(q.qualificationType.name)) ?? null;
+  const otherQualifications = qualifications.filter((q) => !isPadrinhoQualification(q.qualificationType.name));
+  const latestCertificate = (r: { attachments: { path: string; mimeType: string; uploadedAt: Date }[] }) =>
+    [...r.attachments].sort((a, b) => b.uploadedAt.getTime() - a.uploadedAt.getTime())[0] ?? null;
 
   const { timeClock, checklist, checklistPercent } = selected;
   const missedChecklistDays = checklist
@@ -298,6 +305,10 @@ export default async function MeuPerfilPage({ searchParams }: { searchParams: Pr
           </CardContent>
         </Card>
 
+        {padrinhoRecord && (
+          <PadrinhoCard completedDate={padrinhoRecord.completedDate} certificate={latestCertificate(padrinhoRecord)} isSelf />
+        )}
+
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 items-start">
           <Card>
             <CardHeader>
@@ -306,10 +317,10 @@ export default async function MeuPerfilPage({ searchParams }: { searchParams: Pr
               </CardTitle>
             </CardHeader>
             <CardContent className="flex flex-wrap gap-2">
-              {qualifications.length === 0 && (
+              {otherQualifications.length === 0 && (
                 <p className="text-sm text-foreground-subtle">Nenhuma qualificação registrada ainda.</p>
               )}
-              {qualifications.map((record) => {
+              {otherQualifications.map((record) => {
                 const status = qualificationStatus(record.expiresAt);
                 return (
                   <Badge key={record.id} tone={status.tone}>

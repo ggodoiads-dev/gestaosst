@@ -28,6 +28,8 @@ import { Button } from "@/components/ui/button";
 import { formatDate, parseDateOnly } from "@/lib/dates";
 import { formatCurrency } from "@/lib/format";
 import { qualificationStatus } from "@/lib/qualification-status";
+import { PadrinhoCard } from "@/components/domain/padrinho-card";
+import { isPadrinhoQualification } from "@/domain/qualification/padrinho";
 import { EditCollaboratorDialog } from "../collaborator-form-dialog";
 import { DeleteCollaboratorButton } from "../collaborator-delete-button";
 import { CollaboratorAccessPanel } from "../collaborator-access-panel";
@@ -125,6 +127,7 @@ export default async function ColaboradorDetailPage({
     seenTypeIds.add(record.qualificationTypeId);
     currentQualifications.push(record);
   }
+  const padrinhoRecord = currentQualifications.find((r) => isPadrinhoQualification(r.qualificationType.name)) ?? null;
 
   return (
     <>
@@ -259,6 +262,13 @@ export default async function ColaboradorDetailPage({
                 ))}
               </CardContent>
             </Card>
+          )}
+
+          {padrinhoRecord && (
+            <PadrinhoCard
+              completedDate={padrinhoRecord.completedDate}
+              certificate={[...padrinhoRecord.attachments].sort((a, b) => b.uploadedAt.getTime() - a.uploadedAt.getTime())[0] ?? null}
+            />
           )}
 
           <Card>
