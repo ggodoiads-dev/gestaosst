@@ -35,6 +35,7 @@ const STATUS_LABEL: Record<string, string> = {
   FERIAS: "Férias",
   TROCA: "Troca",
   BH_MAIS: "BH+",
+  BH_MENOS: "BH-",
   OUTRO: "Obs.",
 };
 

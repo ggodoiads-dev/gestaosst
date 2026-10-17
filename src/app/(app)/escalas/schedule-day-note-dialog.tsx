@@ -40,7 +40,8 @@ const STATUS_OPTIONS = [
   { value: "ATESTADO", label: "Atestado" },
   { value: "FERIAS", label: "Férias" },
   { value: "TROCA", label: "Troca de turno" },
-  { value: "BH_MAIS", label: "BH+" },
+  { value: "BH_MAIS", label: "BH+ (banco de horas positivo)" },
+  { value: "BH_MENOS", label: "BH- (folga de banco de horas)" },
   { value: "OUTRO", label: "Outro" },
 ];
 

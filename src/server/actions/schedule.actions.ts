@@ -132,7 +132,7 @@ const dayNoteSchema = z.object({
   collaboratorId: z.string().min(1),
   date: z.string().min(1),
   overrideStatus: z.enum(["TRABALHO", "FOLGA"]),
-  status: z.enum(["FALTA", "ATESTADO", "FERIAS", "TROCA", "OUTRO"]).optional().nullable(),
+  status: z.enum(["FALTA", "ATESTADO", "FERIAS", "TROCA", "BH_MAIS", "BH_MENOS", "OUTRO"]).optional().nullable(),
   notes: z.string().trim().min(1, "Escreva uma observação."),
 });
 

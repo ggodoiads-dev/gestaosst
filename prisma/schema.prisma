@@ -1383,6 +1383,7 @@ enum ScheduleDayNoteStatus {
   FERIAS
   TROCA
   BH_MAIS // banco de horas positivo — label exibido na UI como "BH+"
+  BH_MENOS // folga compensada com banco de horas — label exibido na UI como "BH-"
   OUTRO
 }
 
