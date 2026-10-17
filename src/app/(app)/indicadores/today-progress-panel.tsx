@@ -20,12 +20,14 @@ export function TodayProgressPanel({
   dayKey,
   canJustify,
   when = "hoje",
+  off = [],
 }: {
   concluded: TodayProgressEntry[];
   remaining: TodayProgressEntry[];
   dayKey: string;
   canJustify: boolean;
   when?: string;
+  off?: { id: string; name: string; areaName: string | null; reason: string }[];
 }) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("todos");
@@ -69,6 +71,16 @@ export function TodayProgressPanel({
           </button>
         ))}
       </div>
+
+      <p className="text-xs text-foreground-subtle">
+        &quot;Cobrados&quot; = quem está <strong>escalado para trabalhar neste dia</strong>
+        {off.length > 0 && (
+          <>
+            . Mais <strong>{off.length}</strong> pessoa(s) cobrada(s) por checklist estão de folga ou ausentes e não entram hoje
+          </>
+        )}
+        .
+      </p>
 
       {total > 0 && (
         <div className="flex flex-col gap-1">
@@ -226,6 +238,25 @@ export function TodayProgressPanel({
             ))}
           </div>
         </section>
+      )}
+
+      {off.length > 0 && (
+        <details className="rounded-lg border border-border bg-surface px-3 py-2 text-sm">
+          <summary className="cursor-pointer text-xs font-medium text-foreground-subtle">
+            De folga ou ausentes {when === "hoje" ? "hoje" : "neste dia"} — não cobrados ({off.length})
+          </summary>
+          <ul className="mt-2 grid grid-cols-1 gap-x-6 gap-y-1 text-xs sm:grid-cols-2">
+            {off.map((o) => (
+              <li key={o.id} className="flex items-center justify-between gap-2">
+                <Link href={`/indicadores/checklist/${o.id}?dia=${dayKey}`} className="min-w-0 truncate hover:underline">
+                  {formatPersonName(o.name)}
+                  {o.areaName && <span className="text-foreground-subtle"> · {o.areaName}</span>}
+                </Link>
+                <span className="shrink-0 text-foreground-subtle">{o.reason}</span>
+              </li>
+            ))}
+          </ul>
+        </details>
       )}
     </div>
   );

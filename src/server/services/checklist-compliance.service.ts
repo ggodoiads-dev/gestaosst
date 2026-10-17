@@ -422,9 +422,11 @@ export type TodayProgressEntry = {
 
 /** Andamento de HOJE (informativo — NÃO entra na % de aderência, que é sempre até D-1): de quem está escalado
  * e é cobrado por checklist, quem já concluiu tudo e quem ainda falta. */
+export type DayOffEntry = { id: string; name: string; areaName: string | null; reason: string };
+
 async function computeDayProgress(
   day: Date,
-): Promise<{ dayKey: string; concluded: TodayProgressEntry[]; remaining: TodayProgressEntry[] }> {
+): Promise<{ dayKey: string; concluded: TodayProgressEntry[]; remaining: TodayProgressEntry[]; off: DayOffEntry[] }> {
   const today = day;
   const tomorrow = addDays(today, 1);
   const [collaborators, notes, requiredByArea] = await Promise.all([
@@ -434,13 +436,23 @@ async function computeDayProgress(
   ]);
   const noteByCollab = new Map(notes.map((n) => [n.collaboratorId, n]));
 
-  const rows = collaborators
+  const withItems = collaborators
     .map((c) => ({ c, required: getRequiredItemsForCollaborator(c, requiredByArea).items }))
-    .filter(({ c, required }) => {
-      if (required.length === 0) return false;
+    .filter(({ required }) => required.length > 0);
+  const isWorking = (c: (typeof collaborators)[number]) => {
+    const note = noteByCollab.get(c.id);
+    return (note ? note.overrideStatus : dayStatusFor(today, c)) === "TRABALHO";
+  };
+  const rows = withItems.filter(({ c }) => isWorking(c));
+  // Cobrados que NÃO entram hoje porque não estão escalados (folga na escala, ou ausência/folga lançada no dia).
+  const off: DayOffEntry[] = withItems
+    .filter(({ c }) => !isWorking(c))
+    .map(({ c }) => {
       const note = noteByCollab.get(c.id);
-      return (note ? note.overrideStatus : dayStatusFor(today, c)) === "TRABALHO";
-    });
+      const label = note?.status === "FALTA" ? "falta lançada" : note?.status === "ATESTADO" ? "atestado" : note?.status === "FERIAS" ? "férias" : note ? "folga/ausência lançada" : "folga na escala";
+      return { id: c.id, name: c.name, areaName: c.area?.name ?? null, reason: label };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
 
   const userIds = rows.filter(({ c }) => c.userId).map(({ c }) => c.userId!);
   const executions =
@@ -485,7 +497,7 @@ async function computeDayProgress(
   }
   concluded.sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
   remaining.sort((a, b) => b.required - b.done - (a.required - a.done) || a.name.localeCompare(b.name, "pt-BR"));
-  return { dayKey: todayKey, concluded, remaining };
+  return { dayKey: todayKey, concluded, remaining, off };
 }
 
 /** Visão geral (ontem + mês corrente, sempre até D-1) de quantos colaboradores com checklist obrigatório

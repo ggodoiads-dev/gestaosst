@@ -333,6 +333,7 @@ export default async function IndicadoresPage({
                         dayKey={explorer.dayProgress.dayKey}
                         canJustify={explorer.canJustify}
                         when={explorer.isOpenDay ? "hoje" : "nesse dia"}
+                        off={explorer.dayProgress.off}
                       />
                     )
                   ) : explorer.stats.people.length === 0 ? (
