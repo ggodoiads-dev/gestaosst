@@ -12,6 +12,7 @@ import type { CurrentUser } from "@/server/auth/current-user";
 import { requirePermission } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
 import type { ScheduleDayNoteStatus } from "@/generated/prisma/enums";
+import { ensureInterviewForNote } from "@/server/services/absence-interview.service";
 
 export type ScheduleTypeInput = {
   name: string;
@@ -181,7 +182,7 @@ export type ScheduleDayNoteInput = {
 export async function upsertScheduleDayNote(user: CurrentUser, data: ScheduleDayNoteInput) {
   requirePermission(user, PERMISSIONS.SCHEDULE_MANAGE);
 
-  return db.scheduleDayNote.upsert({
+  const note = await db.scheduleDayNote.upsert({
     where: { collaboratorId_date: { collaboratorId: data.collaboratorId, date: data.date } },
     update: { overrideStatus: data.overrideStatus, status: data.status, notes: data.notes },
     create: {
@@ -193,6 +194,8 @@ export async function upsertScheduleDayNote(user: CurrentUser, data: ScheduleDay
       createdById: user.id,
     },
   });
+  await ensureInterviewForNote(note, user.id);
+  return note;
 }
 
 export async function deleteScheduleDayNote(user: CurrentUser, id: string) {

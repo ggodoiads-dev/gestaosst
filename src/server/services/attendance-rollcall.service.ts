@@ -7,6 +7,7 @@ import { hasPermission, ForbiddenError } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
 import type { ScheduleDayNoteStatus } from "@/generated/prisma/enums";
 import type { Prisma } from "@/generated/prisma/client";
+import { ensureInterviewForNote } from "@/server/services/absence-interview.service";
 
 export type RollCallCollaboratorWhere = Prisma.CollaboratorWhereInput;
 
@@ -118,7 +119,7 @@ export async function submitRollCall(user: CurrentUser, entries: RollCallSubmiss
     }
   }
 
-  await db.$transaction(
+  const notes = await db.$transaction(
     absentEntries.map((entry) =>
       db.scheduleDayNote.upsert({
         where: { collaboratorId_date: { collaboratorId: entry.collaboratorId, date: today } },
@@ -138,4 +139,5 @@ export async function submitRollCall(user: CurrentUser, entries: RollCallSubmiss
       }),
     ),
   );
+  for (const note of notes) await ensureInterviewForNote(note, user.id);
 }

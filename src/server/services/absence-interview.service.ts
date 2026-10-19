@@ -68,6 +68,38 @@ export async function requestInterview(user: CurrentUser, noteId: string) {
   return created;
 }
 
+/** Abre a entrevista sozinha quando uma falta/atestado é lançado (escala, chamada). Idempotente e tolerante: nunca
+ * deve derrubar o lançamento da falta se a tabela ainda não existir. */
+export async function ensureInterviewForNote(note: { id: string; collaboratorId: string; status: string | null }, requestedById: string) {
+  if (note.status !== "FALTA" && note.status !== "ATESTADO") return;
+  try {
+    const existing = await db.absenceInterview.findUnique({ where: { scheduleDayNoteId: note.id }, select: { id: true } });
+    if (existing) return;
+    await db.absenceInterview.create({ data: { scheduleDayNoteId: note.id, collaboratorId: note.collaboratorId, requestedById } });
+  } catch (error) {
+    console.error("[absence-interview] não consegui abrir a entrevista automática:", error);
+  }
+}
+
+/** Abre as entrevistas das faltas/atestados dos últimos 30 dias que ainda não têm (lançadas antes da automação). */
+async function backfillRecentInterviews(user: CurrentUser) {
+  try {
+    const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const missing = await db.scheduleDayNote.findMany({
+      where: {
+        status: { in: ["FALTA", "ATESTADO"] },
+        absenceInterviewDone: false,
+        date: { gte: since },
+        absenceInterview: null,
+      },
+      select: { id: true, collaboratorId: true, status: true },
+    });
+    for (const note of missing) await ensureInterviewForNote(note, user.id);
+  } catch (error) {
+    console.error("[absence-interview] backfill falhou:", error);
+  }
+}
+
 /** Relato (parte A). O próprio colaborador envia o dele; o RH pode preencher por quem não tem login. */
 export async function submitAnswers(user: CurrentUser, id: string, input: unknown) {
   const answers: EmployeeAnswers = employeeAnswersSchema.parse(input);
@@ -162,6 +194,7 @@ export async function countMyPendingInterviews(user: CurrentUser): Promise<numbe
 /** Lista do RH (todas as entrevistas). */
 export async function listInterviewsForHr(user: CurrentUser) {
   requirePermission(user, PERMISSIONS.HR_MANAGE);
+  await backfillRecentInterviews(user);
   return db.absenceInterview.findMany({
     include: {
       collaborator: { select: { id: true, name: true, area: { select: { name: true } } } },
