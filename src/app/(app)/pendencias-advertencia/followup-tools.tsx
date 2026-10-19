@@ -3,13 +3,15 @@
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { FileText, Paperclip, Trash2, X } from "lucide-react";
+import { FileText, Paperclip, ShieldCheck, Trash2, X } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { attachmentUrl } from "@/lib/attachment-url";
 import {
   attachWarningDocumentAction,
   deleteAbsenceNoteAction,
+  dismissAbsenceNoteAction,
   removeWarningDocumentAction,
 } from "@/server/actions/absence-followup.actions";
 
@@ -147,6 +149,63 @@ export function DeleteNoteButton({ noteId, label }: { noteId: string; label: str
           </DialogClose>
           <Button onClick={confirm} loading={pending} variant="danger">
             Excluir
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export function DismissNoteButton({ noteId, label, kind }: { noteId: string; label: string; kind: "FALTA" | "ATESTADO" }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  const [pending, startTransition] = useTransition();
+
+  function confirm() {
+    startTransition(async () => {
+      const res = await dismissAbsenceNoteAction(noteId, reason);
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success("Justificado — saiu das pendências.");
+      setOpen(false);
+      setReason("");
+      router.refresh();
+    });
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <Button type="button" size="sm" variant="secondary" onClick={() => setOpen(true)}>
+        <ShieldCheck className="size-4" /> Justificar
+      </Button>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Justificar e tirar das pendências</DialogTitle>
+        </DialogHeader>
+        <DialogBody className="flex flex-col gap-3 text-sm">
+          <p className="font-medium text-foreground">{label}</p>
+          <p className="text-foreground-subtle">
+            O lançamento continua na escala, mas sai desta fila: {kind === "FALTA" ? "não cobra advertência nem " : "não cobra "}
+            entrevista de ABS. O motivo fica registrado na observação do dia.
+          </p>
+          <Textarea
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            rows={3}
+            placeholder="Ex: folga de banco de horas, atestado entregue depois, erro de escala..."
+          />
+        </DialogBody>
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button type="button" variant="secondary">
+              Cancelar
+            </Button>
+          </DialogClose>
+          <Button onClick={confirm} loading={pending} disabled={reason.trim().length < 3}>
+            Justificar
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { markWarningAppliedAction, markAbsenceInterviewDoneAction } from "@/server/actions/schedule.actions";
 import { requestAbsenceInterviewAction } from "@/server/actions/absence-interview.actions";
 import { CreateWarningDialog } from "@/app/(app)/colaboradores/[id]/warning-dialog";
-import { DeleteNoteButton, WarningDocuments } from "./followup-tools";
+import { DeleteNoteButton, DismissNoteButton, WarningDocuments } from "./followup-tools";
 
 export type FollowUpItem = {
   noteId: string;
@@ -89,7 +89,14 @@ function FollowUpCard({ item }: { item: FollowUpItem }) {
           noteId={item.noteId}
           label={`${item.kind === "ATESTADO" ? "Atestado" : "Falta"} de ${formatPersonName(item.collaboratorName)} em ${item.weekday}, ${item.dateLabel}`}
         />
-        {item.kind === "FALTA" && !item.warningApplied && <CreateWarningDialog collaboratorId={item.collaboratorId} />}
+        <div className="flex flex-wrap items-center gap-2">
+          <DismissNoteButton
+            noteId={item.noteId}
+            kind={item.kind}
+            label={`${item.kind === "ATESTADO" ? "Atestado" : "Falta"} de ${formatPersonName(item.collaboratorName)} em ${item.weekday}, ${item.dateLabel}`}
+          />
+          {item.kind === "FALTA" && !item.warningApplied && <CreateWarningDialog collaboratorId={item.collaboratorId} />}
+        </div>
       </div>
     </div>
   );

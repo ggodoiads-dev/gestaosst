@@ -44,6 +44,30 @@ export async function deleteAbsenceNote(user: CurrentUser, noteId: string) {
   });
 }
 
+/** Justifica a falta/atestado e tira da fila de pendências (sem advertência e sem entrevista de ABS). O motivo fica
+ * junto da observação do dia (aparece na escala) e na auditoria. Não apaga nada: o lançamento continua valendo. */
+export async function dismissAbsenceNote(user: CurrentUser, noteId: string, reason: string) {
+  requirePermission(user, PERMISSIONS.HR_MANAGE);
+  const trimmed = reason.trim();
+  if (trimmed.length < 3) throw new Error("Escreva o motivo da justificativa.");
+  const note = await db.scheduleDayNote.findUniqueOrThrow({ where: { id: noteId } });
+  if (note.status !== "FALTA" && note.status !== "ATESTADO") throw new Error("Só dá pra justificar por aqui falta ou atestado.");
+
+  const entry = `Justificado pelo RH: ${trimmed}`;
+  await db.scheduleDayNote.update({
+    where: { id: noteId },
+    data: { warningApplied: true, absenceInterviewDone: true, notes: note.notes ? `${note.notes} — ${entry}` : entry },
+  });
+  await recordAudit({
+    userId: user.id,
+    action: "UPDATE",
+    entityType: "ScheduleDayNote",
+    entityId: noteId,
+    previousValue: { warningApplied: note.warningApplied, absenceInterviewDone: note.absenceInterviewDone },
+    newValue: { warningApplied: true, absenceInterviewDone: true, justification: trimmed },
+  });
+}
+
 /** Anexa o documento da advertência (ex: advertência assinada) a uma falta e já marca a advertência como aplicada. */
 export async function attachWarningDocument(
   user: CurrentUser,

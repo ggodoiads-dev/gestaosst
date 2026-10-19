@@ -19,7 +19,7 @@ async function run(fn: () => Promise<unknown>): Promise<FollowupResult> {
     return { ok: true };
   } catch (error) {
     if (error instanceof ForbiddenError || error instanceof InvalidUploadError) return { ok: false, error: error.message };
-    if (error instanceof Error && /Só dá pra excluir|Advertência só se aplica|não é de uma falta|Escolha um arquivo|Arquivo|arquivo/.test(error.message)) {
+    if (error instanceof Error && /Só dá pra excluir|Só dá pra justificar|Escreva o motivo|Advertência só se aplica|não é de uma falta|Escolha um arquivo|Arquivo|arquivo/.test(error.message)) {
       return { ok: false, error: error.message };
     }
     console.error("[absence-followup] falha:", error);
@@ -31,6 +31,13 @@ export async function deleteAbsenceNoteAction(noteId: string) {
   return run(async () => {
     const user = await requireUser();
     await service.deleteAbsenceNote(user, noteId);
+  });
+}
+
+export async function dismissAbsenceNoteAction(noteId: string, reason: string) {
+  return run(async () => {
+    const user = await requireUser();
+    await service.dismissAbsenceNote(user, noteId, reason);
   });
 }
 
