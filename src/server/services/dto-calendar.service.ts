@@ -8,7 +8,7 @@ import { PERMISSIONS } from "@/domain/shared/permissions";
 import { APP_TIMEZONE } from "@/lib/dates";
 import { getCollaboratorDayStatus } from "@/domain/schedule/schedule-calendar";
 import { assignLeaders, planDtoCalendar, type PlannerLeader } from "@/domain/dto/planner";
-import { DTO_INCIDENT_TYPES, DTO_INCIDENT_WINDOW_DAYS, DTO_NON_EVALUATOR_FUNCTION_KEYWORDS } from "@/domain/dto/suggestions";
+import { DTO_INCIDENT_TYPES, DTO_INCIDENT_WINDOW_DAYS, DTO_NON_EVALUATOR_FUNCTION_KEYWORDS, isExcludedDtoEvaluator } from "@/domain/dto/suggestions";
 
 /**
  * Calendário semanal de DTO: de segunda a sexta, quem deve receber DTO em cada dia. Parte de hoje e distribui os
@@ -55,6 +55,11 @@ export type DtoCalendarDone = {
   activity: string;
   scorePercent: number | null;
   evaluatorName: string | null;
+};
+
+export type DtoLeaderAgenda = {
+  leaderName: string;
+  items: { dayKey: string; weekday: string; collaboratorId: string; name: string; kind: DtoCalendarPerson["kind"]; tenureDays: number | null }[];
 };
 
 export type DtoCalendarDay = {
@@ -170,7 +175,7 @@ export async function getDtoCalendar(user: CurrentUser, params: { weekKey?: stri
       works: (dayKey: string) => worksOn(c, dayKey),
     })),
   });
-  const leaders: PlannerLeader[] = evaluatorRows.map((e) => ({
+  const leaders: PlannerLeader[] = evaluatorRows.filter((e) => !isExcludedDtoEvaluator(e.name)).map((e) => ({
     id: e.id,
     name: e.name,
     ownCollaboratorId: e.id,
@@ -227,7 +232,28 @@ export async function getDtoCalendar(user: CurrentUser, params: { weekKey?: stri
     done: doneByDay.get(dayKey) ?? [],
   }));
 
+  // Agenda por liderança: toda a liderança aparece, com os DTOs que ela faz em cada dia da semana (novatos primeiro).
+  const kindRank = { incidente: 0, novo: 1, nunca: 2, tempo: 3 } as const;
+  const agendaByLeader = new Map<string, DtoLeaderAgenda>(leaders.map((l) => [l.name, { leaderName: l.name, items: [] }]));
+  for (const day of days) {
+    for (const p of day.planned) {
+      if (!p.leaderName) continue;
+      agendaByLeader.get(p.leaderName)?.items.push({
+        dayKey: day.dayKey,
+        weekday: day.weekday,
+        collaboratorId: p.collaboratorId,
+        name: p.name,
+        kind: p.kind,
+        tenureDays: p.tenureDays,
+      });
+    }
+  }
+  const leaderAgenda = [...agendaByLeader.values()]
+    .map((a) => ({ ...a, items: a.items.sort((x, y) => x.dayKey.localeCompare(y.dayKey) || kindRank[x.kind] - kindRank[y.kind]) }))
+    .sort((a, b) => a.leaderName.localeCompare(b.leaderName, "pt-BR"));
+
   return {
+    leaderAgenda,
     weekStart,
     weekEnd,
     prevWeek: keyOf(addDays(dateFromKey(weekStart), -7)),

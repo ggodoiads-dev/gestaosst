@@ -20,6 +20,18 @@ export const DTO_INCIDENT_TYPES = ["ACIDENTE_TIPICO", "QUASE_ACIDENTE", "FAI"] a
 /** Funções cujos ocupantes NÃO fazem DTO como avaliador, mesmo estando no quadro ADM. */
 export const DTO_NON_EVALUATOR_FUNCTION_KEYWORDS = ["assistente", "conferente"] as const;
 
+/** Pessoas do quadro ADM que, por decisão da unidade, não fazem DTO como avaliador (cada item: palavras do nome). */
+const DTO_EXCLUDED_EVALUATORS: readonly (readonly string[])[] = [
+  ["pamela", "bonfate"],
+  ["jonathan", "matheus"],
+];
+
+/** Fora da lista de quem faz DTO (ex: Pâmela Bonfate, Jonathan Matheus), mesmo sendo do quadro ADM. */
+export function isExcludedDtoEvaluator(name: string): boolean {
+  const normalized = name.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  return DTO_EXCLUDED_EVALUATORS.some((words) => words.every((w) => normalized.includes(w)));
+}
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 function dayNumber(date: Date): number {

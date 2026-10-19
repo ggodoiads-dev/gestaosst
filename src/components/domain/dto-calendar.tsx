@@ -18,6 +18,38 @@ function href(week: string, perDay: number) {
 
 const KIND_LABEL = { novo: "Novo", nunca: "Nunca avaliado" } as const;
 
+/** Toda a liderança que faz DTO, com quem cada uma avalia na semana (novatos aparecem primeiro). */
+function LeaderAgenda({ calendar }: { calendar: Calendar }) {
+  return (
+    <div className="flex flex-col gap-2">
+      <h3 className="text-sm font-semibold text-foreground">Por liderança — quem avalia quem na semana</h3>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {calendar.leaderAgenda.map((leader) => (
+          <div key={leader.leaderName} className="flex flex-col gap-1.5 rounded-lg border border-border bg-surface p-3">
+            <div className="flex items-baseline justify-between gap-2">
+              <p className="truncate text-sm font-semibold text-foreground">{formatPersonName(leader.leaderName)}</p>
+              <p className="shrink-0 text-xs text-foreground-subtle">{leader.items.length} DTO(s)</p>
+            </div>
+            {leader.items.length === 0 ? (
+              <p className="text-xs text-foreground-subtle">Nenhum DTO escalado nesta semana.</p>
+            ) : (
+              leader.items.map((item) => (
+                <div key={`${item.dayKey}|${item.collaboratorId}`} className="flex items-center justify-between gap-2 rounded-md bg-surface-muted px-2 py-1">
+                  <span className="min-w-0 truncate text-xs text-foreground">
+                    <span className="font-medium">{item.weekday.slice(0, 3)} {dm(item.dayKey)}</span> · {formatPersonName(item.name)}
+                  </span>
+                  {item.kind === "novo" && <span className="shrink-0 rounded-full bg-info-soft px-1.5 py-0.5 text-[10px] font-medium text-info">Novato</span>}
+                  {item.kind === "incidente" && <span className="shrink-0 rounded-full bg-danger-soft px-1.5 py-0.5 text-[10px] font-medium text-danger">Incidente</span>}
+                </div>
+              ))
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /** Calendário semanal (segunda a sexta): quem deve receber DTO em cada dia. */
 export function DtoCalendar({ calendar }: { calendar: Calendar }) {
   const { weekStart, weekEnd, perDay } = calendar;
@@ -66,8 +98,10 @@ export function DtoCalendar({ calendar }: { calendar: Calendar }) {
 
       <p className="text-xs text-foreground-subtle">
         Distribuição automática a partir de hoje entre os {calendar.eligibleTotal} colaboradores ativos que são avaliados (ADM/liderança fora): cada um
-        no dia em que trabalha, respeitando os 60 dias entre DTOs, e com um avaliador do quadro ADM (exceto assistentes e conferente) que trabalha nesse dia, dividindo a carga entre eles. Ordem: pós-incidente (única exceção aos 60 dias), novos, nunca avaliados e quem está há mais tempo sem DTO.
+        no dia em que trabalha, respeitando os 60 dias entre DTOs, e com um avaliador do quadro ADM (exceto assistentes, conferente, Pâmela Bonfate e Jonathan Matheus) que trabalha nesse dia, dividindo a carga entre eles. Ordem: pós-incidente (única exceção aos 60 dias), novos, nunca avaliados e quem está há mais tempo sem DTO.
       </p>
+
+      <LeaderAgenda calendar={calendar} />
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
         {calendar.days.map((day) => (

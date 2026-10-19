@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { dtoCooldown } from "./suggestions";
+import { dtoCooldown, isExcludedDtoEvaluator } from "./suggestions";
 
 const noon = (key: string) => new Date(`${key}T12:00:00Z`);
 
@@ -59,5 +59,17 @@ describe("hasPendingIncident", () => {
     expect(hasPendingIncident(new Date("2026-10-01T12:00:00Z"), inc)).toBe(true);
     expect(hasPendingIncident(new Date("2026-10-05T12:00:00Z"), inc)).toBe(false);
     expect(hasPendingIncident(new Date("2026-10-07T12:00:00Z"), inc)).toBe(false);
+  });
+});
+
+describe("isExcludedDtoEvaluator", () => {
+  it("tira Pâmela Bonfate e Jonathan Matheus, em qualquer grafia", () => {
+    expect(isExcludedDtoEvaluator("PAMELA APARECIDA BONFATE")).toBe(true);
+    expect(isExcludedDtoEvaluator("Pâmela Bonfate")).toBe(true);
+    expect(isExcludedDtoEvaluator("JONATHAN MATHEUS DA SILVA")).toBe(true);
+  });
+  it("não tira as outras Pâmelas", () => {
+    expect(isExcludedDtoEvaluator("PAMELA DA SILVA VAZ")).toBe(false);
+    expect(isExcludedDtoEvaluator("BRUNA DE SOUZA PEREIRA")).toBe(false);
   });
 });
