@@ -1,7 +1,8 @@
 "use client";
 
 import { useActionState, useState, useTransition } from "react";
-import { Link2, GitBranch, RefreshCw, Pencil } from "lucide-react";
+import { Link2, GitBranch, RefreshCw, Pencil, MapPin } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { FormField } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,7 @@ import {
   assignTemplateAction,
   createNewDraftVersionAction,
   renameTemplateAction,
+  changeTemplateAreaAction,
   syncAreaTemplateEquipmentAction,
   type ActionResult,
 } from "@/server/actions/checklist-template.actions";
@@ -169,6 +171,94 @@ export function RenameTemplateDialog({ templateId, name, description }: { templa
             <Button type="button" variant="secondary">Cancelar</Button>
           </DialogClose>
           <Button onClick={save} loading={isPending}>Salvar</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export function ChangeTemplateAreaDialog({
+  templateId,
+  currentAreaId,
+  currentAreaName,
+  areas,
+  linkedEquipmentCount,
+}: {
+  templateId: string;
+  currentAreaId: string;
+  currentAreaName: string;
+  areas: { id: string; name: string }[];
+  linkedEquipmentCount: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const [areaId, setAreaId] = useState("");
+  const [moveEquipment, setMoveEquipment] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  function save() {
+    if (!areaId) {
+      setError("Escolha a nova área.");
+      return;
+    }
+    setError(null);
+    startTransition(async () => {
+      const res = await changeTemplateAreaAction(templateId, areaId, moveEquipment);
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      toast.success(
+        res.moved > 0
+          ? `Checklist e ${res.moved} equipamento(s) movidos para a nova área.`
+          : "Área do checklist alterada.",
+      );
+      setOpen(false);
+    });
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <Button size="sm" variant="secondary" onClick={() => setOpen(true)}>
+        <MapPin /> Alterar área
+      </Button>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Alterar a área do checklist</DialogTitle>
+        </DialogHeader>
+        <DialogBody className="flex flex-col gap-4">
+          <p className="text-sm text-foreground-subtle">
+            Hoje este checklist é da área <strong className="text-foreground">{currentAreaName}</strong>. Quem trabalha na área nova passa a
+            fazer este checklist.
+          </p>
+          <FormField label="Nova área" required>
+            <Select value={areaId} onValueChange={setAreaId}>
+              <SelectTrigger><SelectValue placeholder="Escolha a área" /></SelectTrigger>
+              <SelectContent>
+                {areas
+                  .filter((a) => a.id !== currentAreaId)
+                  .map((a) => (
+                    <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          </FormField>
+          <label className="flex cursor-pointer items-start gap-2 text-sm text-foreground">
+            <Checkbox checked={moveEquipment} onCheckedChange={(v) => setMoveEquipment(v === true)} className="mt-0.5" />
+            <span>
+              Mover também os {linkedEquipmentCount} equipamento(s) deste checklist para a nova área
+              <span className="block text-xs text-foreground-subtle">
+                Recomendado: o checklist de área cobre os equipamentos que estão na área. Fica registrado no histórico de cada equipamento.
+              </span>
+            </span>
+          </label>
+          {error && <p className="text-sm text-danger">{error}</p>}
+        </DialogBody>
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button type="button" variant="secondary">Cancelar</Button>
+          </DialogClose>
+          <Button onClick={save} loading={isPending}>Alterar área</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

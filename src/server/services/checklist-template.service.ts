@@ -249,6 +249,53 @@ export async function renameTemplate(user: CurrentUser, templateId: string, data
   return updated;
 }
 
+/** Troca a área de um checklist de escopo Área. O checklist de área cobre os equipamentos que estão NA área, então por
+ * padrão os equipamentos vinculados a ele vão junto (com histórico de mudança de área); sem isso o checklist ficaria
+ * apontando pra uma área sem os equipamentos dele. Depois reaplica o vínculo contra a nova área. */
+export async function changeTemplateArea(user: CurrentUser, templateId: string, areaId: string, moveEquipment: boolean) {
+  requirePermission(user, PERMISSIONS.CHECKLIST_TEMPLATE_MANAGE);
+  const template = await db.checklistTemplate.findUniqueOrThrow({ where: { id: templateId } });
+  if (template.scope !== "AREA") throw new ForbiddenError("Esse modelo não é de escopo Área.");
+  if (template.areaId === areaId) throw new ForbiddenError("Esse checklist já está nessa área.");
+  const area = await db.area.findUniqueOrThrow({ where: { id: areaId } });
+
+  const linked = await db.equipment.findMany({
+    where: { active: true, assignments: { some: { templateId, active: true } } },
+    select: { id: true, areaId: true },
+  });
+  const toMove = moveEquipment ? linked.filter((e) => e.areaId !== areaId) : [];
+
+  await db.$transaction(async (tx) => {
+    await tx.checklistTemplate.update({ where: { id: templateId }, data: { areaId } });
+    for (const equipment of toMove) {
+      await tx.equipment.update({ where: { id: equipment.id }, data: { areaId } });
+      await tx.equipmentAreaHistory.create({
+        data: {
+          equipmentId: equipment.id,
+          previousAreaId: equipment.areaId,
+          newAreaId: areaId,
+          changedById: user.id,
+          reason: `Checklist "${template.name}" passou para a área ${area.name}`,
+        },
+      });
+    }
+    await recordAudit(
+      {
+        userId: user.id,
+        action: "UPDATE",
+        entityType: "ChecklistTemplate",
+        entityId: templateId,
+        previousValue: { areaId: template.areaId },
+        newValue: { areaId, movedEquipments: toMove.length },
+      },
+      tx,
+    );
+  });
+
+  const { syncedCount } = await syncAreaTemplateEquipment(user, templateId);
+  return { moved: toMove.length, syncedCount };
+}
+
 /** Exclui uma versão em RASCUNHO (ex: versão de teste) com as perguntas dela. Versão publicada/retirada nunca é
  * apagada (tem histórico de execuções), e o modelo não pode ficar sem nenhuma versão. */
 export async function deleteDraftVersion(user: CurrentUser, versionId: string) {

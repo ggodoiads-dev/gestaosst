@@ -151,6 +151,22 @@ export async function renameTemplateAction(templateId: string, name: string, des
   });
 }
 
+export async function changeTemplateAreaAction(templateId: string, areaId: string, moveEquipment: boolean) {
+  const user = await requireUser();
+  let result: { moved: number; syncedCount: number } | null = null;
+  const status = await toResult(async () => {
+    result = await templateService.changeTemplateArea(user, templateId, areaId, moveEquipment);
+  });
+  if (status.ok) {
+    revalidatePath(`/cadastros/modelos-checklist/${templateId}`);
+    revalidatePath("/cadastros/modelos-checklist");
+    revalidatePath("/checklist/realizar");
+    revalidatePath("/equipamentos");
+    revalidatePath("/areas");
+  }
+  return { ...status, ...(result ?? { moved: 0, syncedCount: 0 }) };
+}
+
 export async function deleteDraftVersionAction(templateId: string, versionId: string): Promise<ActionResult> {
   const user = await requireUser();
   return toResult(() => templateService.deleteDraftVersion(user, versionId)).then((result) => {
