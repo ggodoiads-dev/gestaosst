@@ -5,6 +5,7 @@ import { recordAudit } from "@/server/services/audit";
 import type { CurrentUser } from "@/server/auth/current-user";
 import { requirePermission } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
+import { isPadrinhoQualification } from "@/domain/qualification/padrinho";
 import type { QualificationCategory } from "@/generated/prisma/enums";
 
 export type QualificationTypeInput = {
@@ -221,6 +222,8 @@ export type CollaboratorQualificationSummary = {
   nrs: { typeName: string; expiresAt: Date | null; certificate: QualificationCertificateRef }[];
   hasAnyRecord: boolean;
   hasAnyExpired: boolean;
+  /** Fez a Trilha de Treinamento para Padrinhos (sem validade) — destaque nas fichas e no QR. */
+  padrinho: { completedDate: Date } | null;
   /** "Apto" olha só NR (o que o usuário pediu: sem nenhuma NR cadastrada, ou com alguma vencida,
    * é inapto — independe de ter ASO em dia ou não). */
   apt: boolean;
@@ -258,12 +261,14 @@ export async function getCollaboratorQualificationSummary(collaboratorId: string
   // Sem função vinculada, assume que precisa (comportamento de sempre) — só desliga a cobrança
   // quando a função está explicitamente marcada como "não precisa de NR".
   const functionRequiresNr = collaborator?.function?.requiresNr !== false;
+  const padrinhoRecord = current.find((r) => isPadrinhoQualification(r.qualificationType.name)) ?? null;
 
   return {
     aso: aso ? { typeName: aso.qualificationType.name, expiresAt: aso.expiresAt, certificate: latestCertificate(aso) } : null,
     nrs: nrs.map((r) => ({ typeName: r.qualificationType.name, expiresAt: r.expiresAt, certificate: latestCertificate(r) })),
     hasAnyRecord: current.length > 0,
     hasAnyExpired,
+    padrinho: padrinhoRecord ? { completedDate: padrinhoRecord.completedDate } : null,
     apt: !functionRequiresNr || (nrs.length > 0 && !hasAnyNrExpired),
   };
 }

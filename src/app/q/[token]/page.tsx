@@ -12,6 +12,8 @@ import { qualificationStatus } from "@/lib/qualification-status";
 import { formatDate } from "@/lib/dates";
 import { EquipmentStatusBadge, CriticalityBadge } from "@/components/domain/status-badges";
 import { Badge } from "@/components/ui/badge";
+import { Award } from "lucide-react";
+import { groupByFunction } from "@/domain/qualification/function-groups";
 import { PublicPhoto } from "./public-photo";
 import { AttachmentViewerLink } from "./attachment-viewer-link";
 import type { Equipment, EquipmentType, Area, Collaborator } from "@/generated/prisma/client";
@@ -105,7 +107,7 @@ export default async function QrResolverPage({
   const area = await db.area.findUnique({ where: { qrToken: token } });
   if (area) {
     const [collaborators, documents] = await Promise.all([
-      db.collaborator.findMany({ where: { areaId: area.id, active: true }, orderBy: { name: "asc" } }),
+      db.collaborator.findMany({ where: { areaId: area.id, active: true }, include: { function: { select: { name: true } } }, orderBy: { name: "asc" } }),
       getAreaPublicOverview(area),
     ]);
     const summaries = await Promise.all(
@@ -293,6 +295,7 @@ function PublicCollaboratorView({
       )}
       <h1 className="text-lg font-semibold text-foreground">{collaborator.name}</h1>
       <Badge tone={summary.apt ? "success" : "danger"}>{summary.apt ? "Apto" : "Não apto"}</Badge>
+      {summary.padrinho && <PadrinhoChip completedDate={summary.padrinho.completedDate} />}
 
       <div className="grid w-full grid-cols-2 gap-3 text-left text-sm">
         <div>
@@ -360,7 +363,7 @@ function PublicAreaView({
   baseUrl,
 }: {
   area: Area;
-  entries: { collaborator: Collaborator; summary: QualificationSummary; photoUrl: string | null }[];
+  entries: { collaborator: Collaborator & { function?: { name: string } | null }; summary: QualificationSummary; photoUrl: string | null }[];
   overview: AreaOverview;
   baseUrl: string;
 }) {
@@ -427,31 +430,59 @@ function PublicAreaView({
         </div>
       )}
 
-      <div className="flex flex-col gap-3">
-        <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Colaboradores</p>
+      <div className="flex flex-col gap-4">
+        <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Colaboradores por função</p>
         {entries.length === 0 && (
           <p className="text-center text-sm text-foreground-subtle">Nenhum colaborador cadastrado nessa área.</p>
         )}
-        {entries.map(({ collaborator, summary, photoUrl }) => (
-          <div key={collaborator.id} className="rounded-md border border-border p-3">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-3">
-                {photoUrl ? (
-                  <PublicPhoto src={photoUrl} alt={collaborator.name} className="size-16" rounded="full" />
-                ) : (
-                  <div className="size-16 shrink-0 rounded-full border border-dashed border-border-strong bg-surface-muted" />
-                )}
-                <div>
-                  <p className="font-medium text-foreground">{collaborator.name}</p>
-                  <p className="text-xs text-foreground-subtle">Matrícula: {collaborator.matricula ?? "—"}</p>
-                </div>
-              </div>
-              <Badge tone={summary.apt ? "success" : "neutral"}>{summary.apt ? "Apto" : "Não apto"}</Badge>
+        {groupByFunction(entries, (e) => e.collaborator.function?.name ?? null).map((group) => (
+          <section key={group.functionName ?? "sem-funcao"} className="flex flex-col gap-2.5">
+            <div className="flex items-center justify-between border-b border-border pb-1">
+              <h2 className="text-sm font-semibold text-foreground">{group.functionName ?? "Sem função cadastrada"}</h2>
+              <span className="text-xs text-foreground-subtle">{group.entries.length}</span>
             </div>
-            <QualificationList summary={summary} baseUrl={baseUrl} />
-          </div>
+            {/* Padrinhos primeiro dentro de cada função */}
+            {[...group.entries]
+              .sort((a, b) => Number(!!b.summary.padrinho) - Number(!!a.summary.padrinho))
+              .map(({ collaborator, summary, photoUrl }) => (
+                <div
+                  key={collaborator.id}
+                  className={
+                    summary.padrinho
+                      ? "rounded-md border-2 border-warning/60 bg-warning-soft/40 p-3"
+                      : "rounded-md border border-border p-3"
+                  }
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-3">
+                      {photoUrl ? (
+                        <PublicPhoto src={photoUrl} alt={collaborator.name} className="size-16" rounded="full" />
+                      ) : (
+                        <div className="size-16 shrink-0 rounded-full border border-dashed border-border-strong bg-surface-muted" />
+                      )}
+                      <div>
+                        <p className="font-medium text-foreground">{collaborator.name}</p>
+                        <p className="text-xs text-foreground-subtle">Matrícula: {collaborator.matricula ?? "—"}</p>
+                        {summary.padrinho && <PadrinhoChip completedDate={summary.padrinho.completedDate} />}
+                      </div>
+                    </div>
+                    <Badge tone={summary.apt ? "success" : "neutral"}>{summary.apt ? "Apto" : "Não apto"}</Badge>
+                  </div>
+                  <QualificationList summary={summary} baseUrl={baseUrl} />
+                </div>
+              ))}
+          </section>
         ))}
       </div>
     </div>
+  );
+}
+
+/** Selo de padrinho certificado (Trilha de Treinamento para Padrinhos). */
+function PadrinhoChip({ completedDate }: { completedDate: Date }) {
+  return (
+    <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-warning px-2.5 py-0.5 text-[11px] font-semibold text-white">
+      <Award className="size-3.5" /> Padrinho certificado · {formatDate(completedDate)}
+    </span>
   );
 }
