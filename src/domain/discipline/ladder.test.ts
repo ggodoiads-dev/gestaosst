@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { DISCIPLINE_STEPS, isChecklistInfraction, nextDisciplineStep } from "./ladder";
+import { DISCIPLINE_STEPS, isChecklistInfraction, isPartialChecklist, nextDisciplineStep } from "./ladder";
 
 describe("nextDisciplineStep", () => {
   it("segue a ordem da escada", () => {
@@ -24,5 +24,16 @@ describe("isChecklistInfraction", () => {
   });
   it("sem equipamento exigido não há ocorrência", () => {
     expect(isChecklistInfraction({ required: 0, doneOrJustified: 0 })).toBe(false);
+  });
+});
+
+describe("isPartialChecklist", () => {
+  it("fez alguns mas menos da metade = parcial (não é ocorrência automática)", () => {
+    expect(isPartialChecklist({ required: 18, doneOrJustified: 3 })).toBe(true);
+    expect(isPartialChecklist({ required: 18, doneOrJustified: 8 })).toBe(true);
+  });
+  it("metade ou mais = cumpriu; zero = ocorrência (não parcial)", () => {
+    expect(isPartialChecklist({ required: 18, doneOrJustified: 9 })).toBe(false);
+    expect(isPartialChecklist({ required: 18, doneOrJustified: 0 })).toBe(false);
   });
 });

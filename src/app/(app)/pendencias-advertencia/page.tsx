@@ -28,6 +28,7 @@ export default async function PendenciasAdvertenciaPage() {
         <div className="flex flex-col gap-8">
           <DisciplineSection
             items={overview.items.filter((i) => i.reason === "CHECKLIST")}
+            partial={overview.partial}
             history={overview.history.map((h) => ({ ...h, decidedAtLabel: formatDate(h.decidedAt) }))}
           />
           <section className="flex flex-col gap-3">

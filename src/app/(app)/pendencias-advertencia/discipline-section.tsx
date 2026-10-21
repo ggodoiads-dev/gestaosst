@@ -29,6 +29,8 @@ export type DisciplineEntry = {
   dayKey: string;
   suggestedStep: DisciplineStepKey;
   appliedCount: number;
+  done?: number;
+  required?: number;
 };
 
 export type DisciplineHistoryRow = {
@@ -127,7 +129,7 @@ export function MeasureDialog({ entry, mode, trigger }: { entry: DisciplineEntry
 }
 
 /** Checklist não realizado (nenhum equipamento feito no dia) → medida sugerida pela escada do checklist. */
-export function DisciplineSection({ items, history }: { items: DisciplineEntry[]; history: DisciplineHistoryRow[] }) {
+export function DisciplineSection({ items, partial, history }: { items: DisciplineEntry[]; partial: DisciplineEntry[]; history: DisciplineHistoryRow[] }) {
   const [showHistory, setShowHistory] = useState(false);
   const checklist = items.filter((i) => i.reason === "CHECKLIST");
   const groups = new Map<string, { name: string; id: string; items: DisciplineEntry[] }>();
@@ -186,6 +188,33 @@ export function DisciplineSection({ items, history }: { items: DisciplineEntry[]
             </div>
           ))}
         </div>
+      )}
+
+      {partial.length > 0 && (
+        <details className="rounded-lg border border-border bg-surface px-3 py-2">
+          <summary className="cursor-pointer text-xs font-medium text-foreground-subtle">
+            Fizeram só uma parte do checklist ({partial.length}) — não geram medida sozinhos, mas você pode aplicar
+          </summary>
+          <div className="mt-2 divide-y divide-border">
+            {partial.map((item) => (
+              <div key={`${item.collaboratorId}|${item.dayKey}`} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                <div className="min-w-0">
+                  <p className="text-sm text-foreground">
+                    <Link href={`/colaboradores/${item.collaboratorId}`} className="font-medium hover:underline">
+                      {formatPersonName(item.collaboratorName)}
+                    </Link>{" "}
+                    · {dmy(item.dayKey)} · fez {item.done} de {item.required} equipamentos
+                  </p>
+                  <p className="text-xs text-foreground-subtle">Se aplicar, a medida sugerida é: {disciplineStepLabel(item.suggestedStep)}</p>
+                </div>
+                <div className="flex gap-1.5">
+                  <MeasureDialog entry={item} mode="apply" trigger={<Button size="sm" variant="secondary">Registrar medida</Button>} />
+                  <MeasureDialog entry={item} mode="dismiss" trigger={<Button size="sm" variant="ghost">Dispensar</Button>} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </details>
       )}
 
       {showHistory && (

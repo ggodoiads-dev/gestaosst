@@ -43,6 +43,12 @@ export function nextDisciplineStep(appliedCount: number): DisciplineStepKey {
  * maioria (ou ao menos um) = cumpriu. Equipamento que não podia ser inspecionado no dia (bloqueado/manutenção) não era
  * exigido; justificativa que conta como cumprida vale como feito.
  */
+/** Fez ALGUNS equipamentos, mas menos da metade: não gera medida sozinho (a regra é "nenhum equipamento"), porém o RH vê o caso
+ * e pode aplicar a medida manualmente. */
+export function isPartialChecklist(args: { required: number; doneOrJustified: number }): boolean {
+  return args.required > 0 && args.doneOrJustified > 0 && args.doneOrJustified * 2 < args.required;
+}
+
 export function isChecklistInfraction(args: { required: number; doneOrJustified: number }): boolean {
   return args.required > 0 && args.doneOrJustified === 0;
 }

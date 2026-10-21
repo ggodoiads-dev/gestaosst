@@ -16,7 +16,7 @@ import { PERMISSIONS } from "@/domain/shared/permissions";
 import { formatInTimeZone } from "date-fns-tz";
 import { APP_TIMEZONE } from "@/lib/dates";
 import { recordAudit } from "@/server/services/audit";
-import { isChecklistInfraction } from "@/domain/discipline/ladder";
+import { isChecklistInfraction, isPartialChecklist } from "@/domain/discipline/ladder";
 import {
   CHECKLIST_JUSTIFICATION_REASONS,
   type ChecklistJustificationReason,
@@ -884,7 +884,16 @@ export async function getChecklistCoverageGaps(user: CurrentUser): Promise<Cover
 }
 
 
-export type ChecklistNonCompletion = { collaboratorId: string; name: string; areaName: string | null; dayKey: string; required: number };
+export type ChecklistNonCompletion = {
+  collaboratorId: string;
+  name: string;
+  areaName: string | null;
+  dayKey: string;
+  required: number;
+  done: number;
+  /** `true` = fez alguns equipamentos, mas menos da metade (não é ocorrência automática). */
+  partial: boolean;
+};
 
 /**
  * Dias FECHADOS (de `fromKey` até ontem) em que quem é cobrado por checklist estava escalado e NÃO fez nenhum dos
@@ -943,8 +952,9 @@ export async function listChecklistNonCompletion(fromKey: string): Promise<Check
         ...justifiedItemIds(justificationsByKey.get(`${c.id}|${dayKey}`)),
       ]);
       const done = effective.filter((e) => completedIds.has(e.id)).length;
-      if (isChecklistInfraction({ required: effective.length, doneOrJustified: done })) {
-        result.push({ collaboratorId: c.id, name: c.name, areaName: c.area?.name ?? null, dayKey, required: effective.length });
+      const counts = { required: effective.length, doneOrJustified: done };
+      if (isChecklistInfraction(counts) || isPartialChecklist(counts)) {
+        result.push({ collaboratorId: c.id, name: c.name, areaName: c.area?.name ?? null, dayKey, required: effective.length, done, partial: done > 0 });
       }
     }
   }
