@@ -40,13 +40,13 @@ function localDateKey(date: Date): string {
 type RequiredEquipment = { id: string; code: string; name: string };
 
 /** Equipamentos ativos que exigem checklist (atribuição ativa + versão publicada), agrupados por área. */
-async function getRequiredEquipmentByArea(): Promise<Map<string, RequiredEquipment[]>> {
+async function getRequiredEquipmentByArea(options: { includeUnavailable?: boolean } = {}): Promise<Map<string, RequiredEquipment[]>> {
   const equipments = await db.equipment.findMany({
     where: {
       active: true,
       // Bloqueado / em manutenção não dá pra inspecionar — exigir esse equipamento deixava a pessoa
       // eternamente "pendente" mesmo fazendo o checklist certinho (ex: 4 bloqueados em Amarração).
-      status: { notIn: ["BLOQUEADO", "EM_MANUTENCAO"] },
+      ...(options.includeUnavailable ? {} : { status: { notIn: ["BLOQUEADO", "EM_MANUTENCAO"] } }),
       assignments: { some: { active: true, template: { versions: { some: { status: "ATIVA" } } } } },
     },
     select: { id: true, code: true, name: true, areaId: true },
@@ -58,6 +58,63 @@ async function getRequiredEquipmentByArea(): Promise<Map<string, RequiredEquipme
     byArea.set(eq.areaId, [...(byArea.get(eq.areaId) ?? []), { id: eq.id, code: eq.code, name: eq.name }]);
   }
   return byArea;
+}
+
+/** Eventos que tiram/devolvem o equipamento de uso. */
+const UNAVAILABLE_START_EVENTS = ["EQUIPAMENTO_BLOQUEADO", "MANUTENCAO_INICIADA"] as const;
+const UNAVAILABLE_END_EVENTS = ["EQUIPAMENTO_LIBERADO", "MANUTENCAO_CONCLUIDA"] as const;
+
+/** Disponibilidade HISTÓRICA dos equipamentos: o equipamento que estava bloqueado/em manutenção em um dia não podia ser
+ * inspecionado nele, então não deve ficar "pendente" naquele dia — mesmo que tenha sido liberado depois (o status de
+ * hoje não vale pra dias passados). Reconstrói os períodos a partir do histórico (bloqueio/manutenção → liberação) e
+ * devolve `(equipamento, dia) => indisponível em algum momento do dia?`. Quem está bloqueado agora sem histórico
+ * registrado conta como indisponível desde sempre (comportamento anterior). Se a consulta falhar, ninguém é isentado. */
+async function loadUnavailability(upToDayKey: string): Promise<(equipmentId: string, dayKey: string) => boolean> {
+  try {
+    const upTo = new Date(`${upToDayKey}T23:59:59.999-03:00`);
+    const [events, currentlyUnavailable] = await Promise.all([
+      db.equipmentEvent.findMany({
+        where: { type: { in: [...UNAVAILABLE_START_EVENTS, ...UNAVAILABLE_END_EVENTS] }, occurredAt: { lte: upTo } },
+        orderBy: { occurredAt: "asc" },
+        select: { equipmentId: true, type: true, occurredAt: true },
+      }),
+      db.equipment.findMany({ where: { status: { in: ["BLOQUEADO", "EM_MANUTENCAO"] } }, select: { id: true } }),
+    ]);
+
+    type Interval = { start: number; end: number | null };
+    const byEquipment = new Map<string, Interval[]>();
+    const lastEventAt = new Map<string, number>();
+    for (const e of events) {
+      const list = byEquipment.get(e.equipmentId) ?? [];
+      const t = e.occurredAt.getTime();
+      lastEventAt.set(e.equipmentId, t);
+      const open = list[list.length - 1];
+      if ((UNAVAILABLE_START_EVENTS as readonly string[]).includes(e.type)) {
+        if (!open || open.end !== null) list.push({ start: t, end: null });
+      } else if (open && open.end === null) {
+        open.end = t;
+      }
+      byEquipment.set(e.equipmentId, list);
+    }
+    // Bloqueado agora mas sem período aberto no histórico (ex: status mudado direto no cadastro).
+    for (const { id } of currentlyUnavailable) {
+      const list = byEquipment.get(id) ?? [];
+      const open = list[list.length - 1];
+      if (!open || open.end !== null) list.push({ start: lastEventAt.get(id) ?? 0, end: null });
+      byEquipment.set(id, list);
+    }
+
+    return (equipmentId, dayKey) => {
+      const intervals = byEquipment.get(equipmentId);
+      if (!intervals) return false;
+      const dayStart = new Date(`${dayKey}T00:00:00-03:00`).getTime();
+      const dayEnd = dayStart + 24 * 60 * 60 * 1000;
+      return intervals.some((i) => i.start < dayEnd && (i.end === null || i.end > dayStart));
+    };
+  } catch (error) {
+    console.error("[checklist-compliance] histórico de disponibilidade indisponível:", error);
+    return () => false;
+  }
 }
 
 const collaboratorWithFunctionInclude = {
@@ -193,10 +250,11 @@ async function buildCollaboratorChecklistDays(collaboratorId: string, from: Date
       include: collaboratorWithFunctionInclude,
     }),
     db.scheduleDayNote.findMany({ where: { collaboratorId, date: { gte: rangeStart, lt: rangeEndExclusive } } }),
-    getRequiredEquipmentByArea(),
+    getRequiredEquipmentByArea({ includeUnavailable: true }),
   ]);
 
   const { items: required } = getRequiredItemsForCollaborator(collaborator, requiredByArea);
+  const unavailable = await loadUnavailability(localDateKey(addDays(rangeEndExclusive, -1)));
 
   // equipmentId e checklistVersion.templateId nunca colidem (UUIDs de tabelas diferentes), então
   // dá pra jogar os dois no mesmo Set por dia sem branch por modo — o "required" de cada
@@ -235,6 +293,8 @@ async function buildCollaboratorChecklistDays(collaboratorId: string, from: Date
     const completedIds = new Set([
       ...(completedByDay.get(key) ?? []),
       ...justifiedItemIds(justificationsByKey.get(`${collaboratorId}|${key}`)),
+      // Equipamento bloqueado/em manutenção naquele dia não podia ser inspecionado: não fica pendente.
+      ...required.filter((e) => unavailable(e.id, key)).map((e) => e.id),
     ]);
     days.push({
       date,
@@ -314,8 +374,9 @@ async function computeCompliancePeriodStats(from: Date, toInclusive: Date): Prom
   const [collaborators, notes, requiredByArea] = await Promise.all([
     listEligibleCollaboratorsQuery(),
     db.scheduleDayNote.findMany({ where: { date: { gte: rangeStart, lt: rangeEndExclusive } } }),
-    getRequiredEquipmentByArea(),
+    getRequiredEquipmentByArea({ includeUnavailable: true }),
   ]);
+  const unavailable = await loadUnavailability(localDateKey(addDays(rangeEndExclusive, -1)));
 
   const requiredByCollaborator = new Map(collaborators.map((c) => [c.id, getRequiredItemsForCollaborator(c, requiredByArea)]));
   const eligible = collaborators.filter((c) => (requiredByCollaborator.get(c.id)?.items.length ?? 0) > 0);
@@ -375,6 +436,8 @@ async function computeCompliancePeriodStats(from: Date, toInclusive: Date): Prom
       const completedIds = new Set([
         ...(c.userId ? (completedByKey.get(`${c.userId}|${dayKey}`) ?? []) : []),
         ...justifiedItemIds(justificationsByKey.get(`${c.id}|${dayKey}`)),
+        // Equipamento bloqueado/em manutenção naquele dia não podia ser inspecionado: não fica pendente.
+        ...required.filter((e) => unavailable(e.id, dayKey)).map((e) => e.id),
       ]);
       const pendingToday = required.filter((e) => !completedIds.has(e.id)).length;
       pendingTotal += pendingToday;
@@ -565,9 +628,10 @@ export async function getCollaboratorChecklistDayDetail(
 
   const [collaborator, requiredByArea] = await Promise.all([
     db.collaborator.findUniqueOrThrow({ where: { id: params.collaboratorId }, include: collaboratorWithFunctionInclude }),
-    getRequiredEquipmentByArea(),
+    getRequiredEquipmentByArea({ includeUnavailable: true }),
   ]);
   const { items: required } = getRequiredItemsForCollaborator(collaborator, requiredByArea);
+  const unavailable = await loadUnavailability(params.dayKey);
 
   const rawExecutions = collaborator.userId
     ? await db.checklistExecution.findMany({
@@ -623,7 +687,9 @@ export async function getCollaboratorChecklistDayDetail(
   const justificationsByKey = await loadItemJustifications(params.dayKey, params.dayKey, [params.collaboratorId]);
   const dayJustifications = justificationsByKey.get(`${params.collaboratorId}|${params.dayKey}`) ?? [];
   const justifiedIds = justifiedItemIds(dayJustifications);
-  const doneIds = new Set([...executions.flatMap((e) => e.keys), ...justifiedIds]);
+  // Equipamento bloqueado/em manutenção no dia não podia ser inspecionado: conta como concluído, não pendente.
+  const unavailableIds = new Set(required.filter((e) => unavailable(e.id, params.dayKey)).map((e) => e.id));
+  const doneIds = new Set([...executions.flatMap((e) => e.keys), ...justifiedIds, ...unavailableIds]);
   const missing = required.filter((e) => !doneIds.has(e.id));
   const justified = required
     .filter((e) => justifiedIds.has(e.id) && !executions.some((x) => x.keys.includes(e.id)))
