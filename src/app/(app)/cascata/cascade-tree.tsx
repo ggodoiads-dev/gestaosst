@@ -1,9 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronDown, Flame, GitBranch, Pencil, Plus, Target, Trash2, Zap } from "lucide-react";
+import { ChevronRight, Pencil, Plus, Trash2, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { formatPersonName, initials } from "@/lib/format-name";
+import { formatPersonName } from "@/lib/format-name";
 import { formatCascadeValue } from "@/domain/cascade/status";
 import type { CascadeTreeNode } from "@/server/services/cascade.service";
 import { DeleteNodeDialog, NodeDialog, ValueDialog } from "./cascade-dialogs";
@@ -12,13 +12,14 @@ type Owners = { id: string; name: string }[];
 type Filter = "todos" | "fail" | "priority" | "noiv";
 
 const STATUS = {
-  OK: { label: "Bateu", chip: "bg-success-soft text-success", bar: "bg-success", stripe: "bg-success", text: "text-success" },
-  FAIL: { label: "Não bateu", chip: "bg-danger-soft text-danger", bar: "bg-danger", stripe: "bg-danger", text: "text-danger" },
-  NO_DATA: { label: "Sem resultado", chip: "bg-neutral-soft text-foreground-muted", bar: "bg-border-strong", stripe: "bg-border-strong", text: "text-foreground-subtle" },
-  NO_TARGET: { label: "Sem meta", chip: "bg-neutral-soft text-foreground-muted", bar: "bg-border-strong", stripe: "bg-border-strong", text: "text-foreground-subtle" },
+  OK: { label: "Bateu a meta", dot: "bg-success", text: "text-success" },
+  FAIL: { label: "Não bateu", dot: "bg-danger", text: "text-danger" },
+  NO_DATA: { label: "Sem resultado", dot: "bg-border-strong", text: "text-foreground-subtle" },
+  NO_TARGET: { label: "Sem meta", dot: "bg-border-strong", text: "text-foreground-subtle" },
 } as const;
 
-const SOURCE_LABEL = { MANUAL: "digitado", IMPORT: "planilha", AUTO: "automático (SIGO)", ANTERIOR: "último resultado" } as const;
+const COLS = "md:grid md:grid-cols-[minmax(0,1fr)_96px_104px_84px_124px_130px_132px] md:items-center md:gap-x-3";
+const INDENT = 22;
 
 function monthShort(key: string) {
   const [y, m] = key.split("-");
@@ -36,326 +37,301 @@ function matches(ic: CascadeTreeNode, filter: Filter) {
   return true;
 }
 
+type Row = { node: CascadeTreeNode; depth: number; guides: boolean[]; isLast: boolean };
+
 export function CascadeTree({ roots, periodKey, canManage, owners }: { roots: CascadeTreeNode[]; periodKey: string; canManage: boolean; owners: Owners }) {
-  const [filter, setFilter] = useState<Filter>("todos");
   const sonho = roots.find((r) => r.kind === "SONHO") ?? roots[0];
-  const pilares = sonho.kind === "SONHO" ? sonho.children : roots;
+  const [filter, setFilter] = useState<Filter>("todos");
+  const [open, setOpen] = useState<Set<string>>(new Set());
   const summary = sonho.summary ?? { total: 0, ok: 0, fail: 0, noData: 0, withoutIv: 0 };
-  const priority = useMemo(() => {
-    let n = 0;
-    const walk = (node: CascadeTreeNode) => {
-      if (node.kind === "IC" && matches(node, "priority")) n++;
-      node.children.forEach(walk);
+
+  const allIds = useMemo(() => {
+    const ids: string[] = [];
+    const walk = (n: CascadeTreeNode) => {
+      if (n.children.length > 0) ids.push(n.id);
+      n.children.forEach(walk);
     };
     walk(sonho);
-    return n;
+    return ids;
   }, [sonho]);
-  const pctOk = summary.total === 0 ? 0 : Math.round((summary.ok / summary.total) * 100);
 
-  const tiles: { key: Filter; label: string; value: number; tone: string; ring: string }[] = [
-    { key: "todos", label: "ICs no total", value: summary.total, tone: "text-foreground", ring: "ring-accent" },
-    { key: "fail", label: "Não bateram", value: summary.fail, tone: "text-danger", ring: "ring-danger" },
-    { key: "priority", label: "Prioridade máxima", value: priority, tone: "text-danger", ring: "ring-danger" },
-    { key: "noiv", label: "Sem IVs (sem desdobramento)", value: summary.withoutIv, tone: "text-warning", ring: "ring-warning" },
-  ];
+  const rows = useMemo(() => {
+    const out: Row[] = [];
+    const visit = (node: CascadeTreeNode, depth: number, guides: boolean[], isLast: boolean) => {
+      out.push({ node, depth, guides, isLast });
+      // Pilares e o sonho ficam sempre abertos; IC e IV abrem ao clicar.
+      const expanded = node.kind === "SONHO" || node.kind === "PILAR" || open.has(node.id);
+      if (!expanded) return;
+      const children = node.children.filter((c) => (c.kind === "IC" ? matches(c, filter) : true));
+      children.forEach((child, i) => visit(child, depth + 1, [...guides, !isLast], i === children.length - 1));
+    };
+    const pilares = sonho.kind === "SONHO" ? sonho.children : roots;
+    out.push({ node: sonho, depth: 0, guides: [], isLast: false });
+    const shown = pilares.filter((p) => filter === "todos" || p.children.some((c) => c.kind === "IC" && matches(c, filter)));
+    shown.forEach((p, i) => visit(p, 1, [false], i === shown.length - 1));
+    return out;
+  }, [sonho, roots, open, filter]);
+
+  const toggle = (id: string) =>
+    setOpen((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
   return (
-    <div className="flex flex-col gap-5">
-      {/* Sonho + panorama */}
-      <section className="overflow-hidden rounded-2xl border border-brand/30 bg-gradient-to-br from-brand via-brand to-accent/70 p-5 text-white shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <span className="grid size-12 shrink-0 place-items-center rounded-full bg-white/15 ring-4 ring-white/10">
-              <Target className="size-6" />
-            </span>
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-brand-accent">Sonho</p>
-              <h2 className="text-xl font-bold leading-tight">{sonho.name}</h2>
-            </div>
-          </div>
-          <div className="min-w-56 flex-1 sm:max-w-sm">
-            <div className="flex items-baseline justify-between text-sm">
-              <span className="text-white/80">ICs que bateram a meta</span>
-              <span className="text-2xl font-bold tabular-nums">{pctOk}%</span>
-            </div>
-            <div className="mt-1.5 flex h-2.5 overflow-hidden rounded-full bg-white/20">
-              <div className="bg-success" style={{ width: `${summary.total ? (summary.ok / summary.total) * 100 : 0}%` }} />
-              <div className="bg-danger" style={{ width: `${summary.total ? (summary.fail / summary.total) * 100 : 0}%` }} />
-            </div>
-            <p className="mt-1 text-xs text-white/70">
-              {summary.ok} bateram · {summary.fail} não bateram · {summary.noData} sem resultado
-            </p>
-          </div>
+    <div className="flex flex-col gap-4">
+      {/* Como ler */}
+      <section className="rounded-md border border-border bg-surface px-4 py-3 text-sm">
+        <h2 className="text-sm font-semibold text-foreground">Como ler esta tela</h2>
+        <div className="mt-2 grid grid-cols-1 gap-x-8 gap-y-2 text-[13px] text-foreground-muted lg:grid-cols-2">
+          <p>
+            <strong className="text-foreground">Sonho → Pilar → IC → IV.</strong> A tela é uma árvore: cada linha abre nas linhas que estão logo abaixo dela,
+            com um recuo maior.
+          </p>
+          <p>
+            <strong className="text-foreground">IC (Item de Controle) = O QUÊ.</strong> É a meta que a unidade quer fechar: o resultado.
+          </p>
+          <p>
+            <strong className="text-foreground">IV (Item de Verificação) = COMO.</strong> É o que a rotina precisa fazer para o IC fechar. Um IV pode se abrir em
+            outros IVs, até chegar na pessoa responsável.
+          </p>
+          <p>
+            <strong className="text-foreground">Para abrir o COMO de um IC, clique na linha dele.</strong>{" "}
+            <span className="whitespace-nowrap"><Dot className="bg-success" /> bateu a meta</span> ·{" "}
+            <span className="whitespace-nowrap"><Dot className="bg-danger" /> não bateu</span> ·{" "}
+            <span className="whitespace-nowrap"><Dot className="bg-border-strong" /> sem resultado ou sem meta</span> ·{" "}
+            <span className="whitespace-nowrap"><Zap className="inline size-3 text-accent" /> valor calculado pelo SIGO</span>
+          </p>
         </div>
       </section>
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
-        {tiles.map((t) => (
-          <button
-            key={t.key}
-            type="button"
-            onClick={() => setFilter(filter === t.key ? "todos" : t.key)}
-            aria-pressed={filter === t.key}
-            className={cn(
-              "flex flex-col items-start gap-0.5 rounded-xl border bg-surface px-3.5 py-3 text-left transition hover:bg-surface-muted",
-              filter === t.key ? cn("border-transparent ring-2", t.ring) : "border-border",
-            )}
-          >
-            <span className={cn("flex items-center gap-1.5 text-2xl font-bold tabular-nums leading-none", t.tone)}>
-              {t.key === "priority" && <Flame className="size-5" />}
-              {t.value}
-            </span>
-            <span className="text-xs text-foreground-subtle">{t.label}</span>
+      {/* Resumo e filtro */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-foreground-muted">
+          <strong className="text-foreground">{summary.total} ICs</strong>:{" "}
+          <span className="text-success">{summary.ok} bateram a meta</span> · <span className="text-danger">{summary.fail} não bateram</span> · {summary.noData} sem
+          resultado · <span className="text-warning">{summary.withoutIv} ainda sem IVs</span>
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="flex items-center gap-2 text-xs text-foreground-subtle">
+            Mostrar
+            <select
+              value={filter}
+              onChange={(e) => setFilter(e.target.value as Filter)}
+              className="h-8 rounded-md border border-border-strong bg-surface px-2 text-sm text-foreground"
+            >
+              <option value="todos">Todos os ICs</option>
+              <option value="fail">Só os que não bateram a meta</option>
+              <option value="priority">Prioridade máxima (alto impacto que não bateu)</option>
+              <option value="noiv">Sem IVs (sem desdobramento)</option>
+            </select>
+          </label>
+          <button type="button" onClick={() => setOpen(new Set(allIds))} className="h-8 rounded-md border border-border-strong bg-surface px-3 text-xs font-medium text-foreground hover:bg-surface-muted">
+            Abrir tudo
           </button>
-        ))}
+          <button type="button" onClick={() => setOpen(new Set())} className="h-8 rounded-md border border-border-strong bg-surface px-3 text-xs font-medium text-foreground hover:bg-surface-muted">
+            Fechar tudo
+          </button>
+        </div>
       </div>
 
-      {pilares.map((pilar) => (
-        <PilarSection key={pilar.id} pilar={pilar} filter={filter} periodKey={periodKey} canManage={canManage} owners={owners} />
-      ))}
+      <div className="overflow-hidden rounded-md border border-border bg-surface">
+        <div className={cn("hidden border-b border-border-strong bg-surface-muted px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-foreground-subtle", COLS, "md:grid")}>
+          <span>Item</span>
+          <span>Meta</span>
+          <span>Resultado</span>
+          <span>Atingimento</span>
+          <span>Situação</span>
+          <span>Responsável</span>
+          <span />
+        </div>
+        {rows.map((row) => (
+          <TreeRow
+            key={row.node.id}
+            row={row}
+            expanded={open.has(row.node.id)}
+            onToggle={() => toggle(row.node.id)}
+            periodKey={periodKey}
+            canManage={canManage}
+            owners={owners}
+          />
+        ))}
+        {rows.length <= 1 && <p className="px-4 py-8 text-center text-sm text-foreground-subtle">Nenhum IC com esse filtro.</p>}
+      </div>
     </div>
   );
 }
 
-function PilarSection({ pilar, filter, periodKey, canManage, owners }: { pilar: CascadeTreeNode; filter: Filter; periodKey: string; canManage: boolean; owners: Owners }) {
-  const ics = pilar.children.filter((c) => c.kind === "IC" && matches(c, filter));
-  const s = pilar.summary ?? { total: 0, ok: 0, fail: 0, noData: 0, withoutIv: 0 };
-  if (filter !== "todos" && ics.length === 0) return null;
+function Dot({ className }: { className: string }) {
+  return <span className={cn("mr-1 inline-block size-2.5 rounded-full align-middle", className)} />;
+}
 
-  return (
-    <section className="flex flex-col gap-3">
-      <header className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b-2 border-accent/30 pb-2">
-        <h3 className="text-sm font-bold tracking-wide text-accent">{pilar.name}</h3>
-        <div className="flex h-2 w-40 overflow-hidden rounded-full bg-neutral-soft" aria-hidden>
-          <div className="bg-success" style={{ width: `${s.total ? (s.ok / s.total) * 100 : 0}%` }} />
-          <div className="bg-danger" style={{ width: `${s.total ? (s.fail / s.total) * 100 : 0}%` }} />
-        </div>
-        <p className="text-xs text-foreground-subtle">
-          <strong className="text-success">{s.ok}</strong> bateram · <strong className="text-danger">{s.fail}</strong> não bateram
-          {s.noData > 0 && <> · {s.noData} sem resultado</>}
-          {s.withoutIv > 0 && <> · <span className="text-warning">{s.withoutIv} sem IVs</span></>}
+function TreeRow({ row, expanded, onToggle, periodKey, canManage, owners }: { row: Row; expanded: boolean; onToggle: () => void; periodKey: string; canManage: boolean; owners: Owners }) {
+  const { node, depth } = row;
+  const measured = node.kind === "IC" || node.kind === "IV";
+  const st = STATUS[node.status];
+  const hasChildren = node.children.length > 0;
+  const clickable = node.kind === "IC" || node.kind === "IV";
+
+  // Hierarquia pelo recuo (sem linhas de ligação, que poluíam): IC com faixa colorida de status, IV levemente cinza e mais recuado.
+  const paddingLeft = 12 + depth * INDENT;
+
+  if (node.kind === "SONHO") {
+    return (
+      <div className="border-b border-border-strong bg-brand px-3 py-3 text-brand-foreground">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-brand-foreground/70">Sonho</p>
+        <p className="text-base font-semibold">{node.name}</p>
+      </div>
+    );
+  }
+
+  if (node.kind === "PILAR") {
+    const s = node.summary;
+    return (
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-surface-muted px-3 py-2" style={{ paddingLeft }}>
+        <p className="text-sm font-semibold text-foreground">
+          <span className="mr-2 text-[11px] font-semibold uppercase tracking-wide text-foreground-subtle">Pilar</span>
+          {node.name}
         </p>
-        {canManage && (
-          <span className="ml-auto">
+        <div className="flex items-center gap-3">
+          {s && (
+            <p className="text-xs text-foreground-muted">
+              {s.total} ICs · <span className="text-success">{s.ok} bateram</span> · <span className="text-danger">{s.fail} não bateram</span>
+              {s.withoutIv > 0 && <span className="text-warning"> · {s.withoutIv} sem IVs</span>}
+            </p>
+          )}
+          {canManage && (
             <NodeDialog
               mode="create-ic"
-              parentId={pilar.id}
+              parentId={node.id}
               owners={owners}
               trigger={
-                <button type="button" className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-accent hover:bg-accent-soft">
+                <button type="button" className="inline-flex items-center gap-1 rounded border border-border-strong bg-surface px-2 py-1 text-xs font-medium text-foreground hover:bg-surface-muted">
                   <Plus className="size-3.5" /> Novo IC
                 </button>
               }
             />
-          </span>
-        )}
-      </header>
-      <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-2">
-        {ics.map((ic) => (
-          <IcCard key={ic.id} ic={ic} periodKey={periodKey} canManage={canManage} owners={owners} />
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function IcCard({ ic, periodKey, canManage, owners }: { ic: CascadeTreeNode; periodKey: string; canManage: boolean; owners: Owners }) {
-  const [open, setOpen] = useState(false);
-  const st = STATUS[ic.status];
-  const ivCount = countDescendants(ic);
-
-  return (
-    <article className={cn("flex overflow-hidden rounded-xl border bg-surface shadow-sm", ic.status === "FAIL" ? "border-danger/30" : "border-border", open && "lg:col-span-2")}>
-      <div className={cn("w-1.5 shrink-0", st.stripe)} />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex flex-col gap-3 p-3.5">
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="rounded bg-warning-soft px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-warning">IC · O QUÊ</span>
-                {ic.impact === "ALTO" && <span className="rounded bg-danger-soft px-1.5 py-0.5 text-[10px] font-bold text-danger">ALTO IMPACTO</span>}
-              </div>
-              <h4 className="mt-1 break-words text-base font-semibold leading-snug text-foreground">{ic.name}</h4>
-              {ic.owner && (
-                <p className="mt-0.5 flex items-center gap-1.5 text-xs text-foreground-subtle">
-                  <span className="grid size-5 place-items-center rounded-full bg-accent-soft text-[9px] font-semibold text-accent">{initials(ic.owner.name)}</span>
-                  {formatPersonName(ic.owner.name)}
-                </p>
-              )}
-            </div>
-            {canManage && <Actions node={ic} periodKey={periodKey} owners={owners} />}
-          </div>
-
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <p className="text-[11px] uppercase tracking-wide text-foreground-subtle">
-                Resultado{ic.valueSource === "ANTERIOR" && ic.valuePeriod ? ` · ${monthShort(ic.valuePeriod)}` : ""}
-              </p>
-              <p className={cn("flex items-center gap-1.5 text-3xl font-bold tabular-nums leading-none", st.text)}>
-                {formatCascadeValue(ic.unit, ic.value)}
-                {ic.valueSource === "AUTO" && <Zap className="size-4 text-accent" aria-label="Automático (SIGO)" />}
-              </p>
-            </div>
-            <div className="text-right">
-              <p className="text-[11px] uppercase tracking-wide text-foreground-subtle">Meta{ic.pace === "YEAR" ? " do ano" : ic.pace === "MONTH" ? " do mês" : ""}</p>
-              <p className="text-lg font-semibold tabular-nums text-foreground">
-                {ic.polarity === "LOWER" && ic.target !== null ? "≤ " : ""}
-                {formatCascadeValue(ic.unit, ic.target)}
-              </p>
-            </div>
-            <span className={cn("rounded-full px-2.5 py-1 text-xs font-semibold", st.chip)}>{st.label}</span>
-          </div>
-
-          <Progress node={ic} />
-
-          {ic.diagnosis && (
-            <p
-              className={cn(
-                "rounded-lg px-3 py-2 text-xs",
-                ic.diagnosis.tone === "success" && "bg-success-soft text-success",
-                ic.diagnosis.tone === "warning" && "bg-warning-soft text-warning",
-                ic.diagnosis.tone === "danger" && "bg-danger-soft text-danger",
-                ic.diagnosis.tone === "neutral" && "bg-surface-muted text-foreground-muted",
-              )}
-            >
-              <strong>{ic.diagnosis.title}.</strong> {ic.diagnosis.text}
-            </p>
-          )}
-          {ic.reviewNote && <p className="rounded-lg bg-warning-soft px-3 py-1.5 text-[11px] text-warning">Conferir: {ic.reviewNote}</p>}
-          {ic.valueSource && ic.valueSource !== "AUTO" && ic.note && (
-            <p className="text-[11px] text-foreground-subtle">
-              {SOURCE_LABEL[ic.valueSource]} — {ic.note}
-            </p>
           )}
         </div>
-
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          disabled={ic.children.length === 0}
-          className={cn(
-            "flex items-center justify-between border-t border-border px-3.5 py-2 text-xs font-medium",
-            ic.children.length > 0 ? "text-accent hover:bg-accent-soft" : "text-foreground-subtle",
-          )}
-        >
-          <span className="flex items-center gap-1.5">
-            <GitBranch className="size-3.5" />
-            {ic.children.length > 0 ? `COMO: ${ivCount} IV${ivCount > 1 ? "s" : ""} (processo que fecha a meta)` : "Sem IVs — abra o COMO desta meta"}
-          </span>
-          {ic.children.length > 0 && <ChevronDown className={cn("size-4 transition-transform", open && "rotate-180")} />}
-        </button>
-
-        {open && ic.children.length > 0 && (
-          <div className="border-t border-border bg-surface-muted p-3.5">
-            <IvList nodes={ic.children} periodKey={periodKey} canManage={canManage} owners={owners} />
-          </div>
-        )}
       </div>
-    </article>
-  );
-}
-
-/** IVs com linhas de ligação, como numa árvore genealógica. */
-function IvList({ nodes, periodKey, canManage, owners }: { nodes: CascadeTreeNode[]; periodKey: string; canManage: boolean; owners: Owners }) {
-  return (
-    <ul className="ml-2 flex flex-col gap-2 border-l-2 border-border-strong pl-4">
-      {nodes.map((node) => (
-        <IvNode key={node.id} node={node} periodKey={periodKey} canManage={canManage} owners={owners} />
-      ))}
-    </ul>
-  );
-}
-
-function IvNode({ node, periodKey, canManage, owners }: { node: CascadeTreeNode; periodKey: string; canManage: boolean; owners: Owners }) {
-  const [open, setOpen] = useState(node.children.some((c) => c.status === "FAIL"));
-  const st = STATUS[node.status];
-  const hasChildren = node.children.length > 0;
+    );
+  }
 
   return (
-    <li className="relative before:absolute before:-left-4 before:top-5 before:h-0.5 before:w-4 before:bg-border-strong">
-      <div className="rounded-lg border border-border bg-surface">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5">
-          <span className={cn("size-2.5 shrink-0 rounded-full", st.stripe)} aria-hidden />
-          <div className="min-w-0 flex-1 basis-48">
-            <p className="break-words text-sm font-medium text-foreground">
-              <span className="mr-1.5 rounded bg-neutral-soft px-1 py-0.5 text-[9px] font-bold tracking-wide text-foreground-muted">IV</span>
-              {node.name}
+    <div className="border-b border-border last:border-b-0">
+      <div
+        className={cn(
+          "relative border-l-4 px-3 py-2.5",
+          node.kind === "IC" ? (node.status === "OK" ? "border-l-success" : node.status === "FAIL" ? "border-l-danger" : "border-l-border-strong") : "border-l-transparent bg-surface-muted/40",
+          COLS,
+          clickable && hasChildren && "cursor-pointer hover:bg-surface-muted",
+        )}
+        style={{ paddingLeft }}
+        onClick={(e) => {
+          if (!hasChildren) return;
+          if ((e.target as HTMLElement).closest("button, a, [role=dialog]")) return;
+          onToggle();
+        }}
+      >
+        {/* item */}
+        <div className="flex min-w-0 items-start gap-2 pl-3">
+          <span className={cn("mt-0.5 grid size-5 shrink-0 place-items-center text-foreground-subtle", !hasChildren && "opacity-0")}>
+            <ChevronRight className={cn("size-4 transition-transform", expanded && "rotate-90")} />
+          </span>
+          <div className="min-w-0">
+            <p className="break-words text-sm text-foreground">
+              <span
+                className={cn(
+                  "mr-2 inline-block rounded-sm px-1.5 py-px align-middle text-[10px] font-bold tracking-wide",
+                  node.kind === "IC" ? "bg-foreground text-surface" : "border border-border-strong text-foreground-muted",
+                )}
+              >
+                {node.kind === "IC" ? "IC · O QUÊ" : "IV · COMO"}
+              </span>
+              <span className={cn(node.kind === "IC" && "font-semibold")}>{node.name}</span>
+              {node.kind === "IC" && node.impact === "ALTO" && <span className="ml-2 align-middle text-[10px] font-semibold uppercase tracking-wide text-foreground-subtle">· alto impacto</span>}
             </p>
-            {node.description && <p className="text-[11px] text-foreground-subtle">{node.description}</p>}
-            {node.owner && <p className="text-[11px] text-foreground-subtle">Responsável: {formatPersonName(node.owner.name)}</p>}
+            {node.description && <p className="mt-0.5 text-xs text-foreground-subtle">{node.description}</p>}
+            {node.kind === "IC" && !hasChildren && <p className="mt-0.5 text-xs text-warning">Ainda sem IVs: falta abrir o COMO desta meta.</p>}
+            {node.reviewNote && <p className="mt-0.5 text-xs text-warning">Conferir: {node.reviewNote}</p>}
           </div>
-          <div className="flex shrink-0 items-center gap-3 text-xs">
-            <div className="text-right">
-              <p className="flex items-center justify-end gap-1 font-semibold tabular-nums text-foreground">
-                {formatCascadeValue(node.unit, node.value)}
-                {node.valueSource === "AUTO" && <Zap className="size-3 text-accent" aria-label="Automático (SIGO)" />}
-              </p>
-              <p className="text-[11px] text-foreground-subtle">
-                meta {node.polarity === "LOWER" && node.target !== null ? "≤ " : ""}
+        </div>
+
+        {measured && (
+          <>
+            <Cell label="Meta">
+              <span className="tabular-nums text-foreground">
+                {node.polarity === "LOWER" && node.target !== null ? "≤ " : ""}
                 {formatCascadeValue(node.unit, node.target)}
-              </p>
+              </span>
+              {node.pace === "YEAR" && node.target !== null && <span className="block text-[11px] text-foreground-subtle">no ano</span>}
+              {node.pace === "MONTH" && node.target !== null && <span className="block text-[11px] text-foreground-subtle">no mês</span>}
+            </Cell>
+            <Cell label="Resultado">
+              <span className="inline-flex items-center gap-1 font-semibold tabular-nums text-foreground">
+                {formatCascadeValue(node.unit, node.value)}
+                {node.valueSource === "AUTO" && <Zap className="size-3 text-accent" aria-label="Calculado pelo SIGO" />}
+              </span>
+              {node.valueSource === "ANTERIOR" && node.valuePeriod && <span className="block text-[11px] text-foreground-subtle">de {monthShort(node.valuePeriod)}</span>}
+            </Cell>
+            <Cell label="Atingimento">
+              <span className="tabular-nums text-foreground-muted">{node.progress === null ? "—" : `${Math.round(node.progress * 100)}%`}</span>
+            </Cell>
+            <Cell label="Situação">
+              <span className={cn("inline-flex items-center gap-1.5 text-[13px] font-medium", st.text)}>
+                <Dot className={cn(st.dot, "mr-0")} />
+                {st.label}
+              </span>
+            </Cell>
+            <Cell label="Responsável">
+              <span className="text-[13px] text-foreground-muted">{node.owner ? formatPersonName(node.owner.name) : "—"}</span>
+            </Cell>
+            <div className="mt-1 flex items-center justify-end gap-0.5 md:mt-0">
+              {canManage && <RowActions node={node} periodKey={periodKey} owners={owners} />}
             </div>
-            <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium", st.chip)}>{st.label}</span>
-          </div>
-          {canManage && <Actions node={node} periodKey={periodKey} owners={owners} compact />}
-          {hasChildren && (
-            <button
-              type="button"
-              onClick={() => setOpen((v) => !v)}
-              aria-label={open ? "Fechar" : "Abrir"}
-              className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-[11px] font-medium text-accent hover:bg-accent-soft"
-            >
-              {node.children.length} <ChevronDown className={cn("size-3.5 transition-transform", open && "rotate-180")} />
-            </button>
-          )}
-        </div>
-        {node.progress !== null && (
-          <div className="px-3 pb-2">
-            <Progress node={node} thin />
-          </div>
+          </>
         )}
       </div>
-      {open && hasChildren && (
-        <div className="mt-2">
-          <IvList nodes={node.children} periodKey={periodKey} canManage={canManage} owners={owners} />
-        </div>
-      )}
-    </li>
-  );
-}
 
-function Progress({ node, thin }: { node: CascadeTreeNode; thin?: boolean }) {
-  if (node.progress === null) return null;
-  const st = STATUS[node.status];
-  return (
-    <div>
-      <div className={cn("overflow-hidden rounded-full bg-neutral-soft", thin ? "h-1" : "h-2")}>
-        <div className={cn("h-full rounded-full transition-all", st.bar)} style={{ width: `${Math.max(Math.round(node.progress * 100), 2)}%` }} />
-      </div>
-      {!thin && node.expected !== null && node.pace !== "NONE" && node.target !== null && node.expected !== node.target && (
-        <p className="mt-1 text-[11px] text-foreground-subtle">Esperado até aqui: {formatCascadeValue(node.unit, node.expected)}</p>
+      {expanded && node.kind === "IC" && node.diagnosis && (
+        <div className="border-t border-border bg-surface-muted px-3 py-2 text-[13px]" style={{ paddingLeft: paddingLeft + 34 }}>
+          <span className="font-semibold text-foreground">Leitura: {node.diagnosis.title}.</span>{" "}
+          <span className="text-foreground-muted">{node.diagnosis.text}</span>
+        </div>
       )}
     </div>
   );
 }
 
-function Actions({ node, periodKey, owners, compact }: { node: CascadeTreeNode; periodKey: string; owners: Owners; compact?: boolean }) {
-  const icon = "grid size-7 place-items-center rounded text-foreground-subtle hover:bg-surface-muted";
+/** Célula com o rótulo da coluna visível só no celular (no computador o rótulo está no cabeçalho). */
+function Cell({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex shrink-0 items-center gap-0.5">
+    <div className="mt-1 flex items-baseline gap-2 text-sm md:mt-0 md:block">
+      <span className="w-24 shrink-0 text-[11px] uppercase tracking-wide text-foreground-subtle md:hidden">{label}</span>
+      <span>{children}</span>
+    </div>
+  );
+}
+
+function RowActions({ node, periodKey, owners }: { node: CascadeTreeNode; periodKey: string; owners: Owners }) {
+  const icon = "grid size-7 place-items-center rounded text-foreground-subtle hover:bg-surface hover:text-foreground";
+  return (
+    <>
       <ValueDialog
         nodeId={node.id}
         nodeName={node.name}
         periodKey={periodKey}
         currentValue={node.valuePeriod === periodKey ? node.value : null}
         isAuto={node.valueSource === "AUTO"}
-        trigger={<button type="button" className={cn("rounded font-medium text-accent hover:bg-accent-soft", compact ? "px-1.5 py-1 text-[11px]" : "px-2 py-1 text-xs")}>Resultado</button>}
+        trigger={<button type="button" className="rounded border border-border-strong bg-surface px-2 py-1 text-xs font-medium text-foreground hover:bg-surface-muted">Atualizar</button>}
       />
       <NodeDialog
         mode="create-iv"
         parentId={node.id}
         owners={owners}
-        trigger={<button type="button" aria-label="Adicionar IV" title="Adicionar IV (como)" className={icon}><Plus className="size-4" /></button>}
+        trigger={<button type="button" aria-label="Adicionar IV (como)" title="Adicionar IV (como)" className={icon}><Plus className="size-4" /></button>}
       />
       <NodeDialog
         mode="edit"
@@ -367,8 +343,8 @@ function Actions({ node, periodKey, owners, compact }: { node: CascadeTreeNode; 
         nodeId={node.id}
         nodeName={node.name}
         childCount={countDescendants(node)}
-        trigger={<button type="button" aria-label="Excluir" title="Excluir" className={cn(icon, "hover:bg-danger-soft hover:text-danger")}><Trash2 className="size-4" /></button>}
+        trigger={<button type="button" aria-label="Excluir" title="Excluir" className={cn(icon, "hover:text-danger")}><Trash2 className="size-4" /></button>}
       />
-    </div>
+    </>
   );
 }
