@@ -1,5 +1,5 @@
 import "server-only";
-import { AlignmentType, BorderStyle, Document, HeadingLevel, Packer, Paragraph, Table, TableCell, TableRow, TextRun, WidthType } from "docx";
+import { AlignmentType, BorderStyle, Document, Packer, Paragraph, Table, TableCell, TableRow, TextRun, WidthType } from "docx";
 import { buildMeasureDocumentContent, type MeasureDocumentInput } from "@/domain/discipline/document";
 
 const BORDER = { style: BorderStyle.SINGLE, size: 4, color: "BBBBBB" };
@@ -38,23 +38,25 @@ export async function buildMeasureDocx(input: MeasureDocumentInput): Promise<Buf
   const doc = new Document({
     creator: "SIGO",
     title: content.title,
+    // Fonte única e legível em todo o documento (o Word usava a fonte padrão do tema, com título azul).
+    styles: { default: { document: { run: { font: "Calibri", size: 23, color: "1A1A1A" } } } },
     sections: [
       {
         properties: { page: { margin: { top: 1000, bottom: 1000, left: 1200, right: 1200 } } },
         children: [
           new Paragraph({
             alignment: AlignmentType.CENTER,
-            heading: HeadingLevel.HEADING_1,
-            spacing: { after: 300 },
-            children: [new TextRun({ text: content.title, bold: true, size: 30 })],
+            spacing: { before: 100, after: 360 },
+            border: { bottom: { style: BorderStyle.SINGLE, size: 8, color: "1A1A1A", space: 8 } },
+            children: [new TextRun({ text: content.title, bold: true, size: 32, font: "Calibri", color: "000000" })],
           }),
           new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: content.identification.map(([l, v]) => idRow(l, v)) }),
           ...content.paragraphs.map(
             (text) =>
               new Paragraph({
                 alignment: AlignmentType.JUSTIFIED,
-                spacing: { before: 240, line: 320 },
-                children: [new TextRun({ text, size: 22 })],
+                spacing: { before: 240, line: 340 },
+                children: [new TextRun({ text, size: 23 })],
               }),
           ),
           new Paragraph({ spacing: { before: 360 }, children: [new TextRun({ text: "Local e data: ____________________, ____/____/________", size: 22 })] }),
