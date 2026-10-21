@@ -12,7 +12,7 @@ export const CHECKLIST_JUSTIFICATION_REASONS: Record<
   { label: string; countsAsCompliant: boolean }
 > = {
   ATESTADO_MEDICO: { label: "Atestado médico", countsAsCompliant: true },
-  FOLGA_FERIAS_APROVADA: { label: "Férias ou folga aprovada", countsAsCompliant: true },
+  FOLGA_FERIAS_APROVADA: { label: "Colaborador faltou, de folga ou férias", countsAsCompliant: true },
   EQUIPAMENTO_INDISPONIVEL: { label: "Equipamento parado ou não utilizado no dia", countsAsCompliant: true },
   FALHA_SISTEMA: { label: "Falha do sistema (checklist feito mas não registrado)", countsAsCompliant: true },
   TREINAMENTO_OUTRA_ATIVIDADE: { label: "Em treinamento ou deslocado pra outra atividade", countsAsCompliant: true },
@@ -20,10 +20,10 @@ export const CHECKLIST_JUSTIFICATION_REASONS: Record<
   OUTRO: { label: "Outro", countsAsCompliant: false },
 };
 
-/** Motivos oferecidos ao justificar UM equipamento do checklist (atestado/férias valem pro dia inteiro, não pra um item).
- * "Outro" documenta mas não conta como cumprido — mesma regra do catálogo acima. */
+/** Motivos oferecidos ao justificar os equipamentos do checklist de um colaborador (pode ser item a item ou todos de
+ * uma vez, ex: quando ele faltou). "Outro" documenta mas não conta como cumprido — mesma regra do catálogo acima. */
 export const CHECKLIST_ITEM_JUSTIFICATION_REASON_OPTIONS = (
-  ["EQUIPAMENTO_INDISPONIVEL", "FALHA_SISTEMA", "TREINAMENTO_OUTRA_ATIVIDADE", "OUTRO"] as ChecklistJustificationReason[]
+  ["FOLGA_FERIAS_APROVADA", "ATESTADO_MEDICO", "EQUIPAMENTO_INDISPONIVEL", "FALHA_SISTEMA", "TREINAMENTO_OUTRA_ATIVIDADE", "OUTRO"] as ChecklistJustificationReason[]
 ).map((key) => ({ key, ...CHECKLIST_JUSTIFICATION_REASONS[key] }));
 
 export const CHECKLIST_JUSTIFICATION_REASON_OPTIONS = (
