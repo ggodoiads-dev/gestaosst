@@ -5,15 +5,15 @@ import { requireUser, ForbiddenError } from "@/server/auth/current-user";
 import * as service from "@/server/services/discipline.service";
 import type { DisciplineReasonKey, DisciplineStepKey } from "@/domain/discipline/ladder";
 
-export type DisciplineResult = { ok: true } | { ok: false; error: string };
+export type DisciplineResult = { ok: true; id?: string } | { ok: false; error: string };
 
-async function run(fn: () => Promise<unknown>): Promise<DisciplineResult> {
+async function run(fn: () => Promise<{ id: string }>): Promise<DisciplineResult> {
   try {
-    await fn();
+    const created = await fn();
     revalidatePath("/pendencias-advertencia");
     revalidatePath("/escalas");
     revalidatePath("/presenca");
-    return { ok: true };
+    return { ok: true, id: created.id };
   } catch (error) {
     if (error instanceof ForbiddenError) return { ok: false, error: error.message };
     if (error instanceof Error && /Motivo inválido|Medida inválida|Data inválida|Escreva o motivo|já foi tratada/.test(error.message)) {

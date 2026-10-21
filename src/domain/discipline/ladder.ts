@@ -22,8 +22,8 @@ export const DISCIPLINE_REASONS = [
 
 export type DisciplineReasonKey = (typeof DISCIPLINE_REASONS)[number]["key"];
 
-/** Checklist só gera medida a partir deste dia (o histórico anterior não vira punição retroativa). */
-export const DISCIPLINE_CHECKLIST_START_KEY = "2026-10-22";
+/** As medidas começam a contar neste dia (checklist e falta): o histórico anterior não vira punição retroativa. */
+export const DISCIPLINE_START_KEY = "2026-10-21";
 
 export function disciplineStepLabel(key: string): string {
   return DISCIPLINE_STEPS.find((s) => s.key === key)?.label ?? key;

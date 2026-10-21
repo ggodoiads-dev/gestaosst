@@ -13,6 +13,7 @@ import { FormField } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { applyMeasureAction, dismissOccurrenceAction } from "@/server/actions/discipline.actions";
+import { stepHasDocument } from "@/domain/discipline/document";
 import {
   DISCIPLINE_STEPS,
   disciplineReasonLabel,
@@ -37,6 +38,7 @@ export type DisciplineHistoryRow = {
   dayKey: string;
   step: string;
   status: "APLICADA" | "DISPENSADA";
+  hasDocument: boolean;
   note: string | null;
   decidedByName: string;
   decidedAtLabel: string;
@@ -66,7 +68,11 @@ export function MeasureDialog({ entry, mode, trigger }: { entry: DisciplineEntry
         setError(res.error);
         return;
       }
-      toast.success(isApply ? `${disciplineStepLabel(step)} registrada.` : "Ocorrência dispensada.");
+      const withDocument = isApply && res.id && stepHasDocument(step);
+      toast.success(
+        isApply ? `${disciplineStepLabel(step)} registrada.${withDocument ? " O documento para imprimir está sendo baixado." : ""}` : "Ocorrência dispensada.",
+      );
+      if (withDocument) window.location.assign(`/api/medidas-disciplinares/${res.id}/docx`);
       setOpen(false);
       setNote("");
       router.refresh();
@@ -196,6 +202,11 @@ export function DisciplineSection({ items, history }: { items: DisciplineEntry[]
                       {h.status === "APLICADA" ? disciplineStepLabel(h.step) : "Dispensada"}
                     </span>
                     {h.note && <span className="text-foreground-subtle"> — “{h.note}”</span>}
+                    {h.hasDocument && (
+                      <a href={`/api/medidas-disciplinares/${h.id}/docx`} className="ml-2 text-accent hover:underline">
+                        Documento (Word)
+                      </a>
+                    )}
                   </span>
                   <span className="text-foreground-subtle">
                     {h.decidedByName} · {h.decidedAtLabel}

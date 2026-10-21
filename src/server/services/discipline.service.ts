@@ -4,9 +4,10 @@ import { recordAudit } from "@/server/services/audit";
 import type { CurrentUser } from "@/server/auth/current-user";
 import { hasPermission, ForbiddenError } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
+import { stepHasDocument } from "@/domain/discipline/document";
 import { listChecklistNonCompletion } from "@/server/services/checklist-compliance.service";
 import {
-  DISCIPLINE_CHECKLIST_START_KEY,
+  DISCIPLINE_START_KEY,
   DISCIPLINE_REASONS,
   DISCIPLINE_STEPS,
   nextDisciplineStep,
@@ -47,6 +48,7 @@ export type DisciplineHistoryEntry = {
   dayKey: string;
   step: string;
   status: "APLICADA" | "DISPENSADA";
+  hasDocument: boolean;
   note: string | null;
   decidedByName: string;
   decidedAt: Date;
@@ -80,9 +82,9 @@ export async function getDisciplineOverview(user: CurrentUser) {
   }
 
   const [checklistDays, faltas] = await Promise.all([
-    listChecklistNonCompletion(DISCIPLINE_CHECKLIST_START_KEY),
+    listChecklistNonCompletion(DISCIPLINE_START_KEY),
     db.scheduleDayNote.findMany({
-      where: { status: "FALTA", warningApplied: false },
+      where: { status: "FALTA", warningApplied: false, date: { gte: new Date(`${DISCIPLINE_START_KEY}T00:00:00Z`) } },
       include: { collaborator: { select: { id: true, name: true, area: { select: { name: true } } } } },
       orderBy: { date: "asc" },
     }),
@@ -126,6 +128,7 @@ export async function getDisciplineOverview(user: CurrentUser) {
     dayKey: dayKeyOf(m.referenceDate),
     step: m.step,
     status: m.status as "APLICADA" | "DISPENSADA",
+    hasDocument: m.status === "APLICADA" && stepHasDocument(m.step),
     note: m.note,
     decidedByName: m.decidedBy.name,
     decidedAt: m.decidedAt,
@@ -186,3 +189,19 @@ async function decide(user: CurrentUser, input: DecideInput, status: "APLICADA" 
 
 export const applyMeasure = (user: CurrentUser, input: DecideInput) => decide(user, input, "APLICADA");
 export const dismissOccurrence = (user: CurrentUser, input: DecideInput) => decide(user, input, "DISPENSADA");
+
+/** Dados pro documento impresso de uma medida aplicada (com a posição dela na escada daquele motivo). */
+export async function getMeasureForDocument(user: CurrentUser, id: string) {
+  requireDiscipline(user);
+  const measure = await db.disciplinaryMeasure.findUnique({
+    where: { id },
+    include: {
+      collaborator: { select: { name: true, matricula: true, function: { select: { name: true } }, area: { select: { name: true } } } },
+    },
+  });
+  if (!measure || measure.status !== "APLICADA") return null;
+  const sequence = await db.disciplinaryMeasure.count({
+    where: { collaboratorId: measure.collaboratorId, reason: measure.reason, status: "APLICADA", decidedAt: { lte: measure.decidedAt } },
+  });
+  return { measure, sequence };
+}
