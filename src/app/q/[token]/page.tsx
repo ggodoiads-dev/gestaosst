@@ -295,7 +295,7 @@ function PublicCollaboratorView({
       )}
       <h1 className="text-lg font-semibold text-foreground">{collaborator.name}</h1>
       <Badge tone={summary.apt ? "success" : "danger"}>{summary.apt ? "Apto" : "Não apto"}</Badge>
-      {summary.padrinho && <PadrinhoChip completedDate={summary.padrinho.completedDate} />}
+      {summary.padrinho && <PadrinhoChip padrinho={summary.padrinho} baseUrl={baseUrl} />}
 
       <div className="grid w-full grid-cols-2 gap-3 text-left text-sm">
         <div>
@@ -468,7 +468,7 @@ function PublicAreaView({
                       <div>
                         <p className="font-medium text-foreground">{collaborator.name}</p>
                         <p className="text-xs text-foreground-subtle">Matrícula: {collaborator.matricula ?? "—"}</p>
-                        {summary.padrinho && <PadrinhoChip completedDate={summary.padrinho.completedDate} />}
+                        {summary.padrinho && <PadrinhoChip padrinho={summary.padrinho} baseUrl={baseUrl} />}
                       </div>
                     </div>
                     <Badge tone={summary.apt ? "success" : "neutral"}>{summary.apt ? "Apto" : "Não apto"}</Badge>
@@ -486,10 +486,15 @@ function PublicAreaView({
 }
 
 /** Selo de padrinho certificado (Trilha de Treinamento para Padrinhos). */
-function PadrinhoChip({ completedDate }: { completedDate: Date }) {
+function PadrinhoChip({ padrinho, baseUrl }: { padrinho: NonNullable<QualificationSummary["padrinho"]>; baseUrl: string }) {
   return (
-    <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-warning px-2.5 py-0.5 text-[11px] font-semibold text-white">
-      <Award className="size-3.5" /> Padrinho certificado · {formatDate(completedDate)}
+    <span className="mt-1 inline-flex flex-wrap items-center gap-2">
+      <span className="inline-flex items-center gap-1 rounded-full bg-warning px-2.5 py-0.5 text-[11px] font-semibold text-white">
+        <Award className="size-3.5" /> Padrinho certificado · {formatDate(padrinho.completedDate)}
+      </span>
+      {padrinho.certificate && (
+        <PublicAttachmentLink baseUrl={baseUrl} attachmentId={padrinho.certificate.attachmentId} mimeType={padrinho.certificate.mimeType} />
+      )}
     </span>
   );
 }

@@ -223,7 +223,7 @@ export type CollaboratorQualificationSummary = {
   hasAnyRecord: boolean;
   hasAnyExpired: boolean;
   /** Fez a Trilha de Treinamento para Padrinhos (sem validade) — destaque nas fichas e no QR. */
-  padrinho: { completedDate: Date } | null;
+  padrinho: { completedDate: Date; certificate: QualificationCertificateRef } | null;
   /** "Apto" olha só NR (o que o usuário pediu: sem nenhuma NR cadastrada, ou com alguma vencida,
    * é inapto — independe de ter ASO em dia ou não). */
   apt: boolean;
@@ -268,7 +268,7 @@ export async function getCollaboratorQualificationSummary(collaboratorId: string
     nrs: nrs.map((r) => ({ typeName: r.qualificationType.name, expiresAt: r.expiresAt, certificate: latestCertificate(r) })),
     hasAnyRecord: current.length > 0,
     hasAnyExpired,
-    padrinho: padrinhoRecord ? { completedDate: padrinhoRecord.completedDate } : null,
+    padrinho: padrinhoRecord ? { completedDate: padrinhoRecord.completedDate, certificate: latestCertificate(padrinhoRecord) } : null,
     apt: !functionRequiresNr || (nrs.length > 0 && !hasAnyNrExpired),
   };
 }
