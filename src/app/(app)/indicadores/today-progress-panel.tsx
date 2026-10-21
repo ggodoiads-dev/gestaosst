@@ -27,7 +27,7 @@ export function TodayProgressPanel({
   dayKey: string;
   canJustify: boolean;
   when?: string;
-  off?: { id: string; name: string; areaName: string | null; reason: string }[];
+  off?: { id: string; name: string; areaName: string | null; reason: string; kind: "FALTA" | "AUSENCIA" }[];
 }) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("todos");
@@ -35,6 +35,9 @@ export function TodayProgressPanel({
   const [open, setOpen] = useState<string | null>(null);
 
   const total = concluded.length + remaining.length;
+  const isClosedDay = when !== "hoje";
+  const faltas = off.filter((o) => o.kind === "FALTA");
+  const ausencias = off.filter((o) => o.kind !== "FALTA");
   const noAccessCount = remaining.filter((c) => c.noAccess).length;
   const areas = useMemo(
     () => [...new Set([...concluded, ...remaining].map((c) => c.areaName).filter((a): a is string => !!a))].sort(),
@@ -76,7 +79,12 @@ export function TodayProgressPanel({
         &quot;Cobrados&quot; = quem está <strong>escalado para trabalhar neste dia</strong>
         {off.length > 0 && (
           <>
-            . Mais <strong>{off.length}</strong> pessoa(s) cobrada(s) por checklist estão de folga ou ausentes e não entram hoje
+            . Mais <strong>{ausencias.length}</strong> de folga, férias ou atestado (sem medida)
+            {faltas.length > 0 && (
+              <>
+                {" "}e <strong>{faltas.length}</strong> com falta lançada (a falta tem a sua própria escada de advertência)
+              </>
+            )}
           </>
         )}
         .
@@ -125,7 +133,12 @@ export function TodayProgressPanel({
 
       {shownRemaining.length > 0 && (
         <section className="flex flex-col gap-2">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-warning">Ainda faltam ({shownRemaining.length})</h3>
+          <div>
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-warning">Estavam presentes e não concluíram ({shownRemaining.length})</h3>
+            <p className="text-[11px] text-foreground-subtle">
+              Só gera advertência de checklist quem não fez nenhum equipamento no dia. Fez parte do checklist = cumpriu, sem medida.
+            </p>
+          </div>
           <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
             {shownRemaining.map((c) => {
               const expanded = open === c.id;
@@ -151,6 +164,13 @@ export function TodayProgressPanel({
                           <span className="rounded bg-neutral-soft px-1.5 py-0.5 text-[11px] font-medium text-foreground-muted">
                             sem acesso
                           </span>
+                        )}
+                        {isClosedDay && !c.noAccess && (
+                          c.done === 0 ? (
+                            <span className="rounded bg-danger-soft px-1.5 py-0.5 text-[11px] font-medium text-danger">gera advertência</span>
+                          ) : (
+                            <span className="rounded bg-neutral-soft px-1.5 py-0.5 text-[11px] font-medium text-foreground-muted">fez parte · sem medida</span>
+                          )
                         )}
                       </span>
                       <span className="mt-0.5 flex items-center gap-2">
@@ -240,24 +260,39 @@ export function TodayProgressPanel({
         </section>
       )}
 
-      {off.length > 0 && (
+      {faltas.length > 0 && (
+        <details className="rounded-lg border border-danger/30 bg-surface px-3 py-2 text-sm">
+          <summary className="cursor-pointer text-xs font-medium text-danger">
+            Falta lançada {when === "hoje" ? "hoje" : "neste dia"} — advertência por falta ({faltas.length})
+          </summary>
+          <OffList entries={faltas} dayKey={dayKey} />
+        </details>
+      )}
+
+      {ausencias.length > 0 && (
         <details className="rounded-lg border border-border bg-surface px-3 py-2 text-sm">
           <summary className="cursor-pointer text-xs font-medium text-foreground-subtle">
-            De folga ou ausentes {when === "hoje" ? "hoje" : "neste dia"} — não cobrados ({off.length})
+            Folga, férias ou atestado {when === "hoje" ? "hoje" : "neste dia"} — não cobrados, sem medida ({ausencias.length})
           </summary>
-          <ul className="mt-2 grid grid-cols-1 gap-x-6 gap-y-1 text-xs sm:grid-cols-2">
-            {off.map((o) => (
-              <li key={o.id} className="flex items-center justify-between gap-2">
-                <Link href={`/indicadores/checklist/${o.id}?dia=${dayKey}`} className="min-w-0 truncate hover:underline">
-                  {formatPersonName(o.name)}
-                  {o.areaName && <span className="text-foreground-subtle"> · {o.areaName}</span>}
-                </Link>
-                <span className="shrink-0 text-foreground-subtle">{o.reason}</span>
-              </li>
-            ))}
-          </ul>
+          <OffList entries={ausencias} dayKey={dayKey} />
         </details>
       )}
     </div>
+  );
+}
+
+function OffList({ entries, dayKey }: { entries: { id: string; name: string; areaName: string | null; reason: string }[]; dayKey: string }) {
+  return (
+    <ul className="mt-2 grid grid-cols-1 gap-x-6 gap-y-1 text-xs sm:grid-cols-2">
+      {entries.map((o) => (
+        <li key={o.id} className="flex items-center justify-between gap-2">
+          <Link href={`/indicadores/checklist/${o.id}?dia=${dayKey}`} className="min-w-0 truncate hover:underline">
+            {formatPersonName(o.name)}
+            {o.areaName && <span className="text-foreground-subtle"> · {o.areaName}</span>}
+          </Link>
+          <span className="shrink-0 text-foreground-subtle">{o.reason}</span>
+        </li>
+      ))}
+    </ul>
   );
 }

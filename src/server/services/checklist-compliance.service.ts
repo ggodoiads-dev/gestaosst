@@ -497,7 +497,8 @@ export type TodayProgressEntry = {
 
 /** Andamento de HOJE (informativo — NÃO entra na % de aderência, que é sempre até D-1): de quem está escalado
  * e é cobrado por checklist, quem já concluiu tudo e quem ainda falta. */
-export type DayOffEntry = { id: string; name: string; areaName: string | null; reason: string };
+/** `FALTA` = falta lançada (gera advertência por falta, outra escada); `AUSENCIA` = folga, férias, atestado — sem medida. */
+export type DayOffEntry = { id: string; name: string; areaName: string | null; reason: string; kind: "FALTA" | "AUSENCIA" };
 
 async function computeDayProgress(
   day: Date,
@@ -526,7 +527,7 @@ async function computeDayProgress(
     .map(({ c }) => {
       const note = noteByCollab.get(c.id);
       const label = note?.status === "FALTA" ? "falta lançada" : note?.status === "ATESTADO" ? "atestado" : note?.status === "FERIAS" ? "férias" : note ? "folga/ausência lançada" : "folga na escala";
-      return { id: c.id, name: c.name, areaName: c.area?.name ?? null, reason: label };
+      return { id: c.id, name: c.name, areaName: c.area?.name ?? null, reason: label, kind: note?.status === "FALTA" ? ("FALTA" as const) : ("AUSENCIA" as const) };
     })
     .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
 

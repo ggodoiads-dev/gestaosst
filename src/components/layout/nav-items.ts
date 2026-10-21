@@ -279,30 +279,31 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
   }
   if (importacoes.length > 0) groups.push({ key: "importacoes", title: "Importações", items: importacoes });
 
-  const admin: NavItem[] = [];
+  // Cadastros do dia a dia (cada um pela sua permissão) — não são "Administração".
+  const cadastros: NavItem[] = [];
   if (p.has(PERMISSIONS.MASTERDATA_MANAGE)) {
-    admin.push({ href: "/cadastros/areas", label: "Áreas e Unidades", icon: "building" });
-    admin.push({ href: "/cadastros/equipamentos", label: "Tipos de Equipamento", icon: "equipment" });
-    admin.push({ href: "/cadastros/modelos-checklist", label: "Modelos de Checklist", icon: "checklistTemplate" });
+    cadastros.push({ href: "/cadastros/equipamentos", label: "Tipos de Equipamento", icon: "equipment" });
+    cadastros.push({ href: "/cadastros/modelos-checklist", label: "Modelos de Checklist", icon: "checklistTemplate" });
   }
   if (p.has(PERMISSIONS.QUALIFICATION_MANAGE)) {
-    admin.push({ href: "/cadastros/qualificacoes", label: "Tipos de Qualificação", icon: "qualifications" });
+    cadastros.push({ href: "/cadastros/qualificacoes", label: "Tipos de Qualificação", icon: "qualifications" });
   }
   if (p.has(PERMISSIONS.EPI_MANAGE)) {
-    admin.push({ href: "/cadastros/tipos-epi", label: "Tipos de EPI", icon: "epi" });
-    admin.push({ href: "/cadastros/funcoes", label: "Funções", icon: "jobFunctions" });
+    cadastros.push({ href: "/cadastros/tipos-epi", label: "Tipos de EPI", icon: "epi" });
+    cadastros.push({ href: "/cadastros/funcoes", label: "Funções", icon: "jobFunctions" });
   }
   if (p.has(PERMISSIONS.SCHEDULE_MANAGE)) {
-    admin.push({ href: "/cadastros/escalas", label: "Tipos de Escala", icon: "schedules" });
+    cadastros.push({ href: "/cadastros/escalas", label: "Tipos de Escala", icon: "schedules" });
   }
+  if (cadastros.length > 0) groups.push({ key: "cadastros", title: "Cadastros", items: cadastros });
+
+  // Administração: só o administrador (quem gerencia usuários e perfis) — o Gestor vê tudo, menos esta aba.
+  const admin: NavItem[] = [];
   if (p.has(PERMISSIONS.USER_MANAGE)) {
+    if (p.has(PERMISSIONS.MASTERDATA_MANAGE)) admin.push({ href: "/cadastros/areas", label: "Áreas e Unidades", icon: "building" });
     admin.push({ href: "/usuarios", label: "Usuários e Permissões", icon: "users" });
-  }
-  if (p.has(PERMISSIONS.USER_MANAGE)) {
     admin.push({ href: "/acessos", label: "Acessos", icon: "access" });
-  }
-  if (p.has(PERMISSIONS.AUDIT_VIEW)) {
-    admin.push({ href: "/auditoria", label: "Auditoria", icon: "audit" });
+    if (p.has(PERMISSIONS.AUDIT_VIEW)) admin.push({ href: "/auditoria", label: "Auditoria", icon: "audit" });
   }
   if (admin.length > 0) groups.push({ key: "admin", title: "Administração", items: admin });
 
