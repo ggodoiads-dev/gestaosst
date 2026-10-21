@@ -1,14 +1,29 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { createContext, useContext, useMemo, useState } from "react";
 import { ChevronRight, List, Network, Pencil, Plus, Trash2, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatPersonName } from "@/lib/format-name";
 import { formatCascadeValue } from "@/domain/cascade/status";
 import type { CascadeTreeNode } from "@/server/services/cascade.service";
-import { DeleteNodeDialog, NodeDialog, ValueDialog } from "./cascade-dialogs";
+import { DeleteNodeDialog, NodeDialog, ValueDialog, type ParentOption } from "./cascade-dialogs";
 
 type Owners = { id: string; name: string }[];
+
+/** Todos os lugares onde um item pode ficar (pilares, ICs e IVs), com o caminho completo na etiqueta. */
+function buildParentOptions(roots: CascadeTreeNode[]): ParentOption[] {
+  const out: ParentOption[] = [];
+  const walk = (node: CascadeTreeNode, path: string[], ancestors: string[]) => {
+    if (node.kind === "PILAR") out.push({ id: node.id, kind: "PILAR", label: node.name, ancestors });
+    if (node.kind === "IC" || node.kind === "IV") out.push({ id: node.id, kind: node.kind, label: `${node.kind} · ${[...path, node.name].join(" › ")}`, ancestors });
+    const nextPath = node.kind === "SONHO" ? [] : node.kind === "PILAR" ? [node.name] : [...path, node.name];
+    node.children.forEach((c) => walk(c, nextPath, [...ancestors, node.id]));
+  };
+  roots.forEach((r) => walk(r, [], []));
+  return out;
+}
+
+const ParentOptionsContext = createContext<ParentOption[]>([]);
 type Filter = "todos" | "fail" | "priority" | "noiv";
 
 const STATUS = {
@@ -46,6 +61,7 @@ export function CascadeTree({ roots, periodKey, canManage, owners }: { roots: Ca
   const [pilarId, setPilarId] = useState("");
   const [open, setOpen] = useState<Set<string>>(new Set());
   const summary = sonho.summary ?? { total: 0, ok: 0, fail: 0, noData: 0, withoutIv: 0 };
+  const parentOptions = useMemo(() => buildParentOptions(roots), [roots]);
 
   const allIds = useMemo(() => {
     const ids: string[] = [];
@@ -83,6 +99,7 @@ export function CascadeTree({ roots, periodKey, canManage, owners }: { roots: Ca
     });
 
   return (
+    <ParentOptionsContext.Provider value={parentOptions}>
     <div className="flex flex-col gap-4">
       {/* Como ler */}
       <section className="rounded-md border border-border bg-surface px-4 py-3 text-sm">
@@ -159,6 +176,18 @@ export function CascadeTree({ roots, periodKey, canManage, owners }: { roots: Ca
               <option value="noiv">Sem IVs (sem desdobramento)</option>
             </select>
           </label>
+          {canManage && (
+            <NodeDialog
+              mode="create"
+              owners={owners}
+              parentOptions={parentOptions}
+              trigger={
+                <button type="button" className="inline-flex h-8 items-center gap-1 rounded-md bg-accent px-3 text-xs font-semibold text-accent-foreground hover:bg-accent-hover">
+                  <Plus className="size-3.5" /> Novo IC ou IV
+                </button>
+              }
+            />
+          )}
           <button type="button" onClick={() => setOpen(new Set(allIds))} className="h-8 rounded-md border border-border-strong bg-surface px-3 text-xs font-medium text-foreground hover:bg-surface-muted">
             Abrir tudo
           </button>
@@ -196,6 +225,7 @@ export function CascadeTree({ roots, periodKey, canManage, owners }: { roots: Ca
       </div>
       )}
     </div>
+    </ParentOptionsContext.Provider>
   );
 }
 
@@ -205,6 +235,7 @@ function Dot({ className }: { className: string }) {
 
 function TreeRow({ row, expanded, onToggle, periodKey, canManage, owners }: { row: Row; expanded: boolean; onToggle: () => void; periodKey: string; canManage: boolean; owners: Owners }) {
   const { node, depth } = row;
+  const parentOptions = useContext(ParentOptionsContext);
   const measured = node.kind === "IC" || node.kind === "IV";
   const st = STATUS[node.status];
   const hasChildren = node.children.length > 0;
@@ -239,9 +270,11 @@ function TreeRow({ row, expanded, onToggle, periodKey, canManage, owners }: { ro
           )}
           {canManage && (
             <NodeDialog
-              mode="create-ic"
-              parentId={node.id}
+              mode="create"
+              presetKind="IC"
+              presetParentId={node.id}
               owners={owners}
+              parentOptions={parentOptions}
               trigger={
                 <button type="button" className="inline-flex items-center gap-1 rounded border border-border-strong bg-surface px-2 py-1 text-xs font-medium text-foreground hover:bg-surface-muted">
                   <Plus className="size-3.5" /> Novo IC
@@ -351,6 +384,7 @@ function Cell({ label, children }: { label: string; children: React.ReactNode })
 }
 
 function RowActions({ node, periodKey, owners }: { node: CascadeTreeNode; periodKey: string; owners: Owners }) {
+  const parentOptions = useContext(ParentOptionsContext);
   const icon = "grid size-7 place-items-center rounded text-foreground-subtle hover:bg-surface hover:text-foreground";
   return (
     <>
@@ -363,14 +397,17 @@ function RowActions({ node, periodKey, owners }: { node: CascadeTreeNode; period
         trigger={<button type="button" className="rounded border border-border-strong bg-surface px-2 py-1 text-xs font-medium text-foreground hover:bg-surface-muted">Atualizar</button>}
       />
       <NodeDialog
-        mode="create-iv"
-        parentId={node.id}
+        mode="create"
+        presetKind="IV"
+        presetParentId={node.id}
         owners={owners}
+        parentOptions={parentOptions}
         trigger={<button type="button" aria-label="Adicionar IV (como)" title="Adicionar IV (como)" className={icon}><Plus className="size-4" /></button>}
       />
       <NodeDialog
         mode="edit"
-        node={{ id: node.id, name: node.name, description: node.description, unit: node.unit, polarity: node.polarity, pace: node.pace, target: node.target, ownerId: node.owner?.id ?? null, reviewNote: node.reviewNote }}
+        parentOptions={parentOptions}
+        node={{ id: node.id, kind: node.kind as "IC" | "IV", parentId: node.parentId, name: node.name, description: node.description, unit: node.unit, polarity: node.polarity, pace: node.pace, target: node.target, ownerId: node.owner?.id ?? null, reviewNote: node.reviewNote }}
         owners={owners}
         trigger={<button type="button" aria-label="Editar" title="Editar" className={icon}><Pencil className="size-4" /></button>}
       />

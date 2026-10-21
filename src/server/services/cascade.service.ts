@@ -252,11 +252,43 @@ export async function createNode(user: CurrentUser, parentId: string, kind: "IC"
   return created;
 }
 
-export async function updateNode(user: CurrentUser, id: string, input: NodeInput) {
+export type Placement = { kind: "IC" | "IV"; parentId: string };
+
+/** Valida e resolve onde um IC/IV passa a ficar: IC dentro de um pilar; IV dentro de um IC ou de outro IV — nunca dentro de si
+ * mesmo nem de algo que está abaixo dele (senão a árvore vira um laço). */
+async function resolvePlacement(id: string, placement: Placement) {
+  if (placement.kind !== "IC" && placement.kind !== "IV") throw new ForbiddenError("Tipo inválido.");
+  const all = await db.cascadeNode.findMany({ select: { id: true, parentId: true, kind: true } });
+  const byId = new Map(all.map((n) => [n.id, n]));
+  const parent = byId.get(placement.parentId);
+  if (!parent) throw new ForbiddenError("Escolha onde o item fica.");
+  const descendants = new Set<string>();
+  const stack = [id];
+  while (stack.length) {
+    const current = stack.pop()!;
+    for (const n of all) if (n.parentId === current && !descendants.has(n.id)) {
+      descendants.add(n.id);
+      stack.push(n.id);
+    }
+  }
+  if (placement.parentId === id || descendants.has(placement.parentId)) throw new ForbiddenError("O item não pode ficar dentro dele mesmo nem de algo que está abaixo dele.");
+  if (placement.kind === "IC" && parent.kind !== "PILAR") throw new ForbiddenError("Um IC fica dentro de um pilar.");
+  if (placement.kind === "IV" && parent.kind !== "IC" && parent.kind !== "IV") throw new ForbiddenError("Um IV fica dentro de um IC ou de outro IV.");
+}
+
+export async function updateNode(user: CurrentUser, id: string, input: NodeInput, placement?: Placement) {
   requireManage(user);
   validateInput(input);
   const before = await db.cascadeNode.findUnique({ where: { id } });
   if (!before) throw new ForbiddenError("Nó não encontrado.");
+  let move: { kind: string; parentId: string; sortOrder?: number } | null = null;
+  if (placement) {
+    if (before.kind !== "IC" && before.kind !== "IV") throw new ForbiddenError("O sonho e os pilares não mudam de lugar.");
+    await resolvePlacement(id, placement);
+    const parentChanged = before.parentId !== placement.parentId;
+    const last = parentChanged ? await db.cascadeNode.findFirst({ where: { parentId: placement.parentId }, orderBy: { sortOrder: "desc" }, select: { sortOrder: true } }) : null;
+    move = { kind: placement.kind, parentId: placement.parentId, ...(parentChanged ? { sortOrder: (last?.sortOrder ?? 0) + 1 } : {}) };
+  }
   const updated = await db.cascadeNode.update({
     where: { id },
     data: {
@@ -268,6 +300,7 @@ export async function updateNode(user: CurrentUser, id: string, input: NodeInput
       target: input.target,
       ownerUserId: input.ownerUserId,
       reviewNote: null, // quem confirmou/ajustou o sentido da meta resolveu a dúvida
+      ...(move ?? {}),
     },
   });
   await recordAudit({
@@ -275,8 +308,8 @@ export async function updateNode(user: CurrentUser, id: string, input: NodeInput
     action: "UPDATE",
     entityType: "CascadeNode",
     entityId: id,
-    previousValue: { name: before.name, unit: before.unit, polarity: before.polarity, pace: before.pace, target: before.target, ownerUserId: before.ownerUserId },
-    newValue: input,
+    previousValue: { name: before.name, kind: before.kind, parentId: before.parentId, unit: before.unit, polarity: before.polarity, pace: before.pace, target: before.target, ownerUserId: before.ownerUserId },
+    newValue: { ...input, ...(placement ?? {}) },
   });
   return updated;
 }

@@ -27,6 +27,8 @@ export type NodeFormInput = {
   pace: CascadePace;
   target: string; // texto do campo (vírgula decimal aceita); vazio = sem meta
   ownerUserId: string; // "" = sem responsável
+  kind: "IC" | "IV"; // tipo do item
+  parentId: string; // onde fica: um pilar (IC) ou um IC/IV (IV)
 };
 
 function toInput(form: NodeFormInput): service.NodeInput {
@@ -44,12 +46,12 @@ function toInput(form: NodeFormInput): service.NodeInput {
   };
 }
 
-export async function createNodeAction(parentId: string, kind: "IC" | "IV", form: NodeFormInput) {
-  return run(async () => service.createNode(await requireUser(), parentId, kind, toInput(form)));
+export async function createNodeAction(form: NodeFormInput) {
+  return run(async () => service.createNode(await requireUser(), form.parentId, form.kind, toInput(form)));
 }
 
 export async function updateNodeAction(id: string, form: NodeFormInput) {
-  return run(async () => service.updateNode(await requireUser(), id, toInput(form)));
+  return run(async () => service.updateNode(await requireUser(), id, toInput(form), { kind: form.kind, parentId: form.parentId }));
 }
 
 export async function deleteNodeAction(id: string) {

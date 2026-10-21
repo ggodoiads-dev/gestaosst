@@ -114,11 +114,17 @@ export function ValueDialog({
   );
 }
 
+export type ParentOption = { id: string; kind: "PILAR" | "IC" | "IV"; label: string; ancestors: string[] };
+
 type NodeDialogProps = {
-  mode: "create-iv" | "create-ic" | "edit";
-  parentId?: string;
+  mode: "create" | "edit";
+  /** Na criação: já vem escolhido o tipo e/ou onde o item fica (ex: o botão "+" de um IC cria um IV dentro dele). */
+  presetKind?: "IC" | "IV";
+  presetParentId?: string;
   node?: {
     id: string;
+    kind: "IC" | "IV";
+    parentId: string | null;
     name: string;
     description: string | null;
     unit: CascadeUnit;
@@ -129,11 +135,12 @@ type NodeDialogProps = {
     reviewNote: string | null;
   };
   owners: { id: string; name: string }[];
+  parentOptions: ParentOption[];
   trigger: React.ReactNode;
 };
 
-/** Criar um IV (ou IC) ou editar o nó: nome, unidade, sentido da meta, ritmo, meta e responsável. */
-export function NodeDialog({ mode, parentId, node, owners, trigger }: NodeDialogProps) {
+/** Criar ou editar um IC/IV: tipo (IC ou IV), onde fica (em qual pilar, IC ou IV), nome, unidade, meta, sentido e responsável. */
+export function NodeDialog({ mode, presetKind, presetParentId, node, owners, parentOptions, trigger }: NodeDialogProps) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<NodeFormInput>({
@@ -144,23 +151,41 @@ export function NodeDialog({ mode, parentId, node, owners, trigger }: NodeDialog
     pace: node?.pace ?? "NONE",
     target: numText(node?.target ?? null),
     ownerUserId: node?.ownerId ?? "",
+    kind: node?.kind ?? presetKind ?? "IV",
+    parentId: node?.parentId ?? presetParentId ?? "",
   });
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const set = <K extends keyof NodeFormInput>(key: K, value: NodeFormInput[K]) => setForm((f) => ({ ...f, [key]: value }));
 
+  // Onde o item pode ficar: IC só em pilar; IV em IC ou IV — e nunca dentro de si mesmo nem de algo abaixo dele.
+  const options = parentOptions.filter((o) => {
+    if (form.kind === "IC") return o.kind === "PILAR";
+    if (o.kind === "PILAR") return false;
+    if (node && (o.id === node.id || o.ancestors.includes(node.id))) return false;
+    return true;
+  });
+  const parentValid = options.some((o) => o.id === form.parentId);
+
+  function changeKind(kind: "IC" | "IV") {
+    // Trocar o tipo muda o que pode ser "pai": se o atual não serve mais, pede para escolher de novo.
+    const valid = parentOptions.some((o) => (kind === "IC" ? o.kind === "PILAR" : o.kind !== "PILAR") && o.id === form.parentId && !(node && (o.id === node.id || o.ancestors.includes(node.id))));
+    setForm((f) => ({ ...f, kind, parentId: valid ? f.parentId : "" }));
+  }
+
   function save() {
+    if (!parentValid) {
+      setError(form.kind === "IC" ? "Escolha em qual pilar o IC fica." : "Escolha dentro de qual IC ou IV este IV fica.");
+      return;
+    }
     setError(null);
     startTransition(async () => {
-      const res =
-        mode === "edit"
-          ? await updateNodeAction(node!.id, form)
-          : await createNodeAction(parentId!, mode === "create-ic" ? "IC" : "IV", form);
+      const res = mode === "edit" ? await updateNodeAction(node!.id, form) : await createNodeAction(form);
       if (!res.ok) {
         setError(res.error);
         return;
       }
-      toast.success(mode === "edit" ? "Atualizado." : mode === "create-ic" ? "IC criado." : "IV criado.");
+      toast.success(mode === "edit" ? "Atualizado." : form.kind === "IC" ? "IC criado." : "IV criado.");
       setOpen(false);
       router.refresh();
     });
@@ -171,7 +196,7 @@ export function NodeDialog({ mode, parentId, node, owners, trigger }: NodeDialog
       <span onClick={() => setOpen(true)}>{trigger}</span>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{mode === "edit" ? "Editar" : mode === "create-ic" ? "Novo IC (o quê)" : "Novo IV (como)"}</DialogTitle>
+          <DialogTitle>{mode === "edit" ? "Editar item" : "Novo item"}</DialogTitle>
         </DialogHeader>
         <DialogBody className="flex flex-col gap-4">
           {node?.reviewNote && (
@@ -179,7 +204,32 @@ export function NodeDialog({ mode, parentId, node, owners, trigger }: NodeDialog
               Conferir: {node.reviewNote} Ao salvar, esse aviso some.
             </p>
           )}
-          <FormField label="Nome" required hint={mode === "create-iv" ? "O que a rotina precisa fazer. Ex: Fazer 1 DTO por semana" : undefined}>
+          <FormField label="Tipo" required hint="IC é o resultado (o quê). IV é o processo que fecha um IC (como).">
+            <Select value={form.kind} onValueChange={(v) => changeKind(v as "IC" | "IV")}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="IC">IC · Item de Controle — o QUÊ (resultado)</SelectItem>
+                <SelectItem value="IV">IV · Item de Verificação — o COMO (processo)</SelectItem>
+              </SelectContent>
+            </Select>
+          </FormField>
+          <FormField
+            label={form.kind === "IC" ? "Dentro de qual pilar" : "Dentro de qual IC ou IV"}
+            required
+            hint={form.kind === "IV" ? "Um IV pode ficar dentro de um IC ou dentro de outro IV (que está dentro de um IC)." : undefined}
+          >
+            <select
+              value={parentValid ? form.parentId : ""}
+              onChange={(e) => set("parentId", e.target.value)}
+              className="h-9 w-full rounded-md border border-border-strong bg-surface px-2 text-sm text-foreground"
+            >
+              <option value="">Escolha…</option>
+              {options.map((o) => (
+                <option key={o.id} value={o.id}>{o.label}</option>
+              ))}
+            </select>
+          </FormField>
+          <FormField label="Nome" required hint={form.kind === "IV" ? "O que a rotina precisa fazer. Ex: Fazer 1 DTO por semana" : undefined}>
             <Input value={form.name} onChange={(e) => set("name", e.target.value)} />
           </FormField>
           <div className="grid grid-cols-2 gap-3">
