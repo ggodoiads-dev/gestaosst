@@ -230,6 +230,9 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
     rh.push({ href: "/pendencias-advertencia", label: "Pendências de Advertência", icon: "warningPending" });
     rh.push({ href: "/entrevistas-abs", label: "Entrevistas de ABS", icon: "alert" });
   }
+  if (!p.has(PERMISSIONS.HR_MANAGE) && p.has(PERMISSIONS.DISCIPLINE_MANAGE)) {
+    rh.push({ href: "/pendencias-advertencia", label: "Pendências de Advertência", icon: "warningPending" });
+  }
   if (p.has(PERMISSIONS.SCHEDULE_MANAGE)) {
     rh.push({ href: "/escalas", label: "Escalas de Trabalho", icon: "schedules" });
   }

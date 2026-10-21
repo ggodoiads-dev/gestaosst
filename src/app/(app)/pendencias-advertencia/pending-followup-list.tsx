@@ -13,6 +13,8 @@ import { requestAbsenceInterviewAction } from "@/server/actions/absence-intervie
 import { CreateWarningDialog } from "@/app/(app)/colaboradores/[id]/warning-dialog";
 import { BulkDismissButton, DeleteNoteButton, DismissNoteButton, WarningDocuments } from "./followup-tools";
 import { bulkFollowUpAction } from "@/server/actions/absence-followup.actions";
+import { MeasureDialog, type DisciplineEntry } from "./discipline-section";
+import { disciplineStepLabel } from "@/domain/discipline/ladder";
 
 export type FollowUpItem = {
   noteId: string;
@@ -26,6 +28,8 @@ export type FollowUpItem = {
   notes: string;
   warningApplied: boolean;
   absenceInterviewDone: boolean;
+  /** Falta: medida sugerida pela escada de falta injustificada (null se a tabela de medidas ainda não existe). */
+  discipline: DisciplineEntry | null;
 };
 
 type Filter = "todas" | "advertencia" | "entrevista";
@@ -34,7 +38,7 @@ function normalize(text: string) {
   return text.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 }
 
-function FollowUpCard({ item, selected, onSelect }: { item: FollowUpItem; selected: boolean; onSelect: (value: boolean) => void }) {
+function FollowUpCard({ item, selected, onSelect, canHr }: { item: FollowUpItem; selected: boolean; onSelect: (value: boolean) => void; canHr: boolean }) {
   const [pending, startTransition] = useTransition();
   const router = useRouter();
 
@@ -76,7 +80,7 @@ function FollowUpCard({ item, selected, onSelect }: { item: FollowUpItem; select
             actionLabel={item.warningApplied ? "Desfazer" : "Marcar como aplicada"}
           />
         )}
-        <InterviewStep item={item} pending={pending} run={run} />
+        {canHr && <InterviewStep item={item} pending={pending} run={run} />}
       </div>
 
       {item.kind === "FALTA" && (
@@ -87,11 +91,22 @@ function FollowUpCard({ item, selected, onSelect }: { item: FollowUpItem; select
       )}
 
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3">
+        {canHr ? (
         <DeleteNoteButton
           noteId={item.noteId}
           label={`${item.kind === "ATESTADO" ? "Atestado" : "Falta"} de ${formatPersonName(item.collaboratorName)} em ${item.weekday}, ${item.dateLabel}`}
         />
+        ) : (
+          <span />
+        )}
         <div className="flex flex-wrap items-center gap-2">
+          {item.discipline && (
+            <MeasureDialog
+              entry={item.discipline}
+              mode="apply"
+              trigger={<Button size="sm">Registrar medida · {disciplineStepLabel(item.discipline.suggestedStep)}</Button>}
+            />
+          )}
           <DismissNoteButton
             noteId={item.noteId}
             kind={item.kind}
@@ -207,7 +222,7 @@ function StepRow({
   );
 }
 
-export function PendingFollowUpList({ items }: { items: FollowUpItem[] }) {
+export function PendingFollowUpList({ items, canHr }: { items: FollowUpItem[]; canHr: boolean }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("todas");
@@ -325,9 +340,11 @@ export function PendingFollowUpList({ items }: { items: FollowUpItem[] }) {
                 Advertência aplicada
               </Button>
             )}
-            <Button size="sm" variant="secondary" loading={bulkPending} onClick={() => bulk("interview")}>
-              Entrevista feita
-            </Button>
+            {canHr && (
+              <Button size="sm" variant="secondary" loading={bulkPending} onClick={() => bulk("interview")}>
+                Entrevista feita
+              </Button>
+            )}
             <BulkDismissButton noteIds={selectedShown} onDone={() => setSelected(new Set())} />
             <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
               Limpar
@@ -372,6 +389,7 @@ export function PendingFollowUpList({ items }: { items: FollowUpItem[] }) {
                       item={item}
                       selected={selected.has(item.noteId)}
                       onSelect={(value) => toggle([item.noteId], value)}
+                      canHr={canHr}
                     />
                   ))}
                 </div>

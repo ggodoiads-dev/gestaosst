@@ -9,7 +9,7 @@ import {
 } from "@/domain/schedule/schedule-calendar";
 import { getMyCollaboratorProfile } from "@/server/services/productivity.service";
 import type { CurrentUser } from "@/server/auth/current-user";
-import { requirePermission } from "@/server/auth/current-user";
+import { requirePermission, hasPermission } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
 import type { ScheduleDayNoteStatus } from "@/generated/prisma/enums";
 import { ensureInterviewForNote } from "@/server/services/absence-interview.service";
@@ -339,7 +339,7 @@ export async function getMySchedule(user: CurrentUser, params: { month: number; 
 /** Faltas e atestados lançados (via chamada ou manualmente) com pendência de RH: falta pode precisar de advertência
  * e/ou entrevista de ABS; atestado médico NUNCA gera advertência — só a entrevista de ABS (Rev 03/24 cobre os dois). */
 export function listPendingAbsenceFollowUps(user: CurrentUser) {
-  requirePermission(user, PERMISSIONS.HR_MANAGE);
+  if (!hasPermission(user, PERMISSIONS.HR_MANAGE)) requirePermission(user, PERMISSIONS.DISCIPLINE_MANAGE);
   return db.scheduleDayNote.findMany({
     where: {
       OR: [
@@ -353,7 +353,7 @@ export function listPendingAbsenceFollowUps(user: CurrentUser) {
 }
 
 export async function markWarningApplied(user: CurrentUser, noteId: string, value: boolean) {
-  requirePermission(user, PERMISSIONS.HR_MANAGE);
+  if (!hasPermission(user, PERMISSIONS.HR_MANAGE)) requirePermission(user, PERMISSIONS.DISCIPLINE_MANAGE);
   await db.scheduleDayNote.update({ where: { id: noteId }, data: { warningApplied: value } });
 }
 

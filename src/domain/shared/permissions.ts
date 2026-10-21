@@ -59,6 +59,7 @@ export const PERMISSIONS = {
   WARNING_SELF_VIEW: "warning.self_view",
 
   HR_MANAGE: "hr.manage",
+  DISCIPLINE_MANAGE: "discipline.manage",
 } as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -117,6 +118,7 @@ export const PERMISSION_DESCRIPTIONS: Record<PermissionKey, string> = {
   [PERMISSIONS.WARNING_SELF_VIEW]: "Ver as próprias advertências",
 
   [PERMISSIONS.HR_MANAGE]: "Acessar dados de RH (salário) e importar planilha de colaboradores",
+  [PERMISSIONS.DISCIPLINE_MANAGE]: "Ver as pendências de advertência e registrar medidas disciplinares (sem acesso a salário nem a entrevistas de ABS)",
 };
 
 export const ROLE_KEYS = {
@@ -187,6 +189,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<RoleKeyValue, PermissionKey[]> = {
     PERMISSIONS.CHECKLIST_COMPLIANCE_VIEW,
     PERMISSIONS.SHIFT_CHECKIN_MANAGE,
     PERMISSIONS.REPORTS_VIEW,
+    PERMISSIONS.DISCIPLINE_MANAGE,
   ],
   ADMINISTRADOR: Object.values(PERMISSIONS),
   /** Perfil externo (cliente/auditor): SÓ VÊ. Nenhuma permissão de gerenciar, tratar, validar,

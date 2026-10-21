@@ -110,6 +110,7 @@ model User {
   collaboratorActivitiesGranted   CollaboratorActivity[]       @relation("CollaboratorActivityGrantedBy")
   collaboratorEquipmentsGranted   CollaboratorEquipment[]      @relation("CollaboratorEquipmentCreatedBy")
   warningsCreated                 Warning[]                    @relation("WarningCreatedBy")
+  disciplinaryMeasuresApplied     DisciplinaryMeasure[]        @relation("DisciplinaryMeasureBy")
   equipmentDamagesReported        EquipmentDamage[]            @relation("EquipmentDamageReportedBy")
   guardianReportsImported         GuardianReport[]             @relation("GuardianReportImportedBy")
   collaboratorProfile             Collaborator?
@@ -890,6 +891,7 @@ model Collaborator {
   activityAptitudes           CollaboratorActivity[]
   equipmentAptitudes          CollaboratorEquipment[]
   warnings                    Warning[]
+  disciplinaryMeasures        DisciplinaryMeasure[]
   attachments                 Attachment[]
   equipmentDamagesResponsible EquipmentDamage[]
   guardianReports             GuardianReport[]
@@ -1227,6 +1229,27 @@ model QualificationRecord {
 
 /// Advertência (aviso disciplinar) — alimenta o cálculo de benefícios: uma advertência dentro do
 /// período de apuração faz o colaborador perder a cesta básica do mês de referência.
+/// Medida disciplinar já tratada (aplicada ou dispensada com justificativa) por MOTIVO — cada motivo tem a sua escada
+/// (ver `src/domain/discipline/ladder.ts`). A ocorrência em si é derivada (checklist sem nenhum equipamento feito, falta
+/// injustificada); esta tabela guarda o que o RH/gestor decidiu sobre cada dia. reason/step/status são texto validado em código.
+model DisciplinaryMeasure {
+  id             String   @id @default(uuid())
+  collaboratorId String
+  reason         String // CHECKLIST | FALTA
+  referenceDate  DateTime // dia da ocorrência (meio-dia UTC)
+  step           String // chave da escada: DTO_1 ... COMITE
+  status         String // APLICADA | DISPENSADA
+  note           String?
+  decidedById    String
+  decidedAt      DateTime @default(now())
+
+  collaborator Collaborator @relation(fields: [collaboratorId], references: [id])
+  decidedBy    User         @relation("DisciplinaryMeasureBy", fields: [decidedById], references: [id])
+
+  @@unique([collaboratorId, reason, referenceDate])
+  @@index([collaboratorId, reason])
+}
+
 model Warning {
   id             String   @id @default(uuid())
   collaboratorId String

@@ -3,10 +3,15 @@ import { db } from "@/server/db";
 import { recordAudit } from "@/server/services/audit";
 import { deleteStoredFile } from "@/server/services/storage";
 import type { CurrentUser } from "@/server/auth/current-user";
-import { requirePermission } from "@/server/auth/current-user";
+import { requirePermission, hasPermission } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
 
 /** Tratativa de faltas/atestados pelo RH: excluir lançamento errado e anexar o documento da advertência. */
+
+/** Fila de advertência: RH ou gestor (permissão de medidas disciplinares). Entrevista de ABS e exclusão de lançamento seguem só com o RH. */
+function requireFollowUp(user: CurrentUser) {
+  if (!hasPermission(user, PERMISSIONS.HR_MANAGE)) requirePermission(user, PERMISSIONS.DISCIPLINE_MANAGE);
+}
 
 async function noteWithFiles(noteId: string) {
   return db.scheduleDayNote.findUniqueOrThrow({
@@ -47,7 +52,7 @@ export async function deleteAbsenceNote(user: CurrentUser, noteId: string) {
 /** Justifica a falta/atestado e tira da fila de pendências (sem advertência e sem entrevista de ABS). O motivo fica
  * junto da observação do dia (aparece na escala) e na auditoria. Não apaga nada: o lançamento continua valendo. */
 export async function dismissAbsenceNote(user: CurrentUser, noteId: string, reason: string) {
-  requirePermission(user, PERMISSIONS.HR_MANAGE);
+  requireFollowUp(user);
   const trimmed = reason.trim();
   if (trimmed.length < 3) throw new Error("Escreva o motivo da justificativa.");
   const note = await db.scheduleDayNote.findUniqueOrThrow({ where: { id: noteId } });
@@ -71,7 +76,8 @@ export async function dismissAbsenceNote(user: CurrentUser, noteId: string, reas
 /** Ação em lote sobre várias faltas/atestados da fila: marcar advertência aplicada, marcar entrevista de ABS feita ou
  * justificar (com motivo único). Devolve quantos lançamentos mudaram. */
 export async function bulkFollowUp(user: CurrentUser, noteIds: string[], op: "warning" | "interview" | "dismiss", reason?: string) {
-  requirePermission(user, PERMISSIONS.HR_MANAGE);
+  if (op === "interview") requirePermission(user, PERMISSIONS.HR_MANAGE);
+  else requireFollowUp(user);
   const ids = [...new Set(noteIds)];
   if (ids.length === 0) throw new Error("Selecione ao menos um lançamento.");
   if (ids.length > 200) throw new Error("Selecione no máximo 200 lançamentos por vez.");
@@ -100,7 +106,7 @@ export async function attachWarningDocument(
   noteId: string,
   file: { filename: string; path: string; mimeType: string; size: number },
 ) {
-  requirePermission(user, PERMISSIONS.HR_MANAGE);
+  requireFollowUp(user);
   const note = await db.scheduleDayNote.findUniqueOrThrow({ where: { id: noteId } });
   if (note.status !== "FALTA") throw new Error("Advertência só se aplica a falta (atestado médico não gera advertência).");
 
@@ -129,7 +135,7 @@ export async function attachWarningDocument(
 }
 
 export async function removeWarningDocument(user: CurrentUser, attachmentId: string) {
-  requirePermission(user, PERMISSIONS.HR_MANAGE);
+  requireFollowUp(user);
   const attachment = await db.attachment.findUniqueOrThrow({ where: { id: attachmentId } });
   if (!attachment.scheduleDayNoteId) throw new Error("Este anexo não é de uma falta.");
   await db.attachment.delete({ where: { id: attachmentId } });

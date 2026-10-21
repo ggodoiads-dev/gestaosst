@@ -16,6 +16,7 @@ import { PERMISSIONS } from "@/domain/shared/permissions";
 import { formatInTimeZone } from "date-fns-tz";
 import { APP_TIMEZONE } from "@/lib/dates";
 import { recordAudit } from "@/server/services/audit";
+import { isChecklistInfraction } from "@/domain/discipline/ladder";
 import {
   CHECKLIST_JUSTIFICATION_REASONS,
   type ChecklistJustificationReason,
@@ -874,4 +875,72 @@ export async function getChecklistCoverageGaps(user: CurrentUser): Promise<Cover
     unconfigured,
     uncovered: [...uncovered.entries()].map(([functionName, count]) => ({ functionName, count })).sort((a, b) => b.count - a.count),
   };
+}
+
+
+export type ChecklistNonCompletion = { collaboratorId: string; name: string; areaName: string | null; dayKey: string; required: number };
+
+/**
+ * Dias FECHADOS (de `fromKey` até ontem) em que quem é cobrado por checklist estava escalado e NÃO fez nenhum dos
+ * equipamentos exigidos — a base das medidas disciplinares. Fez ao menos um (ou a maioria) = cumpriu, não entra. Não
+ * entram: equipamento que estava bloqueado/em manutenção no dia (não era exigido), item justificado com motivo que conta
+ * como cumprido e quem ainda não tem login (não tem como fazer).
+ */
+export async function listChecklistNonCompletion(fromKey: string): Promise<ChecklistNonCompletion[]> {
+  const [fy, fm, fd] = fromKey.split("-").map(Number);
+  const rangeStart = new Date(fy, fm - 1, fd);
+  const rangeEndExclusive = addDays(lastClosedDay(), 1);
+  if (rangeStart >= rangeEndExclusive) return [];
+
+  const [collaborators, notes, requiredByArea] = await Promise.all([
+    listEligibleCollaboratorsQuery(),
+    db.scheduleDayNote.findMany({ where: { date: { gte: rangeStart, lt: rangeEndExclusive } } }),
+    getRequiredEquipmentByArea({ includeUnavailable: true }),
+  ]);
+  const unavailable = await loadUnavailability(localDateKey(addDays(rangeEndExclusive, -1)));
+  const eligible = collaborators.filter((c) => c.userId && getRequiredItemsForCollaborator(c, requiredByArea).items.length > 0);
+  if (eligible.length === 0) return [];
+
+  const executions = await db.checklistExecution.findMany({
+    where: {
+      executedById: { in: eligible.map((c) => c.userId!) },
+      status: "CONCLUIDO",
+      finishedAt: { gte: dayStartInstant(rangeStart), lt: dayStartInstant(rangeEndExclusive) },
+    },
+    select: { executedById: true, equipmentId: true, finishedAt: true, checklistVersion: { select: { templateId: true } } },
+  });
+  const completedByKey = new Map<string, Set<string>>();
+  for (const ex of executions) {
+    const key = `${ex.executedById}|${brtDayKey(ex.finishedAt!)}`;
+    const set = completedByKey.get(key) ?? new Set<string>();
+    set.add(ex.equipmentId);
+    set.add(ex.checklistVersion.templateId);
+    completedByKey.set(key, set);
+  }
+  const notesByKey = new Map(notes.map((n) => [`${n.collaboratorId}|${localDateKey(n.date)}`, n]));
+  const justificationsByKey = await loadItemJustifications(
+    localDateKey(rangeStart),
+    localDateKey(addDays(rangeEndExclusive, -1)),
+    eligible.map((c) => c.id),
+  );
+
+  const result: ChecklistNonCompletion[] = [];
+  for (const c of eligible) {
+    const required = getRequiredItemsForCollaborator(c, requiredByArea).items;
+    for (let date = rangeStart; date < rangeEndExclusive; date = addDays(date, 1)) {
+      const dayKey = localDateKey(date);
+      const note = notesByKey.get(`${c.id}|${dayKey}`);
+      if ((note ? note.overrideStatus : dayStatusFor(date, c)) !== "TRABALHO") continue;
+      const effective = required.filter((e) => !unavailable(e.id, dayKey));
+      const completedIds = new Set([
+        ...(completedByKey.get(`${c.userId}|${dayKey}`) ?? []),
+        ...justifiedItemIds(justificationsByKey.get(`${c.id}|${dayKey}`)),
+      ]);
+      const done = effective.filter((e) => completedIds.has(e.id)).length;
+      if (isChecklistInfraction({ required: effective.length, doneOrJustified: done })) {
+        result.push({ collaboratorId: c.id, name: c.name, areaName: c.area?.name ?? null, dayKey, required: effective.length });
+      }
+    }
+  }
+  return result;
 }
