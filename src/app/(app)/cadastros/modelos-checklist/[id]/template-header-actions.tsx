@@ -1,7 +1,9 @@
 "use client";
 
 import { useActionState, useState, useTransition } from "react";
-import { Link2, GitBranch, RefreshCw } from "lucide-react";
+import { Link2, GitBranch, RefreshCw, Pencil } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { FormField } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -16,6 +18,7 @@ import {
 import {
   assignTemplateAction,
   createNewDraftVersionAction,
+  renameTemplateAction,
   syncAreaTemplateEquipmentAction,
   type ActionResult,
 } from "@/server/actions/checklist-template.actions";
@@ -117,6 +120,56 @@ export function AssignEquipmentDialog({
             <Button type="submit" loading={pending}>Salvar</Button>
           </DialogFooter>
         </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export function RenameTemplateDialog({ templateId, name, description }: { templateId: string; name: string; description: string | null }) {
+  const [open, setOpen] = useState(false);
+  const [newName, setNewName] = useState(name);
+  const [newDescription, setNewDescription] = useState(description ?? "");
+  const [error, setError] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  function save() {
+    setError(null);
+    startTransition(async () => {
+      const res = await renameTemplateAction(templateId, newName, newDescription);
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      toast.success("Modelo atualizado.");
+      setOpen(false);
+    });
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <Button size="sm" variant="secondary" onClick={() => setOpen(true)}>
+        <Pencil /> Renomear
+      </Button>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Renomear modelo de checklist</DialogTitle>
+        </DialogHeader>
+        <DialogBody className="flex flex-col gap-4">
+          <FormField label="Nome do modelo" htmlFor="template-name" required hint="Ex: Checklist de Carga e Descarga">
+            <Input id="template-name" value={newName} onChange={(e) => setNewName(e.target.value)} />
+          </FormField>
+          <FormField label="Descrição" htmlFor="template-description" hint="Opcional">
+            <Input id="template-description" value={newDescription} onChange={(e) => setNewDescription(e.target.value)} />
+          </FormField>
+          <p className="text-xs text-foreground-subtle">Só muda o nome: as versões, perguntas e o histórico de execuções continuam os mesmos.</p>
+          {error && <p className="text-sm text-danger">{error}</p>}
+        </DialogBody>
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button type="button" variant="secondary">Cancelar</Button>
+          </DialogClose>
+          <Button onClick={save} loading={isPending}>Salvar</Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

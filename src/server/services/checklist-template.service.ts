@@ -230,6 +230,58 @@ export async function createNewDraftVersion(user: CurrentUser, templateId: strin
   return version;
 }
 
+/** Troca o nome (e a descrição) do modelo — as execuções e atribuições seguem ligadas ao mesmo modelo. */
+export async function renameTemplate(user: CurrentUser, templateId: string, data: { name: string; description?: string | null }) {
+  requirePermission(user, PERMISSIONS.CHECKLIST_TEMPLATE_MANAGE);
+  const name = data.name.trim();
+  if (name.length < 3) throw new ForbiddenError("Informe o nome do modelo.");
+  const before = await db.checklistTemplate.findUniqueOrThrow({ where: { id: templateId }, select: { name: true, description: true } });
+  const description = data.description === undefined ? before.description : data.description?.trim() || null;
+  const updated = await db.checklistTemplate.update({ where: { id: templateId }, data: { name, description } });
+  await recordAudit({
+    userId: user.id,
+    action: "UPDATE",
+    entityType: "ChecklistTemplate",
+    entityId: templateId,
+    previousValue: before,
+    newValue: { name, description },
+  });
+  return updated;
+}
+
+/** Exclui uma versão em RASCUNHO (ex: versão de teste) com as perguntas dela. Versão publicada/retirada nunca é
+ * apagada (tem histórico de execuções), e o modelo não pode ficar sem nenhuma versão. */
+export async function deleteDraftVersion(user: CurrentUser, versionId: string) {
+  requirePermission(user, PERMISSIONS.CHECKLIST_TEMPLATE_MANAGE);
+  const version = await getDraftVersionOrThrow(versionId);
+  const [others, executions, schedules] = await Promise.all([
+    db.checklistVersion.count({ where: { templateId: version.templateId, id: { not: versionId } } }),
+    db.checklistExecution.count({ where: { checklistVersionId: versionId } }),
+    db.checklistSchedule.count({ where: { versionId } }),
+  ]);
+  if (others === 0) throw new ForbiddenError("O modelo precisa ter ao menos uma versão. Exclua o modelo inteiro se não for mais usar.");
+  if (executions > 0 || schedules > 0) throw new ForbiddenError("Esta versão já foi usada e não pode ser excluída.");
+
+  await db.$transaction(async (tx) => {
+    const questionIds = (await tx.checklistQuestion.findMany({ where: { versionId }, select: { id: true } })).map((q) => q.id);
+    await tx.questionRule.deleteMany({ where: { questionId: { in: questionIds } } });
+    await tx.checklistQuestionOption.deleteMany({ where: { questionId: { in: questionIds } } });
+    await tx.checklistQuestion.deleteMany({ where: { versionId } });
+    await tx.checklistVersion.delete({ where: { id: versionId } });
+    await recordAudit(
+      {
+        userId: user.id,
+        action: "DELETE",
+        entityType: "ChecklistVersion",
+        entityId: versionId,
+        previousValue: { templateId: version.templateId, versionNumber: version.versionNumber, questions: questionIds.length },
+      },
+      tx,
+    );
+  });
+  return version.templateId;
+}
+
 export async function updateVersionPeriodicity(
   user: CurrentUser,
   versionId: string,

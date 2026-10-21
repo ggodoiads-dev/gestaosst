@@ -2,12 +2,14 @@
 
 import { useState, useTransition } from "react";
 import { Trash2, Rocket } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { VersionStatusBadge } from "@/components/domain/status-badges";
 import { AddQuestionDialog } from "./add-question-dialog";
 import {
+  deleteDraftVersionAction,
   publishVersionAction,
   removeQuestionAction,
   updateVersionPeriodicityAction,
@@ -57,6 +59,8 @@ export function VersionEditor({
 }) {
   const [periodicity, setPeriodicity] = useState(version.periodicity);
   const [isPending, startTransition] = useTransition();
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const router = useRouter();
   const isDraft = version.status === "RASCUNHO";
 
   function handlePeriodicityChange(value: string) {
@@ -70,6 +74,18 @@ export function VersionEditor({
     startTransition(async () => {
       await publishVersionAction(templateId, version.id);
       toast.success(`Versão ${version.versionNumber} publicada e ativada.`);
+    });
+  }
+
+  function handleDeleteDraft() {
+    startTransition(async () => {
+      const res = await deleteDraftVersionAction(templateId, version.id);
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success(`Versão ${version.versionNumber} excluída.`);
+      router.refresh();
     });
   }
 
@@ -97,9 +113,26 @@ export function VersionEditor({
             </SelectContent>
           </Select>
           {isDraft && (
-            <Button size="sm" onClick={handlePublish} loading={isPending}>
-              <Rocket /> Publicar versão
-            </Button>
+            <>
+              {confirmingDelete ? (
+                <div className="flex items-center gap-2 rounded-md border border-danger/30 bg-danger/10 px-2 py-1">
+                  <span className="text-xs text-danger">Excluir esta versão e as perguntas dela?</span>
+                  <Button size="sm" variant="danger" onClick={handleDeleteDraft} loading={isPending}>
+                    Sim, excluir
+                  </Button>
+                  <Button size="sm" variant="secondary" onClick={() => setConfirmingDelete(false)}>
+                    Não
+                  </Button>
+                </div>
+              ) : (
+                <Button size="sm" variant="ghost" className="text-danger hover:text-danger" onClick={() => setConfirmingDelete(true)}>
+                  <Trash2 /> Excluir versão
+                </Button>
+              )}
+              <Button size="sm" onClick={handlePublish} loading={isPending}>
+                <Rocket /> Publicar versão
+              </Button>
+            </>
           )}
         </div>
       </div>

@@ -139,6 +139,26 @@ export async function addQuestionAction(_prev: ActionResult, formData: FormData)
   });
 }
 
+export async function renameTemplateAction(templateId: string, name: string, description: string): Promise<ActionResult> {
+  const user = await requireUser();
+  return toResult(() => templateService.renameTemplate(user, templateId, { name, description })).then((result) => {
+    if (result.ok) {
+      revalidatePath(`/cadastros/modelos-checklist/${templateId}`);
+      revalidatePath("/cadastros/modelos-checklist");
+      revalidatePath("/checklist/realizar");
+    }
+    return result;
+  });
+}
+
+export async function deleteDraftVersionAction(templateId: string, versionId: string): Promise<ActionResult> {
+  const user = await requireUser();
+  return toResult(() => templateService.deleteDraftVersion(user, versionId)).then((result) => {
+    if (result.ok) revalidatePath(`/cadastros/modelos-checklist/${templateId}`);
+    return result;
+  });
+}
+
 export async function removeQuestionAction(templateId: string, questionId: string) {
   const user = await requireUser();
   await templateService.removeQuestion(user, questionId);

@@ -6,7 +6,7 @@ import { listFaultCategories } from "@/server/services/masterdata.service";
 import { PageHeader, PageBody } from "@/components/domain/page-header";
 import { TemplateStatusBadge } from "@/components/domain/status-badges";
 import { VersionTabs } from "./version-tabs";
-import { NewDraftVersionButton, AssignEquipmentDialog, SyncAreaEquipmentButton } from "./template-header-actions";
+import { NewDraftVersionButton, AssignEquipmentDialog, SyncAreaEquipmentButton, RenameTemplateDialog } from "./template-header-actions";
 
 export default async function ModeloChecklistDetailPage({
   params,
@@ -38,6 +38,7 @@ export default async function ModeloChecklistDetailPage({
         actions={
           <div className="flex items-center gap-2">
             <TemplateStatusBadge status={template.status} />
+            <RenameTemplateDialog templateId={template.id} name={template.name} description={template.description} />
             {template.scope === "AREA" ? (
               <SyncAreaEquipmentButton templateId={template.id} />
             ) : (
