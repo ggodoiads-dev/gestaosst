@@ -6,7 +6,7 @@ import type { CurrentUser } from "@/server/auth/current-user";
 import { hasPermission, ForbiddenError } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
 import { APP_TIMEZONE } from "@/lib/dates";
-import { resolveAutoValues } from "@/server/services/cascade-auto.service";
+import { resolveAutoValues, ytdKeyOf } from "@/server/services/cascade-auto.service";
 import {
   diagnose,
   evaluateNode,
@@ -53,11 +53,19 @@ export type CascadeTreeNode = {
   pace: CascadePace;
   target: number | null;
   expected: number | null;
+  /** Base da situação: o acumulado do ano (YTD) quando existe; senão o resultado do mês. */
   value: number | null;
   valueSource: ValueSource | null;
-  /** Período do resultado mostrado (pode ser anterior ao selecionado). */
   valuePeriod: string | null;
   note: string | null;
+  /** Resultado do mês selecionado e se ele bate a meta do mês. */
+  monthValue: number | null;
+  monthSource: ValueSource | null;
+  monthStatus: NodeStatus;
+  /** Acumulado do ano (YTD) até o mês selecionado (ou o último informado). */
+  ytdValue: number | null;
+  ytdSource: ValueSource | null;
+  ytdPeriod: string | null;
   status: NodeStatus;
   progress: number | null;
   impact: string | null;
@@ -81,7 +89,7 @@ export async function getCascadeTree(user: CurrentUser, periodKeyInput?: string)
   const periodKey = periodKeyInput && isValidPeriodKey(periodKeyInput) ? periodKeyInput : currentPeriodKey();
   const todayKey = formatInTimeZone(new Date(), APP_TIMEZONE, "yyyy-MM-dd");
 
-  let nodes: Awaited<ReturnType<typeof loadNodes>> = [];
+  let nodes: LoadedNode[] = [];
   try {
     nodes = await loadNodes(periodKey);
   } catch (error) {
@@ -89,36 +97,61 @@ export async function getCascadeTree(user: CurrentUser, periodKeyInput?: string)
     return { periodKey, roots: [] as CascadeTreeNode[], ready: false, canManage: canManageCascade(user), owners: [] as { id: string; name: string }[] };
   }
 
-  const autoKeys = nodes.filter((n) => n.sigoKey).map((n) => n.sigoKey!);
+  const autoKeys = nodes.filter((n) => n.sigoKey).flatMap((n) => [n.sigoKey!, ...(ytdKeyOf(n.sigoKey!) ? [ytdKeyOf(n.sigoKey!)!] : [])]);
   const auto = await resolveAutoValues(autoKeys, periodKey);
 
   const byId = new Map<string, CascadeTreeNode>();
   for (const n of nodes) {
     const exact = n.values.find((v) => v.periodKey === periodKey) ?? null;
-    const previous = n.values.filter((v) => v.periodKey < periodKey).sort((a, b) => b.periodKey.localeCompare(a.periodKey))[0] ?? null;
-    const autoValue = n.sigoKey ? (auto.get(n.sigoKey) ?? null) : null;
-    let value: number | null = null;
-    let valueSource: ValueSource | null = null;
-    let valuePeriod: string | null = null;
-    let note: string | null = null;
-    if (exact) {
-      value = exact.value;
-      valueSource = exact.source as ValueSource;
-      valuePeriod = exact.periodKey;
-      note = exact.note;
-    } else if (autoValue !== null) {
-      value = autoValue;
-      valueSource = "AUTO";
-      valuePeriod = periodKey;
-    } else if (previous) {
-      value = previous.value;
-      valueSource = "ANTERIOR";
-      valuePeriod = previous.periodKey;
-      note = previous.note;
+    const previousYtd = n.values.filter((v) => v.periodKey < periodKey && v.ytd !== null).sort((a, b) => b.periodKey.localeCompare(a.periodKey))[0] ?? null;
+    const autoMonth = n.sigoKey ? (auto.get(n.sigoKey) ?? null) : null;
+    const ytdKey = n.sigoKey ? ytdKeyOf(n.sigoKey) : null;
+    const autoYtd = ytdKey ? (auto.get(ytdKey) ?? null) : null;
+
+    // Resultado do MÊS: o digitado/importado do mês; senão o automático do SIGO. Não "herda" de mês anterior.
+    let monthValue: number | null = null;
+    let monthSource: ValueSource | null = null;
+    if (exact && exact.value !== null) {
+      monthValue = exact.value;
+      monthSource = exact.source as ValueSource;
+    } else if (autoMonth !== null) {
+      monthValue = autoMonth;
+      monthSource = "AUTO";
     }
-    const evaluation = n.kind === "IC" || n.kind === "IV"
-      ? evaluateNode({ value, target: n.target, polarity: n.polarity as CascadePolarity, pace: n.pace as CascadePace, periodKey: valuePeriod ?? periodKey, todayKey })
+    // ACUMULADO do ano: o do mês; senão a soma automática; senão o último informado (o YTD vale até alguém atualizar).
+    let ytdValue: number | null = null;
+    let ytdSource: ValueSource | null = null;
+    let ytdPeriod: string | null = null;
+    if (exact && exact.ytd !== null) {
+      ytdValue = exact.ytd;
+      ytdSource = exact.source as ValueSource;
+      ytdPeriod = periodKey;
+    } else if (autoYtd !== null) {
+      ytdValue = autoYtd;
+      ytdSource = "AUTO";
+      ytdPeriod = periodKey;
+    } else if (previousYtd) {
+      ytdValue = previousYtd.ytd;
+      ytdSource = "ANTERIOR";
+      ytdPeriod = previousYtd.periodKey;
+    }
+    const note = exact?.note ?? (previousYtd && ytdSource === "ANTERIOR" ? previousYtd.note : null);
+
+    // A situação usa o acumulado (como a planilha); sem acumulado, o resultado do mês.
+    const value = ytdValue ?? monthValue;
+    const valueSource = ytdValue !== null ? ytdSource : monthSource;
+    const valuePeriod = ytdValue !== null ? ytdPeriod : value !== null ? periodKey : null;
+    const polarity = n.polarity as CascadePolarity;
+    const pace = n.pace as CascadePace;
+    const measured = n.kind === "IC" || n.kind === "IV";
+    const evaluation = measured
+      ? evaluateNode({ value, target: n.target, polarity, pace, periodKey: valuePeriod ?? periodKey, todayKey })
       : { status: "NO_DATA" as NodeStatus, expected: null, progress: null };
+    // Meta do mês: a anual dividida por 12 (quando a meta é anual e maior é melhor); senão a própria meta.
+    const monthTarget = n.target !== null && pace === "YEAR" && polarity === "HIGHER" ? n.target / 12 : n.target;
+    const monthEvaluation = measured
+      ? evaluateNode({ value: monthValue, target: monthTarget, polarity, pace: pace === "MONTH" ? "MONTH" : "NONE", periodKey, todayKey })
+      : { status: "NO_DATA" as NodeStatus };
     byId.set(n.id, {
       id: n.id,
       parentId: n.parentId,
@@ -134,6 +167,12 @@ export async function getCascadeTree(user: CurrentUser, periodKeyInput?: string)
       valueSource,
       valuePeriod,
       note,
+      monthValue,
+      monthSource,
+      monthStatus: monthEvaluation.status,
+      ytdValue,
+      ytdSource,
+      ytdPeriod,
       status: evaluation.status,
       progress: evaluation.progress,
       impact: n.impact,
@@ -191,15 +230,35 @@ export async function getCascadeTree(user: CurrentUser, periodKeyInput?: string)
   return { periodKey, roots, ready: true, canManage: canManageCascade(user), owners };
 }
 
-async function loadNodes(periodKey: string) {
+type LoadedNode = Awaited<ReturnType<typeof loadNodesWithYtd>>[number];
+
+async function loadNodesWithYtd(periodKey: string) {
   return db.cascadeNode.findMany({
     where: { active: true },
     orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
     include: {
       owner: { select: { id: true, name: true } },
-      values: { where: { periodKey: { lte: periodKey } }, select: { periodKey: true, value: true, source: true, note: true } },
+      values: { where: { periodKey: { lte: periodKey } }, select: { periodKey: true, value: true, ytd: true, source: true, note: true } },
     },
   });
+}
+
+/** Lê a árvore. Se a coluna do acumulado (ytd) ainda não existe no banco (migração pendente), lê sem ela. */
+async function loadNodes(periodKey: string): Promise<LoadedNode[]> {
+  try {
+    return await loadNodesWithYtd(periodKey);
+  } catch (error) {
+    console.error("[cascade] lendo sem a coluna ytd (migração pendente?):", error);
+    const nodes = await db.cascadeNode.findMany({
+      where: { active: true },
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+      include: {
+        owner: { select: { id: true, name: true } },
+        values: { where: { periodKey: { lte: periodKey } }, select: { periodKey: true, value: true, source: true, note: true } },
+      },
+    });
+    return nodes.map((n) => ({ ...n, values: n.values.map((v) => ({ ...v, ytd: null as number | null })) }));
+  }
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -323,20 +382,20 @@ export async function deleteNode(user: CurrentUser, id: string) {
   await recordAudit({ userId: user.id, action: "DELETE", entityType: "CascadeNode", entityId: id, previousValue: { kind: node.kind, name: node.name } });
 }
 
-export async function setNodeValue(user: CurrentUser, id: string, periodKey: string, value: number | null, note: string) {
+export async function setNodeValue(user: CurrentUser, id: string, periodKey: string, month: number | null, ytd: number | null, note: string) {
   requireManage(user);
   if (!isValidPeriodKey(periodKey)) throw new ForbiddenError("Período inválido.");
-  if (value === null) {
+  if ((month !== null && !Number.isFinite(month)) || (ytd !== null && !Number.isFinite(ytd))) throw new ForbiddenError("Valor inválido.");
+  if (month === null && ytd === null) {
     await db.cascadeValue.deleteMany({ where: { nodeId: id, periodKey } });
   } else {
-    if (!Number.isFinite(value)) throw new ForbiddenError("Valor inválido.");
     await db.cascadeValue.upsert({
       where: { nodeId_periodKey: { nodeId: id, periodKey } },
-      update: { value, note: note.trim() || null, source: "MANUAL", updatedById: user.id },
-      create: { nodeId: id, periodKey, value, note: note.trim() || null, source: "MANUAL", updatedById: user.id },
+      update: { value: month, ytd, note: note.trim() || null, source: "MANUAL", updatedById: user.id },
+      create: { nodeId: id, periodKey, value: month, ytd, note: note.trim() || null, source: "MANUAL", updatedById: user.id },
     });
   }
-  await recordAudit({ userId: user.id, action: "UPDATE", entityType: "CascadeValue", entityId: id, newValue: { periodKey, value, note } });
+  await recordAudit({ userId: user.id, action: "UPDATE", entityType: "CascadeValue", entityId: id, newValue: { periodKey, month, ytd, note } });
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -357,7 +416,7 @@ type SeedNode = {
 };
 
 const IC_SIGO: Record<string, string> = {
-  "dto-dmpeople": "dto.year.count",
+  "dto-dmpeople": "dto.month.count",
   "qlp-relatando": "guardian.reporters.pct",
   "check-list-empilhadeira": "forklift.checklist.pct",
 };
@@ -417,7 +476,7 @@ export async function seedCascade(user: CurrentUser) {
     });
     if (!wasThere) {
       await db.cascadeValue.create({
-        data: { nodeId: id, periodKey: SEED_PERIOD, value: ic.value, note: "Acumulado até set/2026 (planilha SWOT)", source: "IMPORT", updatedById: user.id },
+        data: { nodeId: id, periodKey: SEED_PERIOD, ytd: ic.value, note: "Acumulado do ano até set/2026 (planilha SWOT)", source: "IMPORT", updatedById: user.id },
       });
     }
   }

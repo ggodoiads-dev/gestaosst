@@ -1265,7 +1265,8 @@ model CascadeValue {
   id          String   @id @default(uuid())
   nodeId      String
   periodKey   String // AAAA-MM
-  value       Float
+  value       Float? // resultado do mês
+  ytd         Float? // acumulado do ano até o mês (YTD)
   note        String?
   source      String   @default("MANUAL") // MANUAL | IMPORT
   updatedById String

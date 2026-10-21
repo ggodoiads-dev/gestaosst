@@ -21,6 +21,7 @@ export const SIGO_KEY_LABELS: Record<string, string> = {
   "dto.incident.pct": "% dos incidentes recentes com DTO pós-incidente",
   "guardian.reporters.pct": "% dos colaboradores ativos que relataram no mês (Guardian)",
   "guardian.reports.count": "Relatos do Guardian no mês",
+  "guardian.reports.ytd": "Relatos do Guardian no ano (até o mês)",
   "guardian.notreported.count": "Colaboradores ativos sem relato no mês",
   "guardian.notreported.turno": "Colaboradores do turno sem relato no mês",
   "forklift.checklist.pct": "% de empilhadeira-dia com checklist concluído no mês",
@@ -99,6 +100,8 @@ async function resolveOne(key: string, periodKey: string, todayKey: string): Pro
     }
     case "guardian.reports.count":
       return db.guardianReport.count({ where: { occurredAt: { gte: from, lt: to } } });
+    case "guardian.reports.ytd":
+      return db.guardianReport.count({ where: { occurredAt: { gte: new Date(Date.UTC(y, 0, 1)), lt: to } } });
     case "forklift.available.pct": {
       const forklifts = await db.equipment.findMany({ where: { active: true, type: { name: { contains: "empilhadeira", mode: "insensitive" } } }, select: { status: true } });
       return pct(forklifts.filter((f) => !(UNAVAILABLE as readonly string[]).includes(f.status)).length, forklifts.length);
@@ -132,6 +135,13 @@ async function resolveOne(key: string, periodKey: string, todayKey: string): Pro
     default:
       return null;
   }
+}
+
+/** Chave que dá o ACUMULADO DO ANO (YTD) de quem tem um resultado do mês contável. Só vale para contagens (somam). */
+export function ytdKeyOf(sigoKey: string): string | null {
+  if (sigoKey === "dto.month.count") return "dto.year.count";
+  if (sigoKey === "guardian.reports.count") return "guardian.reports.ytd";
+  return null;
 }
 
 /** Resolve vários `sigoKey` de uma vez. Falha de uma chave não derruba as outras (vira `null`). */

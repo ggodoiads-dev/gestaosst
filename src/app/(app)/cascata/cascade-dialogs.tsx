@@ -45,38 +45,42 @@ function numText(value: number | null) {
   return value === null ? "" : String(value).replace(".", ",");
 }
 
-/** Informar o resultado do período (sobrescreve o valor automático do SIGO, se houver). */
+/** Informar o resultado do mês e o acumulado do ano (YTD) — fica salvo por mês e sobrescreve o valor automático do SIGO. */
 export function ValueDialog({
   nodeId,
   nodeName,
   periodKey,
-  currentValue,
-  isAuto,
+  currentMonth,
+  currentYtd,
+  hasAuto,
   trigger,
 }: {
   nodeId: string;
   nodeName: string;
   periodKey: string;
-  currentValue: number | null;
-  isAuto: boolean;
+  currentMonth: number | null;
+  currentYtd: number | null;
+  hasAuto: boolean;
   trigger: React.ReactNode;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [value, setValue] = useState(numText(currentValue));
+  const [month, setMonth] = useState(numText(currentMonth));
+  const [ytd, setYtd] = useState(numText(currentYtd));
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const label = periodKey.split("-").reverse().join("/");
 
   function save(clear: boolean) {
     setError(null);
     startTransition(async () => {
-      const res = await setNodeValueAction(nodeId, periodKey, clear ? "" : value, note);
+      const res = await setNodeValueAction(nodeId, periodKey, clear ? "" : month, clear ? "" : ytd, note);
       if (!res.ok) {
         setError(res.error);
         return;
       }
-      toast.success(clear ? "Valor removido." : "Resultado atualizado.");
+      toast.success(clear ? "Valores de " + label + " removidos." : "Resultado de " + label + " salvo.");
       setOpen(false);
       router.refresh();
     });
@@ -87,13 +91,16 @@ export function ValueDialog({
       <span onClick={() => setOpen(true)}>{trigger}</span>
       <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle>Atualizar resultado</DialogTitle>
+          <DialogTitle>Resultado de {label}</DialogTitle>
         </DialogHeader>
         <DialogBody className="flex flex-col gap-3 text-sm">
           <p className="font-medium text-foreground">{nodeName}</p>
-          {isAuto && <p className="text-xs text-foreground-subtle">Hoje este valor vem do SIGO automaticamente. Se você informar um valor, ele passa na frente do automático neste mês.</p>}
-          <FormField label={`Resultado de ${periodKey.split("-").reverse().join("/")}`} required>
-            <Input value={value} onChange={(e) => setValue(e.target.value)} inputMode="decimal" placeholder="Ex: 97,41" />
+          {hasAuto && <p className="text-xs text-foreground-subtle">Parte dos números vem do SIGO automaticamente. O que você informar aqui passa na frente do automático neste mês.</p>}
+          <FormField label={`Resultado do mês (${label})`} hint="O que aconteceu só neste mês">
+            <Input value={month} onChange={(e) => setMonth(e.target.value)} inputMode="decimal" placeholder="Ex: 97,4" />
+          </FormField>
+          <FormField label={`Acumulado do ano até ${label} (YTD)`} hint="Do início do ano até este mês. É com ele que a meta anual é comparada.">
+            <Input value={ytd} onChange={(e) => setYtd(e.target.value)} inputMode="decimal" placeholder="Ex: 97,41" />
           </FormField>
           <FormField label="Observação" hint="Opcional">
             <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} />
@@ -101,7 +108,7 @@ export function ValueDialog({
           {error && <p className="text-sm text-danger">{error}</p>}
         </DialogBody>
         <DialogFooter className="justify-between">
-          <Button type="button" variant="ghost" onClick={() => save(true)} loading={pending}>Remover valor</Button>
+          <Button type="button" variant="ghost" onClick={() => save(true)} loading={pending}>Remover</Button>
           <div className="flex gap-2">
             <DialogClose asChild>
               <Button type="button" variant="secondary">Cancelar</Button>

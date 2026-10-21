@@ -33,7 +33,7 @@ const STATUS = {
   NO_TARGET: { label: "Sem meta", dot: "bg-border-strong", text: "text-foreground-subtle" },
 } as const;
 
-const COLS = "md:grid md:grid-cols-[minmax(0,1fr)_96px_104px_84px_124px_130px_132px] md:items-center md:gap-x-3";
+const COLS = "xl:grid xl:grid-cols-[minmax(0,1fr)_88px_92px_112px_80px_120px_116px_132px] xl:items-center xl:gap-x-3";
 const INDENT = 22;
 
 function monthShort(key: string) {
@@ -121,7 +121,7 @@ export function CascadeTree({ roots, periodKey, canManage, owners }: { roots: Ca
             <span className="whitespace-nowrap"><Dot className="bg-success" /> bateu a meta</span> ·{" "}
             <span className="whitespace-nowrap"><Dot className="bg-danger" /> não bateu</span> ·{" "}
             <span className="whitespace-nowrap"><Dot className="bg-border-strong" /> sem resultado ou sem meta</span> ·{" "}
-            <span className="whitespace-nowrap"><Zap className="inline size-3 text-accent" /> valor calculado pelo SIGO</span>
+            <span className="whitespace-nowrap"><Zap className="inline size-3 text-accent" /> valor calculado pelo SIGO</span>.{" "}<strong className="text-foreground">Mês</strong> é o resultado do mês escolhido; <strong className="text-foreground">Acumulado (YTD)</strong> é do início do ano até o mês. A situação compara o acumulado com a meta do ano.
           </p>
         </div>
       </section>
@@ -201,10 +201,11 @@ export function CascadeTree({ roots, periodKey, canManage, owners }: { roots: Ca
         <Diagram sonho={sonho} roots={roots} filter={filter} pilarId={pilarId} open={open} toggle={toggle} />
       ) : (
       <div className="overflow-hidden rounded-md border border-border bg-surface">
-        <div className={cn("hidden border-b border-border-strong bg-surface-muted px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-foreground-subtle", COLS, "md:grid")}>
+        <div className={cn("hidden border-b border-border-strong bg-surface-muted px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-foreground-subtle", COLS, "xl:grid")}>
           <span>Item</span>
           <span>Meta</span>
-          <span>Resultado</span>
+          <span>Mês</span>
+          <span>Acumulado (YTD)</span>
           <span>Atingimento</span>
           <span>Situação</span>
           <span>Responsável</span>
@@ -337,12 +338,18 @@ function TreeRow({ row, expanded, onToggle, periodKey, canManage, owners }: { ro
               {node.pace === "YEAR" && node.target !== null && <span className="block text-[11px] text-foreground-subtle">no ano</span>}
               {node.pace === "MONTH" && node.target !== null && <span className="block text-[11px] text-foreground-subtle">no mês</span>}
             </Cell>
-            <Cell label="Resultado">
-              <span className="inline-flex items-center gap-1 font-semibold tabular-nums text-foreground">
-                {formatCascadeValue(node.unit, node.value)}
-                {node.valueSource === "AUTO" && <Zap className="size-3 text-accent" aria-label="Calculado pelo SIGO" />}
+            <Cell label="Resultado do mês">
+              <span className="inline-flex items-center gap-1 font-semibold tabular-nums">
+                <span className={cn(node.monthValue === null ? "text-foreground-subtle" : STATUS[node.monthStatus].text)}>{formatCascadeValue(node.unit, node.monthValue)}</span>
+                {node.monthSource === "AUTO" && <Zap className="size-3 text-accent" aria-label="Calculado pelo SIGO" />}
               </span>
-              {node.valueSource === "ANTERIOR" && node.valuePeriod && <span className="block text-[11px] text-foreground-subtle">de {monthShort(node.valuePeriod)}</span>}
+            </Cell>
+            <Cell label="Acumulado no ano (YTD)">
+              <span className="inline-flex items-center gap-1 font-semibold tabular-nums text-foreground">
+                {formatCascadeValue(node.unit, node.ytdValue)}
+                {node.ytdSource === "AUTO" && <Zap className="size-3 text-accent" aria-label="Calculado pelo SIGO" />}
+              </span>
+              {node.ytdSource === "ANTERIOR" && node.ytdPeriod && <span className="block text-[11px] text-foreground-subtle">até {monthShort(node.ytdPeriod)}</span>}
             </Cell>
             <Cell label="Atingimento">
               <span className="tabular-nums text-foreground-muted">{node.progress === null ? "—" : `${Math.round(node.progress * 100)}%`}</span>
@@ -356,7 +363,7 @@ function TreeRow({ row, expanded, onToggle, periodKey, canManage, owners }: { ro
             <Cell label="Responsável">
               <span className="text-[13px] text-foreground-muted">{node.owner ? formatPersonName(node.owner.name) : "—"}</span>
             </Cell>
-            <div className="mt-1 flex items-center justify-end gap-0.5 md:mt-0">
+            <div className="mt-1 flex items-center justify-end gap-0.5 xl:mt-0">
               {canManage && <RowActions node={node} periodKey={periodKey} owners={owners} />}
             </div>
           </>
@@ -376,8 +383,8 @@ function TreeRow({ row, expanded, onToggle, periodKey, canManage, owners }: { ro
 /** Célula com o rótulo da coluna visível só no celular (no computador o rótulo está no cabeçalho). */
 function Cell({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="mt-1 flex items-baseline gap-2 text-sm md:mt-0 md:block">
-      <span className="w-24 shrink-0 text-[11px] uppercase tracking-wide text-foreground-subtle md:hidden">{label}</span>
+    <div className="mt-1 flex items-baseline gap-2 text-sm xl:mt-0 xl:block">
+      <span className="w-24 shrink-0 text-[11px] uppercase tracking-wide text-foreground-subtle xl:hidden">{label}</span>
       <span>{children}</span>
     </div>
   );
@@ -392,8 +399,9 @@ function RowActions({ node, periodKey, owners }: { node: CascadeTreeNode; period
         nodeId={node.id}
         nodeName={node.name}
         periodKey={periodKey}
-        currentValue={node.valuePeriod === periodKey ? node.value : null}
-        isAuto={node.valueSource === "AUTO"}
+        currentMonth={node.monthValue}
+        currentYtd={node.ytdPeriod === periodKey ? node.ytdValue : null}
+        hasAuto={node.monthSource === "AUTO" || node.ytdSource === "AUTO"}
         trigger={<button type="button" className="rounded border border-border-strong bg-surface px-2 py-1 text-xs font-medium text-foreground hover:bg-surface-muted">Atualizar</button>}
       />
       <NodeDialog
@@ -555,15 +563,23 @@ function NodeBox({ node, childCount, expanded, onToggle }: { node: CascadeTreeNo
         )}
       </p>
       <p className="mt-0.5 line-clamp-2 text-[13px] font-semibold leading-snug text-foreground">{node.name}</p>
-      <div className="mt-1.5 flex items-baseline justify-between gap-2 text-[11px] text-foreground-subtle">
+      <div className="mt-1.5 grid grid-cols-3 gap-1 text-[11px] text-foreground-subtle">
         <span>
-          Meta <span className="font-medium tabular-nums text-foreground-muted">{node.polarity === "LOWER" && node.target !== null ? "≤ " : ""}{formatCascadeValue(node.unit, node.target)}</span>
+          Meta
+          <span className="block font-medium tabular-nums text-foreground-muted">{node.polarity === "LOWER" && node.target !== null ? "≤ " : ""}{formatCascadeValue(node.unit, node.target)}</span>
         </span>
         <span>
-          Resultado{" "}
-          <span className={cn("inline-flex items-center gap-0.5 font-bold tabular-nums", st.text)}>
-            {formatCascadeValue(node.unit, node.value)}
-            {node.valueSource === "AUTO" && <Zap className="size-3 text-accent" />}
+          Mês
+          <span className={cn("flex items-center gap-0.5 font-bold tabular-nums", node.monthValue === null ? "text-foreground-subtle" : STATUS[node.monthStatus].text)}>
+            {formatCascadeValue(node.unit, node.monthValue)}
+            {node.monthSource === "AUTO" && <Zap className="size-3 text-accent" />}
+          </span>
+        </span>
+        <span>
+          Ano (YTD)
+          <span className={cn("flex items-center gap-0.5 font-bold tabular-nums", st.text)}>
+            {formatCascadeValue(node.unit, node.ytdValue)}
+            {node.ytdSource === "AUTO" && <Zap className="size-3 text-accent" />}
           </span>
         </span>
       </div>

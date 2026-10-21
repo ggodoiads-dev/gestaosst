@@ -58,12 +58,17 @@ export async function deleteNodeAction(id: string) {
   return run(async () => service.deleteNode(await requireUser(), id));
 }
 
-export async function setNodeValueAction(id: string, periodKey: string, valueText: string, note: string) {
+function parseNumber(text: string): number | null {
+  const raw = text.trim().replace(/\./g, "").replace(",", ".");
+  if (raw === "") return null;
+  const value = Number(raw);
+  if (!Number.isFinite(value)) throw new ForbiddenError("Valor inválido.");
+  return value;
+}
+
+export async function setNodeValueAction(id: string, periodKey: string, monthText: string, ytdText: string, note: string) {
   return run(async () => {
-    const raw = valueText.trim().replace(/\./g, "").replace(",", ".");
-    const value = raw === "" ? null : Number(raw);
-    if (value !== null && !Number.isFinite(value)) throw new ForbiddenError("Valor inválido.");
-    await service.setNodeValue(await requireUser(), id, periodKey, value, note);
+    await service.setNodeValue(await requireUser(), id, periodKey, parseNumber(monthText), parseNumber(ytdText), note);
   });
 }
 
