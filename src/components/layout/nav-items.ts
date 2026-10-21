@@ -277,12 +277,12 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
   if (p.has(PERMISSIONS.DTO_MANAGE)) {
     importacoes.push({ href: "/dto/importar", label: "Importar DTO", icon: "checklistCompliance" });
   }
-  if (p.has(PERMISSIONS.MASTERDATA_MANAGE)) {
+  if (p.has(PERMISSIONS.MASTERDATA_MANAGE) && p.has(PERMISSIONS.USER_MANAGE)) {
     importacoes.push({ href: "/cadastros/equipamentos/importar", label: "Importar Equipamentos", icon: "equipmentImport" });
   }
   if (importacoes.length > 0) groups.push({ key: "importacoes", title: "Importações", items: importacoes });
 
-  // Cadastros do dia a dia (cada um pela sua permissão) — não são "Administração".
+  // Cadastros (tipos, modelos, funções) — só aparecem para o Administrador.
   const cadastros: NavItem[] = [];
   if (p.has(PERMISSIONS.MASTERDATA_MANAGE)) {
     cadastros.push({ href: "/cadastros/equipamentos", label: "Tipos de Equipamento", icon: "equipment" });
@@ -298,7 +298,8 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
   if (p.has(PERMISSIONS.SCHEDULE_MANAGE)) {
     cadastros.push({ href: "/cadastros/escalas", label: "Tipos de Escala", icon: "schedules" });
   }
-  if (cadastros.length > 0) groups.push({ key: "cadastros", title: "Cadastros", items: cadastros });
+  // Cadastros são só do Administrador (quem gerencia usuários e perfis).
+  if (cadastros.length > 0 && p.has(PERMISSIONS.USER_MANAGE)) groups.push({ key: "cadastros", title: "Cadastros", items: cadastros });
 
   // Administração: só o administrador (quem gerencia usuários e perfis) — o Gestor vê tudo, menos esta aba.
   const admin: NavItem[] = [];
