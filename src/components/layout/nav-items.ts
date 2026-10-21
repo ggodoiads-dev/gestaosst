@@ -257,6 +257,9 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
   if (p.has(PERMISSIONS.HR_MANAGE) || p.has(PERMISSIONS.EQUIPMENT_DAMAGE_MANAGE)) {
     indicadores.push({ href: "/financeiro", label: "Financeiro", icon: "finance" });
   }
+  if (p.has(PERMISSIONS.HR_MANAGE)) {
+    indicadores.push({ href: "/financeiro/dre", label: "DRE", icon: "finance" });
+  }
   if (indicadores.length > 0) groups.push({ key: "indicadores", title: "Supervisão", items: indicadores });
 
   // Tudo que alimenta o SIGO com planilhas/exports de outros sistemas fica num lugar só.
@@ -270,6 +273,9 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
   }
   if (p.has(PERMISSIONS.QUALIFICATION_MANAGE)) {
     importacoes.push({ href: "/qualificacoes/importar", label: "Importar ASOs/NRs", icon: "qualificationImport" });
+  }
+  if (p.has(PERMISSIONS.HR_MANAGE)) {
+    importacoes.push({ href: "/financeiro/dre/importar", label: "Importar DRE", icon: "finance" });
   }
   if (p.has(PERMISSIONS.GUARDIAN_MANAGE)) {
     importacoes.push({ href: "/guardian/importar", label: "Importar Guardian", icon: "guardian" });

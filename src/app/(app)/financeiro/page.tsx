@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Wrench, Wallet, Calculator, Info } from "lucide-react";
-import { requireUser } from "@/server/auth/current-user";
+import { requireUser, hasPermission } from "@/server/auth/current-user";
+import { PERMISSIONS } from "@/domain/shared/permissions";
 import { getFinanceSummary } from "@/server/services/finance.service";
 import { PageHeader, PageBody } from "@/components/domain/page-header";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
@@ -29,6 +30,15 @@ export default async function FinanceiroPage() {
         description="Consolidação do custo que o sistema já conhece — nada é lançado manualmente aqui, cada número tem origem numa tela específica e pode ser conferido linha a linha."
       />
       <PageBody>
+        {hasPermission(user, PERMISSIONS.HR_MANAGE) && (
+          <Link href="/financeiro/dre" className="flex items-center justify-between gap-3 rounded-lg border border-border-strong bg-surface px-4 py-3 hover:bg-surface-muted">
+            <span>
+              <span className="block text-sm font-semibold text-foreground">DRE — Demonstrativo de Resultados</span>
+              <span className="block text-xs text-foreground-subtle">Receita, custos, despesas e EBITDA mês a mês e no acumulado do ano, importados da plataforma financeira. Alimenta os indicadores financeiros do Cascateamento.</span>
+            </span>
+            <span className="shrink-0 text-sm font-medium text-accent">Abrir DRE →</span>
+          </Link>
+        )}
         {showEmpty && (
           <Card>
             <CardContent className="py-8 text-center text-sm text-foreground-subtle">

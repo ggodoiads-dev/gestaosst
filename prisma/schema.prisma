@@ -105,6 +105,7 @@ model User {
   absenceInterviewsAnswered       AbsenceInterview[]           @relation("AbsenceInterviewAnsweredBy")
   absenceInterviewsConcluded      AbsenceInterview[]           @relation("AbsenceInterviewConcludedBy")
   cascadeNodesOwned               CascadeNode[]                @relation("CascadeNodeOwner")
+  dreImports                      DreImport[]                  @relation("DreImportedBy")
   cascadeValuesUpdated            CascadeValue[]               @relation("CascadeValueBy")
   dtoEvaluationsImported          DtoEvaluation[]              @relation("DtoEvaluationImportedBy")
   dtoJustificationsMade           DtoJustification[]           @relation("DtoJustificationCreatedBy")
@@ -1231,6 +1232,40 @@ model QualificationRecord {
 
 /// Advertência (aviso disciplinar) — alimenta o cálculo de benefícios: uma advertência dentro do
 /// período de apuração faz o colaborador perder a cesta básica do mês de referência.
+/// DRE (Demonstrativo de Resultados) importado do export da plataforma financeira: uma linha de conta por mês. Reimportar um
+/// mês substitui as linhas dele. O acumulado do ano (YTD) é somado dos meses, não guardado.
+model DreImport {
+  id           String   @id @default(uuid())
+  fileName     String
+  unit         String?
+  officialAt   String? // "OFICIAL ATUALIZADO EM" do arquivo
+  months       String[] // AAAA-MM lidos neste arquivo
+  importedAt   DateTime @default(now())
+  importedById String
+
+  importedBy User      @relation("DreImportedBy", fields: [importedById], references: [id])
+  lines      DreLine[]
+}
+
+model DreLine {
+  id         String @id @default(uuid())
+  importId   String
+  periodKey  String // AAAA-MM
+  code       String // 001 ... 283
+  name       String
+  level      Int // 0 = totalizador, 1+ = subconta
+  position   Int // ordem no DRE
+  remunerado Float
+  realizado  Float
+  diferenca  Float
+  avr        Float // % sobre a receita líquida realizada
+
+  import DreImport @relation(fields: [importId], references: [id], onDelete: Cascade)
+
+  @@unique([periodKey, code])
+  @@index([periodKey])
+}
+
 /// Cascateamento de metas (árvore genealógica): Sonho → Pilar → IC (item de controle: O QUE, o resultado) → IV (item de
 /// verificação: COMO, o processo que fecha o IC) → IVs de IVs, até a rotina de uma pessoa. kind/unit/polarity/pace são texto
 /// validado em código (ver `src/domain/cascade`). `sigoKey` liga o nó a um número que o SIGO já mede sozinho.

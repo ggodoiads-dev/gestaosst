@@ -4,6 +4,8 @@ import { formatInTimeZone } from "date-fns-tz";
 import { db } from "@/server/db";
 import { APP_TIMEZONE } from "@/lib/dates";
 import { DTO_INCIDENT_TYPES, DTO_NEW_HIRE_DAYS } from "@/domain/dto/suggestions";
+import { parseDreKey } from "@/domain/dre/metrics";
+import { resolveDreMetric } from "@/server/services/dre.service";
 
 /**
  * Números que o SIGO já mede sozinho e que alimentam os nós do cascateamento (`sigoKey`). Cada chave devolve o valor do
@@ -44,6 +46,7 @@ async function dtoCollaborators() {
 }
 
 async function resolveOne(key: string, periodKey: string, todayKey: string): Promise<number | null> {
+  if (key.startsWith("dre.")) return resolveDreMetric(key, periodKey);
   const [base, param] = key.split(":");
   const { from, to, y } = monthBounds(periodKey);
   const today = new Date(`${todayKey}T12:00:00Z`);
@@ -139,6 +142,8 @@ async function resolveOne(key: string, periodKey: string, todayKey: string): Pro
 
 /** Chave que dá o ACUMULADO DO ANO (YTD) de quem tem um resultado do mês contável. Só vale para contagens (somam). */
 export function ytdKeyOf(sigoKey: string): string | null {
+  const dre = parseDreKey(sigoKey);
+  if (dre) return dre.ytd ? null : sigoKey.replace(/^dre\.(avr|ratio):/, "dre.$1.ytd:");
   if (sigoKey === "dto.month.count") return "dto.year.count";
   if (sigoKey === "guardian.reports.count") return "guardian.reports.ytd";
   return null;

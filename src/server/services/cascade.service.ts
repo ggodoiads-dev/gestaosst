@@ -22,6 +22,16 @@ import {
 } from "@/domain/cascade/status";
 import { SEED_ICS, SEED_PERIOD, SEED_PILARES, SEED_SONHO } from "@/domain/cascade/seed-data";
 
+/** ICs financeiros que leem do DRE importado (mês e acumulado do ano), pelo `seedKey` da estrutura inicial. Valor: chave do DRE;
+ * "-" na frente do código troca o sinal (custos são negativos no DRE e o indicador é um % positivo). */
+const SEED_DRE_KEYS: Record<string, string> = {
+  "ic:gastos-totais": "dre.avr:-021",
+  "ic:despesas-administrativas": "dre.avr:-158",
+  "ic:pacote-de-manutencao": "dre.avr:114",
+  "ic:ebitda": "dre.avr:233",
+  "ic:pacote-de-gente": "dre.ratio:033",
+};
+
 /**
  * Cascateamento de metas: árvore Sonho → Pilar → IC (O QUE) → IV (COMO) → IVs de IVs. Ver (gerente, auditor) exige
  * indicadores consolidados; criar/editar/atualizar resultado exige `cascade.manage`.
@@ -97,6 +107,7 @@ export async function getCascadeTree(user: CurrentUser, periodKeyInput?: string)
     return { periodKey, roots: [] as CascadeTreeNode[], ready: false, canManage: canManageCascade(user), owners: [] as { id: string; name: string }[] };
   }
 
+  nodes = nodes.map((n) => ({ ...n, sigoKey: n.sigoKey ?? SEED_DRE_KEYS[n.seedKey ?? ""] ?? null }));
   const autoKeys = nodes.filter((n) => n.sigoKey).flatMap((n) => [n.sigoKey!, ...(ytdKeyOf(n.sigoKey!) ? [ytdKeyOf(n.sigoKey!)!] : [])]);
   const auto = await resolveAutoValues(autoKeys, periodKey);
 
