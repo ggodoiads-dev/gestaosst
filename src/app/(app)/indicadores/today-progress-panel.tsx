@@ -6,6 +6,7 @@ import { Check, ChevronDown, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatPersonName, initials } from "@/lib/format-name";
 import { JustifyChecklistItemDialog } from "@/components/domain/justify-checklist-item-dialog";
+import { UndoChecklistJustificationsButton } from "@/components/domain/undo-checklist-justifications-button";
 import type { TodayProgressEntry } from "@/server/services/checklist-compliance.service";
 
 type Filter = "todos" | "faltam" | "concluidos";
@@ -165,6 +166,7 @@ export function TodayProgressPanel({
                             sem acesso
                           </span>
                         )}
+                        {c.justified > 0 && <span className="rounded bg-warning-soft px-1.5 py-0.5 text-[11px] font-medium text-warning">{c.justified} justificado(s)</span>}
                         {isClosedDay && !c.noAccess && (
                           c.done * 100 < c.required * 80 ? (
                             <span className="rounded bg-danger-soft px-1.5 py-0.5 text-[11px] font-medium text-danger">gera advertência</span>
@@ -195,6 +197,15 @@ export function TodayProgressPanel({
                         >
                           Ver respostas do dia
                         </Link>
+                        {canJustify && c.justified > 0 && (
+                          <UndoChecklistJustificationsButton
+                            collaboratorId={c.id}
+                            collaboratorName={formatPersonName(c.name)}
+                            dayKey={dayKey}
+                            count={c.justified}
+                            label={`Desfazer justificativas (${c.justified})`}
+                          />
+                        )}
                         {canJustify && c.missing.length > 0 && (
                           <JustifyChecklistItemDialog
                             collaboratorId={c.id}
@@ -239,22 +250,30 @@ export function TodayProgressPanel({
           <h3 className="text-xs font-semibold uppercase tracking-wide text-success">Concluíram ({shownConcluded.length})</h3>
           <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
             {shownConcluded.map((c) => (
-              <Link
-                key={c.id}
-                href={`/indicadores/checklist/${c.id}?dia=${dayKey}`}
-                className="flex items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2.5 hover:bg-surface-muted"
-              >
-                <span className="grid size-9 shrink-0 place-items-center rounded-full bg-success-soft text-success">
-                  <Check className="size-4" />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-medium text-foreground">{formatPersonName(c.name)}</span>
-                  <span className="block text-xs text-foreground-subtle">
-                    {c.required}/{c.required} equipamentos
-                    {c.areaName && ` · ${c.areaName}`}
+              <div key={c.id} className="flex items-center gap-2 rounded-lg border border-border bg-surface pr-2 hover:bg-surface-muted">
+                <Link href={`/indicadores/checklist/${c.id}?dia=${dayKey}`} className="flex min-w-0 flex-1 items-center gap-3 px-3 py-2.5">
+                  <span className="grid size-9 shrink-0 place-items-center rounded-full bg-success-soft text-success">
+                    <Check className="size-4" />
                   </span>
-                </span>
-              </Link>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium text-foreground">{formatPersonName(c.name)}</span>
+                    <span className="block text-xs text-foreground-subtle">
+                      {c.required}/{c.required} equipamentos
+                      {c.areaName && ` · ${c.areaName}`}
+                      {c.justified > 0 && <span className="font-medium text-warning"> · {c.justified} justificado(s)</span>}
+                    </span>
+                  </span>
+                </Link>
+                {canJustify && c.justified > 0 && (
+                  <UndoChecklistJustificationsButton
+                    collaboratorId={c.id}
+                    collaboratorName={formatPersonName(c.name)}
+                    dayKey={dayKey}
+                    count={c.justified}
+                    label="Desfazer justificativas"
+                  />
+                )}
+              </div>
             ))}
           </div>
         </section>

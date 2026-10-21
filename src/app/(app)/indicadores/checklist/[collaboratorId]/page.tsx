@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { APP_TIMEZONE, formatDate, formatDateTime, parseDateOnly } from "@/lib/dates";
 import { attachmentUrl } from "@/lib/attachment-url";
 import { DayJumpInput } from "@/components/domain/day-jump-input";
+import { UndoChecklistJustificationsButton } from "@/components/domain/undo-checklist-justifications-button";
 import { JustifyChecklistItemDialog } from "@/components/domain/justify-checklist-item-dialog";
 
 const RESULT_TONE: Record<string, "success" | "info" | "warning" | "danger"> = {
@@ -127,7 +128,18 @@ export default async function ChecklistDoColaboradorPage({
         {detail.justified.length > 0 && (
           <Card>
             <CardContent className="flex flex-col gap-2 py-4">
-              <p className="text-sm font-semibold text-foreground">Justificados e concluídos — {detail.justified.length}</p>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-semibold text-foreground">Justificados e concluídos — {detail.justified.length}</p>
+                {detail.canJustify && (
+                  <UndoChecklistJustificationsButton
+                    collaboratorId={detail.collaborator.id}
+                    collaboratorName={detail.collaborator.name}
+                    dayKey={dayKey}
+                    count={detail.justified.length}
+                    label={detail.justified.length > 1 ? `Desfazer todas (${detail.justified.length})` : "Desfazer"}
+                  />
+                )}
+              </div>
               <div className="flex flex-col divide-y divide-border">
                 {detail.justified.map((e) => (
                   <div key={e.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
@@ -139,15 +151,24 @@ export default async function ChecklistDoColaboradorPage({
                       </span>
                     </span>
                     {detail.canJustify && (
-                      <JustifyChecklistItemDialog
-                        collaboratorId={detail.collaborator.id}
-                        collaboratorName={detail.collaborator.name}
-                        dayKey={dayKey}
-                        itemIds={[e.id]}
-                        itemLabel={e.code}
-                        currentReason={e.justification.reason}
-                        currentNote={e.justification.note}
-                      />
+                      <span className="flex items-center gap-1">
+                        <JustifyChecklistItemDialog
+                          collaboratorId={detail.collaborator.id}
+                          collaboratorName={detail.collaborator.name}
+                          dayKey={dayKey}
+                          itemIds={[e.id]}
+                          itemLabel={e.code}
+                          currentReason={e.justification.reason}
+                          currentNote={e.justification.note}
+                        />
+                        <UndoChecklistJustificationsButton
+                          collaboratorId={detail.collaborator.id}
+                          collaboratorName={detail.collaborator.name}
+                          dayKey={dayKey}
+                          itemIds={[e.id]}
+                          count={1}
+                        />
+                      </span>
                     )}
                   </div>
                 ))}

@@ -493,6 +493,8 @@ export type TodayProgressEntry = {
   noAccess: boolean;
   /** Equipamentos que ainda faltam hoje (vazio quando concluiu). */
   missing: { id: string; code: string }[];
+  /** Quantos itens do dia contam como concluídos só por justificativa (dá pra desfazer). */
+  justified: number;
 };
 
 /** Andamento de HOJE (informativo — NÃO entra na % de aderência, que é sempre até D-1): de quem está escalado
@@ -556,10 +558,9 @@ async function computeDayProgress(
   const concluded: TodayProgressEntry[] = [];
   const remaining: TodayProgressEntry[] = [];
   for (const { c, required } of rows) {
-    const doneIds = new Set([
-      ...(c.userId ? (doneByUser.get(c.userId) ?? []) : []),
-      ...justifiedItemIds(justificationsByKey.get(`${c.id}|${todayKey}`)),
-    ]);
+    const executedNow = new Set(c.userId ? (doneByUser.get(c.userId) ?? []) : []);
+    const justifiedNow = justifiedItemIds(justificationsByKey.get(`${c.id}|${todayKey}`));
+    const doneIds = new Set([...executedNow, ...justifiedNow]);
     // Equipamento bloqueado/em manutenção no dia não podia ser inspecionado: sai da conta (nem feito, nem pendente) — igual ao detalhe.
     const dayRequired = required.filter((e) => !unavailable(e.id, todayKey));
     if (dayRequired.length === 0) continue;
@@ -572,6 +573,7 @@ async function computeDayProgress(
       required: dayRequired.length,
       noAccess: !c.userId,
       missing,
+      justified: dayRequired.filter((e) => justifiedNow.has(e.id) && !executedNow.has(e.id)).length,
     };
     (missing.length === 0 ? concluded : remaining).push(entry);
   }
@@ -790,6 +792,36 @@ export async function removeChecklistItemJustification(
     entityId: existing.id,
     previousValue: { ...key, reason: existing.reason, note: existing.note },
   });
+}
+
+/** Desfaz justificativas de um colaborador num dia: as de `itemIds` ou, sem lista, todas do dia. Devolve quantas foram desfeitas. */
+export async function removeChecklistItemJustifications(
+  user: CurrentUser,
+  input: { collaboratorId: string; dayKey: string; itemIds?: string[] },
+) {
+  if (!canJustifyChecklist(user)) throw new ForbiddenError();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.dayKey)) throw new Error("Data inválida.");
+  const rows = await db.checklistItemJustification.findMany({
+    where: {
+      collaboratorId: input.collaboratorId,
+      dayKey: input.dayKey,
+      ...(input.itemIds && input.itemIds.length > 0 ? { itemId: { in: input.itemIds } } : {}),
+    },
+  });
+  if (rows.length === 0) return 0;
+  await db.checklistItemJustification.deleteMany({ where: { id: { in: rows.map((r) => r.id) } } });
+  await recordAudit({
+    userId: user.id,
+    action: "DELETE",
+    entityType: "ChecklistItemJustification",
+    entityId: rows[0].id,
+    previousValue: {
+      collaboratorId: input.collaboratorId,
+      dayKey: input.dayKey,
+      removed: rows.map((r) => ({ itemId: r.itemId, reason: r.reason, note: r.note })),
+    },
+  });
+  return rows.length;
 }
 
 export type ComplianceExplorerPeriod = "dia" | "mes" | "ano";
