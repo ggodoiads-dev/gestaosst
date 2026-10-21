@@ -54,3 +54,26 @@ describe("perfil Auditor (só leitura)", () => {
     expect(DEFAULT_ROLE_PERMISSIONS[ROLE_KEYS.ADMINISTRADOR]).toEqual(expect.arrayContaining(auditor));
   });
 });
+
+describe("perfis por função", () => {
+  it("gestor vê e faz tudo, menos administrar usuários", () => {
+    const gestor = DEFAULT_ROLE_PERMISSIONS[ROLE_KEYS.GESTOR];
+    expect(gestor).toContain(PERMISSIONS.HR_MANAGE);
+    expect(gestor).toContain(PERMISSIONS.AUDIT_VIEW);
+    expect(gestor).toContain(PERMISSIONS.DISCIPLINE_MANAGE);
+    expect(gestor).not.toContain(PERMISSIONS.USER_MANAGE);
+  });
+  it("RH, técnico de segurança, frota e manutenção só usam permissões que existem no catálogo, e ninguém além de admin/gestor administra usuários", () => {
+    for (const role of [ROLE_KEYS.RH, ROLE_KEYS.TECNICO_SEGURANCA, ROLE_KEYS.FROTA, ROLE_KEYS.MANUTENCAO]) {
+      const keys = DEFAULT_ROLE_PERMISSIONS[role];
+      for (const key of keys) expect(PERMISSION_DESCRIPTIONS[key]).toBeTruthy();
+      expect(keys).not.toContain(PERMISSIONS.USER_MANAGE);
+    }
+  });
+  it("só o RH (e gestor/admin) acessa dados de RH", () => {
+    expect(DEFAULT_ROLE_PERMISSIONS[ROLE_KEYS.RH]).toContain(PERMISSIONS.HR_MANAGE);
+    for (const role of [ROLE_KEYS.TECNICO_SEGURANCA, ROLE_KEYS.FROTA, ROLE_KEYS.MANUTENCAO]) {
+      expect(DEFAULT_ROLE_PERMISSIONS[role]).not.toContain(PERMISSIONS.HR_MANAGE);
+    }
+  });
+});
