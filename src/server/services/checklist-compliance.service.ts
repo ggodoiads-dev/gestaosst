@@ -957,19 +957,3 @@ export async function listChecklistNonCompletion(fromKey: string): Promise<Check
   }
   return result;
 }
-
-// TEMP-DIAG: apoio da rota de diagnóstico (remover junto com ela).
-export async function diagnoseChecklistDays(collaboratorId: string, from: Date, to: Date) {
-  const { collaborator, days } = await buildCollaboratorChecklistDays(collaboratorId, from, to);
-  return {
-    eligible: !!collaborator,
-    days: days.map((d) => ({
-      day: localDateKey(d.date),
-      status: d.status,
-      future: d.future,
-      required: d.required.length,
-      done: d.completed.length,
-      pending: d.pending.length,
-    })),
-  };
-}
