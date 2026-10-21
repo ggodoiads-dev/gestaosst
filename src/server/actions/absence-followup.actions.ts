@@ -41,7 +41,7 @@ export async function dismissAbsenceNoteAction(noteId: string, reason: string) {
   });
 }
 
-export async function bulkFollowUpAction(noteIds: string[], op: "warning" | "interview" | "dismiss", reason?: string) {
+export async function bulkFollowUpAction(noteIds: string[], op: "warning" | "interview" | "dismiss" | "delete", reason?: string) {
   return run(async () => {
     const user = await requireUser();
     await service.bulkFollowUp(user, noteIds, op, reason);

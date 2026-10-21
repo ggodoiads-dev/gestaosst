@@ -264,3 +264,50 @@ export function BulkDismissButton({ noteIds, onDone }: { noteIds: string[]; onDo
     </Dialog>
   );
 }
+
+export function BulkDeleteButton({ noteIds, onDone }: { noteIds: string[]; onDone: () => void }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [pending, startTransition] = useTransition();
+
+  function confirm() {
+    startTransition(async () => {
+      const res = await bulkFollowUpAction(noteIds, "delete");
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success(`${noteIds.length} lançamento(s) excluído(s).`);
+      setOpen(false);
+      onDone();
+      router.refresh();
+    });
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <Button type="button" size="sm" variant="secondary" className="text-danger hover:text-danger" onClick={() => setOpen(true)}>
+        <Trash2 className="size-4" /> Excluir
+      </Button>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Excluir {noteIds.length} lançamento(s)?</DialogTitle>
+        </DialogHeader>
+        <DialogBody className="text-sm text-foreground-subtle">
+          Use quando foram lançados por engano. Eles saem da escada, da presença e desta fila, e cada dia volta ao que a escala do colaborador
+          determina. Os anexos e as entrevistas de ABS deles também são apagados. Não dá para desfazer.
+        </DialogBody>
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button type="button" variant="secondary">
+              Cancelar
+            </Button>
+          </DialogClose>
+          <Button onClick={confirm} loading={pending} variant="danger">
+            Excluir {noteIds.length}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}

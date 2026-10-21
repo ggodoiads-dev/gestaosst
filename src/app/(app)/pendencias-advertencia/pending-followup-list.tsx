@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { markWarningAppliedAction, markAbsenceInterviewDoneAction } from "@/server/actions/schedule.actions";
 import { requestAbsenceInterviewAction } from "@/server/actions/absence-interview.actions";
 import { CreateWarningDialog } from "@/app/(app)/colaboradores/[id]/warning-dialog";
-import { BulkDismissButton, DeleteNoteButton, DismissNoteButton, WarningDocuments } from "./followup-tools";
+import { BulkDeleteButton, BulkDismissButton, DeleteNoteButton, DismissNoteButton, WarningDocuments } from "./followup-tools";
 import { bulkFollowUpAction } from "@/server/actions/absence-followup.actions";
 import { MeasureDialog, type DisciplineEntry } from "./discipline-section";
 import { disciplineStepLabel } from "@/domain/discipline/ladder";
@@ -346,6 +346,7 @@ export function PendingFollowUpList({ items, canHr }: { items: FollowUpItem[]; c
               </Button>
             )}
             <BulkDismissButton noteIds={selectedShown} onDone={() => setSelected(new Set())} />
+            {canHr && <BulkDeleteButton noteIds={selectedShown} onDone={() => setSelected(new Set())} />}
             <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
               Limpar
             </Button>

@@ -75,8 +75,8 @@ export async function dismissAbsenceNote(user: CurrentUser, noteId: string, reas
 
 /** Ação em lote sobre várias faltas/atestados da fila: marcar advertência aplicada, marcar entrevista de ABS feita ou
  * justificar (com motivo único). Devolve quantos lançamentos mudaram. */
-export async function bulkFollowUp(user: CurrentUser, noteIds: string[], op: "warning" | "interview" | "dismiss", reason?: string) {
-  if (op === "interview") requirePermission(user, PERMISSIONS.HR_MANAGE);
+export async function bulkFollowUp(user: CurrentUser, noteIds: string[], op: "warning" | "interview" | "dismiss" | "delete", reason?: string) {
+  if (op === "interview" || op === "delete") requirePermission(user, PERMISSIONS.HR_MANAGE);
   else requireFollowUp(user);
   const ids = [...new Set(noteIds)];
   if (ids.length === 0) throw new Error("Selecione ao menos um lançamento.");
@@ -84,6 +84,10 @@ export async function bulkFollowUp(user: CurrentUser, noteIds: string[], op: "wa
 
   if (op === "dismiss") {
     for (const id of ids) await dismissAbsenceNote(user, id, reason ?? "");
+    return ids.length;
+  }
+  if (op === "delete") {
+    for (const id of ids) await deleteAbsenceNote(user, id);
     return ids.length;
   }
   const result =
