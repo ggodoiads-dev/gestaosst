@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronRight, Pencil, Plus, Trash2, Zap } from "lucide-react";
+import { ChevronRight, List, Network, Pencil, Plus, Trash2, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatPersonName } from "@/lib/format-name";
 import { formatCascadeValue } from "@/domain/cascade/status";
@@ -42,6 +42,8 @@ type Row = { node: CascadeTreeNode; depth: number; guides: boolean[]; isLast: bo
 export function CascadeTree({ roots, periodKey, canManage, owners }: { roots: CascadeTreeNode[]; periodKey: string; canManage: boolean; owners: Owners }) {
   const sonho = roots.find((r) => r.kind === "SONHO") ?? roots[0];
   const [filter, setFilter] = useState<Filter>("todos");
+  const [view, setView] = useState<"arvore" | "lista">("arvore");
+  const [pilarId, setPilarId] = useState("");
   const [open, setOpen] = useState<Set<string>>(new Set());
   const summary = sonho.summary ?? { total: 0, ok: 0, fail: 0, noData: 0, withoutIv: 0 };
 
@@ -98,7 +100,7 @@ export function CascadeTree({ roots, periodKey, canManage, owners }: { roots: Ca
             outros IVs, até chegar na pessoa responsável.
           </p>
           <p>
-            <strong className="text-foreground">Para abrir o COMO de um IC, clique na linha dele.</strong>{" "}
+            <strong className="text-foreground">Para abrir o COMO de um IC, clique nele.</strong>{" "}
             <span className="whitespace-nowrap"><Dot className="bg-success" /> bateu a meta</span> ·{" "}
             <span className="whitespace-nowrap"><Dot className="bg-danger" /> não bateu</span> ·{" "}
             <span className="whitespace-nowrap"><Dot className="bg-border-strong" /> sem resultado ou sem meta</span> ·{" "}
@@ -115,6 +117,35 @@ export function CascadeTree({ roots, periodKey, canManage, owners }: { roots: Ca
           resultado · <span className="text-warning">{summary.withoutIv} ainda sem IVs</span>
         </p>
         <div className="flex flex-wrap items-center gap-2">
+          <div className="flex overflow-hidden rounded-md border border-border-strong text-xs font-medium" role="group" aria-label="Forma de ver">
+            <button
+              type="button"
+              onClick={() => setView("arvore")}
+              aria-pressed={view === "arvore"}
+              className={cn("inline-flex h-8 items-center gap-1.5 px-3", view === "arvore" ? "bg-foreground text-surface" : "bg-surface text-foreground hover:bg-surface-muted")}
+            >
+              <Network className="size-3.5" /> Árvore
+            </button>
+            <button
+              type="button"
+              onClick={() => setView("lista")}
+              aria-pressed={view === "lista"}
+              className={cn("inline-flex h-8 items-center gap-1.5 border-l border-border-strong px-3", view === "lista" ? "bg-foreground text-surface" : "bg-surface text-foreground hover:bg-surface-muted")}
+            >
+              <List className="size-3.5" /> Lista
+            </button>
+          </div>
+          {view === "arvore" && (
+            <label className="flex items-center gap-2 text-xs text-foreground-subtle">
+              Pilar
+              <select value={pilarId} onChange={(e) => setPilarId(e.target.value)} className="h-8 rounded-md border border-border-strong bg-surface px-2 text-sm text-foreground">
+                <option value="">Todos os pilares</option>
+                {(sonho.kind === "SONHO" ? sonho.children : roots).map((pl) => (
+                  <option key={pl.id} value={pl.id}>{pl.name}</option>
+                ))}
+              </select>
+            </label>
+          )}
           <label className="flex items-center gap-2 text-xs text-foreground-subtle">
             Mostrar
             <select
@@ -137,6 +168,9 @@ export function CascadeTree({ roots, periodKey, canManage, owners }: { roots: Ca
         </div>
       </div>
 
+      {view === "arvore" ? (
+        <Diagram sonho={sonho} roots={roots} filter={filter} pilarId={pilarId} open={open} toggle={toggle} />
+      ) : (
       <div className="overflow-hidden rounded-md border border-border bg-surface">
         <div className={cn("hidden border-b border-border-strong bg-surface-muted px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-foreground-subtle", COLS, "md:grid")}>
           <span>Item</span>
@@ -160,6 +194,7 @@ export function CascadeTree({ roots, periodKey, canManage, owners }: { roots: Ca
         ))}
         {rows.length <= 1 && <p className="px-4 py-8 text-center text-sm text-foreground-subtle">Nenhum IC com esse filtro.</p>}
       </div>
+      )}
     </div>
   );
 }
@@ -346,5 +381,160 @@ function RowActions({ node, periodKey, owners }: { node: CascadeTreeNode; period
         trigger={<button type="button" aria-label="Excluir" title="Excluir" className={cn(icon, "hover:text-danger")}><Trash2 className="size-4" /></button>}
       />
     </>
+  );
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Visão em árvore (genealógica): da esquerda para a direita — Sonho → Pilar → IC (o quê) → IV (como) → IV...
+// ---------------------------------------------------------------------------------------------------------------------
+
+const BOX_TOP = {
+  OK: "border-t-success",
+  FAIL: "border-t-danger",
+  NO_DATA: "border-t-border-strong",
+  NO_TARGET: "border-t-border-strong",
+} as const;
+
+function Diagram({
+  sonho,
+  roots,
+  filter,
+  pilarId,
+  open,
+  toggle,
+}: {
+  sonho: CascadeTreeNode;
+  roots: CascadeTreeNode[];
+  filter: Filter;
+  pilarId: string;
+  open: Set<string>;
+  toggle: (id: string) => void;
+}) {
+  const pilares = (sonho.kind === "SONHO" ? sonho.children : roots).filter((p) => !pilarId || p.id === pilarId);
+  const visible = (node: CascadeTreeNode): CascadeTreeNode[] => node.children.filter((c) => c.kind !== "IC" || matches(c, filter));
+  const shown = pilares.filter((p) => filter === "todos" || p.children.some((c) => c.kind === "IC" && matches(c, filter)));
+
+  if (shown.length === 0) return <p className="rounded-md border border-border bg-surface px-4 py-8 text-center text-sm text-foreground-subtle">Nenhum IC com esse filtro.</p>;
+
+  // Com um pilar só, ele vira a raiz; com vários, o Sonho é a raiz.
+  const root: CascadeTreeNode = pilarId || filter !== "todos" ? { ...sonho, children: shown } : sonho;
+
+  return (
+    <div className="overflow-x-auto rounded-md border border-border bg-surface p-4">
+      <p className="mb-3 text-xs text-foreground-subtle">
+        Leia da esquerda para a direita: cada caixa abre nas caixas que saem dela. Clique em um IC ou IV para abrir ou fechar o que vem depois.
+      </p>
+      <div className="min-w-max">
+        <Branch node={root} visible={visible} open={open} toggle={toggle} />
+      </div>
+    </div>
+  );
+}
+
+function Branch({ node, visible, open, toggle }: { node: CascadeTreeNode; visible: (n: CascadeTreeNode) => CascadeTreeNode[]; open: Set<string>; toggle: (id: string) => void }) {
+  const kids = visible(node);
+  const expanded = node.kind === "SONHO" || node.kind === "PILAR" || open.has(node.id);
+  return (
+    <div className="flex items-center">
+      <NodeBox node={node} childCount={kids.length} expanded={expanded} onToggle={() => toggle(node.id)} />
+      {expanded && kids.length > 0 && (
+        <>
+          <span aria-hidden className="h-px w-6 shrink-0 bg-border-strong" />
+          <div className="flex flex-col">
+            {kids.map((child, i) => (
+              <div
+                key={child.id}
+                className={cn(
+                  "relative flex items-center py-1.5 pl-6",
+                  "before:absolute before:left-0 before:top-1/2 before:h-px before:w-6 before:bg-border-strong",
+                  kids.length > 1 && "after:absolute after:left-0 after:w-px after:bg-border-strong",
+                  kids.length > 1 && (i === 0 ? "after:bottom-0 after:top-1/2" : i === kids.length - 1 ? "after:bottom-1/2 after:top-0" : "after:bottom-0 after:top-0"),
+                )}
+              >
+                <Branch node={child} visible={visible} open={open} toggle={toggle} />
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function NodeBox({ node, childCount, expanded, onToggle }: { node: CascadeTreeNode; childCount: number; expanded: boolean; onToggle: () => void }) {
+  const measured = node.kind === "IC" || node.kind === "IV";
+  const st = STATUS[node.status];
+  const canToggle = measured && node.children.length > 0;
+
+  if (node.kind === "SONHO") {
+    return (
+      <div className="w-48 shrink-0 rounded-md bg-brand px-3 py-3 text-brand-foreground">
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-brand-foreground/70">Sonho</p>
+        <p className="text-sm font-semibold leading-snug">{node.name}</p>
+      </div>
+    );
+  }
+  if (node.kind === "PILAR") {
+    const s = node.summary;
+    return (
+      <div className="w-44 shrink-0 rounded-md border border-border-strong bg-surface-muted px-3 py-2.5">
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-foreground-subtle">Pilar</p>
+        <p className="text-sm font-bold text-foreground">{node.name}</p>
+        {s && (
+          <p className="mt-0.5 text-[11px] text-foreground-muted">
+            <span className="text-success">{s.ok} bateram</span> · <span className="text-danger">{s.fail} não</span>
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={
+        canToggle
+          ? (e) => {
+              const el = e.currentTarget;
+              onToggle();
+              // Os filhos abrem à direita: traz a caixa clicada para o centro da área rolável para o que abriu ficar à vista.
+              setTimeout(() => el.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" }), 60);
+            }
+          : undefined
+      }
+      aria-expanded={canToggle ? expanded : undefined}
+      className={cn(
+        "w-56 shrink-0 rounded-md border border-border border-t-4 bg-surface px-3 py-2 text-left shadow-sm",
+        BOX_TOP[node.status],
+        canToggle ? "cursor-pointer hover:bg-surface-muted" : "cursor-default",
+      )}
+    >
+      <p className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wide text-foreground-subtle">
+        <span>{node.kind === "IC" ? "IC · O QUÊ" : "IV · COMO"}</span>
+        {canToggle && (
+          <span className="inline-flex items-center gap-0.5 text-accent">
+            {childCount} <ChevronRight className={cn("size-3.5 transition-transform", expanded && "rotate-90")} />
+          </span>
+        )}
+      </p>
+      <p className="mt-0.5 line-clamp-2 text-[13px] font-semibold leading-snug text-foreground">{node.name}</p>
+      <div className="mt-1.5 flex items-baseline justify-between gap-2 text-[11px] text-foreground-subtle">
+        <span>
+          Meta <span className="font-medium tabular-nums text-foreground-muted">{node.polarity === "LOWER" && node.target !== null ? "≤ " : ""}{formatCascadeValue(node.unit, node.target)}</span>
+        </span>
+        <span>
+          Resultado{" "}
+          <span className={cn("inline-flex items-center gap-0.5 font-bold tabular-nums", st.text)}>
+            {formatCascadeValue(node.unit, node.value)}
+            {node.valueSource === "AUTO" && <Zap className="size-3 text-accent" />}
+          </span>
+        </span>
+      </div>
+      <p className={cn("mt-1 flex items-center gap-1.5 text-[11px] font-medium", st.text)}>
+        <Dot className={cn(st.dot, "mr-0 size-2")} /> {st.label}
+        {node.kind === "IC" && node.impact === "ALTO" && <span className="ml-auto text-[10px] font-semibold uppercase text-foreground-subtle">alto impacto</span>}
+      </p>
+      {node.kind === "IC" && node.children.length === 0 && <p className="mt-1 text-[11px] text-warning">Sem IVs ainda</p>}
+    </button>
   );
 }
