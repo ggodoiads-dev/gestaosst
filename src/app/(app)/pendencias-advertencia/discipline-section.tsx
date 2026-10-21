@@ -128,8 +128,8 @@ export function MeasureDialog({ entry, mode, trigger }: { entry: DisciplineEntry
   );
 }
 
-/** Checklist não realizado (nenhum equipamento feito no dia) → medida sugerida pela escada do checklist. */
-export function DisciplineSection({ items, partial, history }: { items: DisciplineEntry[]; partial: DisciplineEntry[]; history: DisciplineHistoryRow[] }) {
+/** Checklist abaixo de 80% no dia → medida sugerida pela escada do checklist. */
+export function DisciplineSection({ items, history }: { items: DisciplineEntry[]; history: DisciplineHistoryRow[] }) {
   const [showHistory, setShowHistory] = useState(false);
   const checklist = items.filter((i) => i.reason === "CHECKLIST");
   const groups = new Map<string, { name: string; id: string; items: DisciplineEntry[] }>();
@@ -147,7 +147,7 @@ export function DisciplineSection({ items, partial, history }: { items: Discipli
             <Gavel className="size-4" /> Checklist não realizado ({checklist.length})
           </h2>
           <p className="text-xs text-foreground-subtle">
-            Só entra quem não fez nenhum equipamento do checklist no dia (fez a maioria = cumpriu). Cada motivo segue a sua escada: 1º DTO →
+            Entra quem fez menos de 80% do checklist no dia (80% ou mais = cumpriu). Cada motivo segue a sua escada: 1º DTO →
             2º DTO → advertência verbal → 1ª escrita → 2ª escrita → suspensão de 1 dia → suspensão de 3 dias → comitê.
           </p>
         </div>
@@ -169,13 +169,16 @@ export function DisciplineSection({ items, partial, history }: { items: Discipli
                 <Link href={`/colaboradores/${g.id}`} className="text-sm font-semibold text-foreground hover:underline">
                   {formatPersonName(g.name)}
                 </Link>
-                <span className="text-xs text-foreground-subtle">{g.items.length} dia(s) sem checklist</span>
+                <span className="text-xs text-foreground-subtle">{g.items.length} dia(s) abaixo de 80%</span>
               </div>
               <div className="divide-y divide-border">
                 {g.items.map((item) => (
                   <div key={item.dayKey} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5">
                     <div className="min-w-0">
-                      <p className="text-sm text-foreground">{dmy(item.dayKey)} — não fez nenhum equipamento</p>
+                      <p className="text-sm text-foreground">
+                        {dmy(item.dayKey)} — fez {item.done ?? 0} de {item.required ?? 0} equipamentos (
+                        {item.required ? Math.round(((item.done ?? 0) / item.required) * 100) : 0}%)
+                      </p>
                       <p className="text-xs text-warning">Medida sugerida: {disciplineStepLabel(item.suggestedStep)}</p>
                     </div>
                     <div className="flex gap-1.5">
@@ -188,33 +191,6 @@ export function DisciplineSection({ items, partial, history }: { items: Discipli
             </div>
           ))}
         </div>
-      )}
-
-      {partial.length > 0 && (
-        <details className="rounded-lg border border-border bg-surface px-3 py-2">
-          <summary className="cursor-pointer text-xs font-medium text-foreground-subtle">
-            Fizeram só uma parte do checklist ({partial.length}) — não geram medida sozinhos, mas você pode aplicar
-          </summary>
-          <div className="mt-2 divide-y divide-border">
-            {partial.map((item) => (
-              <div key={`${item.collaboratorId}|${item.dayKey}`} className="flex flex-wrap items-center justify-between gap-2 py-2">
-                <div className="min-w-0">
-                  <p className="text-sm text-foreground">
-                    <Link href={`/colaboradores/${item.collaboratorId}`} className="font-medium hover:underline">
-                      {formatPersonName(item.collaboratorName)}
-                    </Link>{" "}
-                    · {dmy(item.dayKey)} · fez {item.done} de {item.required} equipamentos
-                  </p>
-                  <p className="text-xs text-foreground-subtle">Se aplicar, a medida sugerida é: {disciplineStepLabel(item.suggestedStep)}</p>
-                </div>
-                <div className="flex gap-1.5">
-                  <MeasureDialog entry={item} mode="apply" trigger={<Button size="sm" variant="secondary">Registrar medida</Button>} />
-                  <MeasureDialog entry={item} mode="dismiss" trigger={<Button size="sm" variant="ghost">Dispensar</Button>} />
-                </div>
-              </div>
-            ))}
-          </div>
-        </details>
       )}
 
       {showHistory && (

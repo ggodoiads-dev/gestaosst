@@ -39,7 +39,7 @@ export type DisciplineItem = {
   noteId: string | null;
   suggestedStep: DisciplineStepKey;
   appliedCount: number;
-  /** Só checklist parcial: quantos equipamentos fez / eram exigidos. */
+  /** Só checklist: quantos equipamentos fez / eram exigidos no dia. */
   done?: number;
   required?: number;
 };
@@ -94,15 +94,15 @@ export async function getDisciplineOverview(user: CurrentUser) {
   ]);
 
   const raw: Omit<DisciplineItem, "suggestedStep" | "appliedCount">[] = [
-    ...checklistDays
-      .filter((d) => !d.partial)
-      .map((d) => ({
+    ...checklistDays.map((d) => ({
       reason: "CHECKLIST" as const,
       collaboratorId: d.collaboratorId,
       collaboratorName: d.name,
       areaName: d.areaName,
       dayKey: d.dayKey,
       noteId: null,
+      done: d.done,
+      required: d.required,
     })),
     ...faltas.map((n) => ({
       reason: "FALTA" as const,
@@ -126,26 +126,6 @@ export async function getDisciplineOverview(user: CurrentUser) {
     return { ...i, appliedCount, suggestedStep: nextDisciplineStep(appliedCount + index) };
   });
 
-  // Fez só uma parte (menos da metade): não entra na escada sozinho, mas aparece pro RH aplicar a medida se quiser.
-  const partial: DisciplineItem[] = checklistDays
-    .filter((d) => d.partial && !handled.has(`CHECKLIST|${d.collaboratorId}|${d.dayKey}`))
-    .map((d) => {
-      const appliedCount = applied.get(`CHECKLIST|${d.collaboratorId}`) ?? 0;
-      return {
-        reason: "CHECKLIST" as const,
-        collaboratorId: d.collaboratorId,
-        collaboratorName: d.name,
-        areaName: d.areaName,
-        dayKey: d.dayKey,
-        noteId: null,
-        appliedCount,
-        suggestedStep: nextDisciplineStep(appliedCount),
-        done: d.done,
-        required: d.required,
-      };
-    })
-    .sort((a, b) => b.dayKey.localeCompare(a.dayKey));
-
   const history: DisciplineHistoryEntry[] = measures.slice(0, 60).map((m) => ({
     id: m.id,
     reason: m.reason as DisciplineReasonKey,
@@ -158,7 +138,7 @@ export async function getDisciplineOverview(user: CurrentUser) {
     decidedByName: m.decidedBy.name,
     decidedAt: m.decidedAt,
   }));
-  return { items, partial, history };
+  return { items, history };
 }
 
 export type DecideInput = {

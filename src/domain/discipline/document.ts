@@ -18,7 +18,7 @@ const TITLES: Partial<Record<DisciplineStepKey, string>> = {
 
 const FACTS: Record<DisciplineReasonKey, string> = {
   CHECKLIST:
-    "não realizou o checklist de inspeção dos equipamentos do seu turno (nenhum equipamento foi inspecionado), procedimento obrigatório de segurança da operação",
+    "não realizou o checklist de inspeção dos equipamentos do seu turno (realizou menos de 80% dos equipamentos exigidos), procedimento obrigatório de segurança da operação",
   FALTA: "ausentou-se do trabalho sem justificativa (falta injustificada)",
 };
 

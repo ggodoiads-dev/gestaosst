@@ -136,7 +136,7 @@ export function TodayProgressPanel({
           <div>
             <h3 className="text-xs font-semibold uppercase tracking-wide text-warning">Estavam presentes e não concluíram ({shownRemaining.length})</h3>
             <p className="text-[11px] text-foreground-subtle">
-              Só gera advertência de checklist quem não fez nenhum equipamento no dia. Fez parte do checklist = cumpriu, sem medida.
+              Gera advertência de checklist quem fez menos de 80% dos equipamentos no dia. 80% ou mais = cumpriu, sem medida.
             </p>
           </div>
           <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
@@ -166,10 +166,10 @@ export function TodayProgressPanel({
                           </span>
                         )}
                         {isClosedDay && !c.noAccess && (
-                          c.done === 0 ? (
+                          c.done * 100 < c.required * 80 ? (
                             <span className="rounded bg-danger-soft px-1.5 py-0.5 text-[11px] font-medium text-danger">gera advertência</span>
                           ) : (
-                            <span className="rounded bg-neutral-soft px-1.5 py-0.5 text-[11px] font-medium text-foreground-muted">fez parte · sem medida</span>
+                            <span className="rounded bg-neutral-soft px-1.5 py-0.5 text-[11px] font-medium text-foreground-muted">80% ou mais · sem medida</span>
                           )
                         )}
                       </span>

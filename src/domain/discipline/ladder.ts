@@ -38,17 +38,14 @@ export function nextDisciplineStep(appliedCount: number): DisciplineStepKey {
   return DISCIPLINE_STEPS[Math.min(Math.max(appliedCount, 0), DISCIPLINE_STEPS.length - 1)].key;
 }
 
-/**
- * Um dia de checklist só vira ocorrência quando a pessoa NÃO fez nenhum dos equipamentos que eram exigidos nele. Fez a
- * maioria (ou ao menos um) = cumpriu. Equipamento que não podia ser inspecionado no dia (bloqueado/manutenção) não era
- * exigido; justificativa que conta como cumprida vale como feito.
- */
-/** Fez ALGUNS equipamentos, mas menos da metade: não gera medida sozinho (a regra é "nenhum equipamento"), porém o RH vê o caso
- * e pode aplicar a medida manualmente. */
-export function isPartialChecklist(args: { required: number; doneOrJustified: number }): boolean {
-  return args.required > 0 && args.doneOrJustified > 0 && args.doneOrJustified * 2 < args.required;
-}
+/** Quem faz menos que isso (em %) do checklist exigido no dia entra na escada de medidas disciplinares. */
+export const DISCIPLINE_CHECKLIST_MIN_PERCENT = 80;
 
+/**
+ * Um dia de checklist vira ocorrência quando a pessoa fez MENOS de 80% dos equipamentos que eram exigidos nele. Equipamento
+ * que não podia ser inspecionado no dia (bloqueado/manutenção) não era exigido; justificativa que conta como cumprida vale
+ * como feito.
+ */
 export function isChecklistInfraction(args: { required: number; doneOrJustified: number }): boolean {
-  return args.required > 0 && args.doneOrJustified === 0;
+  return args.required > 0 && args.doneOrJustified * 100 < args.required * DISCIPLINE_CHECKLIST_MIN_PERCENT;
 }

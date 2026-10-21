@@ -16,7 +16,7 @@ import { PERMISSIONS } from "@/domain/shared/permissions";
 import { formatInTimeZone } from "date-fns-tz";
 import { APP_TIMEZONE } from "@/lib/dates";
 import { recordAudit } from "@/server/services/audit";
-import { isChecklistInfraction, isPartialChecklist } from "@/domain/discipline/ladder";
+import { isChecklistInfraction } from "@/domain/discipline/ladder";
 import {
   CHECKLIST_JUSTIFICATION_REASONS,
   type ChecklistJustificationReason,
@@ -891,13 +891,11 @@ export type ChecklistNonCompletion = {
   dayKey: string;
   required: number;
   done: number;
-  /** `true` = fez alguns equipamentos, mas menos da metade (não é ocorrência automática). */
-  partial: boolean;
 };
 
 /**
- * Dias FECHADOS (de `fromKey` até ontem) em que quem é cobrado por checklist estava escalado e NÃO fez nenhum dos
- * equipamentos exigidos — a base das medidas disciplinares. Fez ao menos um (ou a maioria) = cumpriu, não entra. Não
+ * Dias FECHADOS (de `fromKey` até ontem) em que quem é cobrado por checklist estava escalado e fez MENOS de 80% dos
+ * equipamentos exigidos — a base das medidas disciplinares. 80% ou mais = cumpriu, não entra. Não
  * entram: equipamento que estava bloqueado/em manutenção no dia (não era exigido), item justificado com motivo que conta
  * como cumprido e quem ainda não tem login (não tem como fazer).
  */
@@ -952,9 +950,8 @@ export async function listChecklistNonCompletion(fromKey: string): Promise<Check
         ...justifiedItemIds(justificationsByKey.get(`${c.id}|${dayKey}`)),
       ]);
       const done = effective.filter((e) => completedIds.has(e.id)).length;
-      const counts = { required: effective.length, doneOrJustified: done };
-      if (isChecklistInfraction(counts) || isPartialChecklist(counts)) {
-        result.push({ collaboratorId: c.id, name: c.name, areaName: c.area?.name ?? null, dayKey, required: effective.length, done, partial: done > 0 });
+      if (isChecklistInfraction({ required: effective.length, doneOrJustified: done })) {
+        result.push({ collaboratorId: c.id, name: c.name, areaName: c.area?.name ?? null, dayKey, required: effective.length, done });
       }
     }
   }
