@@ -443,9 +443,10 @@ function PublicAreaView({
             </div>
             {groupByTurno(group.entries, (e) => e.collaborator.turno?.name ?? null).map((turnoGroup) => (
               <div key={turnoGroup.turnoName ?? "sem-turno"} className="flex flex-col gap-2.5">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-foreground-subtle">
-                  {turnoGroup.turnoName ?? "Sem turno"} · {turnoGroup.entries.length}
-                </p>
+                <div className="flex items-center justify-between rounded-md border-l-4 border-accent bg-accent-soft px-3 py-1.5">
+                  <span className="text-sm font-semibold uppercase tracking-wide text-accent">{turnoGroup.turnoName ?? "Sem turno"}</span>
+                  <span className="rounded-full bg-surface px-2 py-0.5 text-xs font-semibold text-accent">{turnoGroup.entries.length}</span>
+                </div>
                 {[...turnoGroup.entries]
               .sort((a, b) => Number(!!b.summary.padrinho) - Number(!!a.summary.padrinho))
               .map(({ collaborator, summary, photoUrl }) => (

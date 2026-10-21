@@ -153,6 +153,14 @@ export default async function ColaboradorDetailPage({
         }
       />
       <PageBody className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
+        {padrinhoRecord && (
+          <div className="lg:col-span-3">
+            <PadrinhoCard
+              completedDate={padrinhoRecord.completedDate}
+              certificate={[...padrinhoRecord.attachments].sort((a, b) => b.uploadedAt.getTime() - a.uploadedAt.getTime())[0] ?? null}
+            />
+          </div>
+        )}
         <div className="lg:col-span-1 flex flex-col gap-5">
           <Card>
             <CardHeader>
@@ -262,13 +270,6 @@ export default async function ColaboradorDetailPage({
                 ))}
               </CardContent>
             </Card>
-          )}
-
-          {padrinhoRecord && (
-            <PadrinhoCard
-              completedDate={padrinhoRecord.completedDate}
-              certificate={[...padrinhoRecord.attachments].sort((a, b) => b.uploadedAt.getTime() - a.uploadedAt.getTime())[0] ?? null}
-            />
           )}
 
           <Card>
