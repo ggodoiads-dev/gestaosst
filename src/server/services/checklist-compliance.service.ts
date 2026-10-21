@@ -505,8 +505,9 @@ async function computeDayProgress(
   const [collaborators, notes, requiredByArea] = await Promise.all([
     listEligibleCollaboratorsQuery(),
     db.scheduleDayNote.findMany({ where: { date: { gte: today, lt: tomorrow } } }),
-    getRequiredEquipmentByArea(),
+    getRequiredEquipmentByArea({ includeUnavailable: true }),
   ]);
+  const unavailable = await loadUnavailability(localDateKey(today));
   const noteByCollab = new Map(notes.map((n) => [n.collaboratorId, n]));
 
   const withItems = collaborators
@@ -555,6 +556,8 @@ async function computeDayProgress(
     const doneIds = new Set([
       ...(c.userId ? (doneByUser.get(c.userId) ?? []) : []),
       ...justifiedItemIds(justificationsByKey.get(`${c.id}|${todayKey}`)),
+      // Equipamento bloqueado/em manutenção no dia não podia ser inspecionado: não fica pendente (igual ao detalhe do dia).
+      ...required.filter((e) => unavailable(e.id, todayKey)).map((e) => e.id),
     ]);
     const missing = required.filter((e) => !doneIds.has(e.id)).map((e) => ({ id: e.id, code: e.code }));
     const entry: TodayProgressEntry = {
@@ -743,7 +746,7 @@ export async function justifyChecklistItem(
     if (!collaborator.areaId || !user.areaIds.has(collaborator.areaId)) throw new ForbiddenError();
   }
   // Só dá pra justificar o que era realmente exigido dele.
-  const { items } = getRequiredItemsForCollaborator(collaborator, await getRequiredEquipmentByArea());
+  const { items } = getRequiredItemsForCollaborator(collaborator, await getRequiredEquipmentByArea({ includeUnavailable: true }));
   const requiredIds = new Set(items.map((i) => i.id));
   if (input.itemIds.some((id) => !requiredIds.has(id))) throw new Error("Esse item não era exigido desse colaborador.");
 
