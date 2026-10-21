@@ -11,6 +11,7 @@ import { attachmentUrl } from "@/lib/attachment-url";
 import {
   attachWarningDocumentAction,
   deleteAbsenceNoteAction,
+  bulkFollowUpAction,
   dismissAbsenceNoteAction,
   removeWarningDocumentAction,
 } from "@/server/actions/absence-followup.actions";
@@ -197,6 +198,57 @@ export function DismissNoteButton({ noteId, label, kind }: { noteId: string; lab
             rows={3}
             placeholder="Ex: folga de banco de horas, atestado entregue depois, erro de escala..."
           />
+        </DialogBody>
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button type="button" variant="secondary">
+              Cancelar
+            </Button>
+          </DialogClose>
+          <Button onClick={confirm} loading={pending} disabled={reason.trim().length < 3}>
+            Justificar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export function BulkDismissButton({ noteIds, onDone }: { noteIds: string[]; onDone: () => void }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  const [pending, startTransition] = useTransition();
+
+  function confirm() {
+    startTransition(async () => {
+      const res = await bulkFollowUpAction(noteIds, "dismiss", reason);
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success(`${noteIds.length} lançamento(s) justificado(s).`);
+      setOpen(false);
+      setReason("");
+      onDone();
+      router.refresh();
+    });
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <Button type="button" size="sm" variant="secondary" onClick={() => setOpen(true)}>
+        <ShieldCheck className="size-4" /> Justificar
+      </Button>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Justificar {noteIds.length} lançamento(s)</DialogTitle>
+        </DialogHeader>
+        <DialogBody className="flex flex-col gap-3 text-sm">
+          <p className="text-foreground-subtle">
+            Todos saem da fila (sem advertência e sem entrevista de ABS) e o mesmo motivo fica registrado em cada um. Os lançamentos continuam na escala.
+          </p>
+          <Textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} placeholder="Ex: folga de banco de horas, erro de escala..." />
         </DialogBody>
         <DialogFooter>
           <DialogClose asChild>

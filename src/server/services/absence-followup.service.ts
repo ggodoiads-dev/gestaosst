@@ -68,6 +68,32 @@ export async function dismissAbsenceNote(user: CurrentUser, noteId: string, reas
   });
 }
 
+/** Ação em lote sobre várias faltas/atestados da fila: marcar advertência aplicada, marcar entrevista de ABS feita ou
+ * justificar (com motivo único). Devolve quantos lançamentos mudaram. */
+export async function bulkFollowUp(user: CurrentUser, noteIds: string[], op: "warning" | "interview" | "dismiss", reason?: string) {
+  requirePermission(user, PERMISSIONS.HR_MANAGE);
+  const ids = [...new Set(noteIds)];
+  if (ids.length === 0) throw new Error("Selecione ao menos um lançamento.");
+  if (ids.length > 200) throw new Error("Selecione no máximo 200 lançamentos por vez.");
+
+  if (op === "dismiss") {
+    for (const id of ids) await dismissAbsenceNote(user, id, reason ?? "");
+    return ids.length;
+  }
+  const result =
+    op === "warning"
+      ? await db.scheduleDayNote.updateMany({ where: { id: { in: ids }, status: "FALTA" }, data: { warningApplied: true } })
+      : await db.scheduleDayNote.updateMany({ where: { id: { in: ids }, status: { in: ["FALTA", "ATESTADO"] } }, data: { absenceInterviewDone: true } });
+  await recordAudit({
+    userId: user.id,
+    action: "UPDATE",
+    entityType: "ScheduleDayNote",
+    entityId: ids[0],
+    newValue: { bulk: op, noteIds: ids, changed: result.count },
+  });
+  return result.count;
+}
+
 /** Anexa o documento da advertência (ex: advertência assinada) a uma falta e já marca a advertência como aplicada. */
 export async function attachWarningDocument(
   user: CurrentUser,
