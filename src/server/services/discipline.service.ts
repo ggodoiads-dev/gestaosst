@@ -266,3 +266,37 @@ export async function getMeasurePreview(
     .catch(() => 0);
   return { collaborator, sequence: applied + 1 };
 }
+
+/** Desfaz uma decisão (medida aplicada ou ocorrência dispensada): a ocorrência volta pra fila de pendências e a escada
+ * recalcula sozinha. Falta: a falta volta a ficar sem advertência (e, se tinha sido dispensada, volta a ser "Falta"). */
+export async function undoDecision(user: CurrentUser, id: string) {
+  requireDiscipline(user);
+  const measure = await db.disciplinaryMeasure.findUnique({ where: { id } });
+  if (!measure) throw new Error("Registro não encontrado.");
+
+  await db.disciplinaryMeasure.delete({ where: { id } });
+  if (measure.reason === "FALTA") {
+    const dayKey = dayKeyOf(measure.referenceDate);
+    const notes = await db.scheduleDayNote.findMany({
+      where: {
+        collaboratorId: measure.collaboratorId,
+        status: { in: ["FALTA", "OUTRO"] },
+        date: { gte: new Date(`${dayKey}T00:00:00Z`), lt: new Date(new Date(`${dayKey}T00:00:00Z`).getTime() + 24 * 3600 * 1000) },
+      },
+      select: { id: true, status: true, notes: true },
+    });
+    for (const n of notes) {
+      const wasJustified = measure.status === "DISPENSADA" && n.status === "OUTRO" && n.notes.includes("Falta justificada");
+      if (n.status === "FALTA" || wasJustified) {
+        await db.scheduleDayNote.update({ where: { id: n.id }, data: { warningApplied: false, ...(wasJustified ? { status: "FALTA" as const } : {}) } });
+      }
+    }
+  }
+  await recordAudit({
+    userId: user.id,
+    action: "DELETE",
+    entityType: "DisciplinaryMeasure",
+    entityId: id,
+    previousValue: { reason: measure.reason, step: measure.step, status: measure.status, referenceDate: measure.referenceDate, note: measure.note },
+  });
+}
