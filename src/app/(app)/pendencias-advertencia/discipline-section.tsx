@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Gavel, History } from "lucide-react";
+import { FileDown, Gavel, History } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatPersonName, initials } from "@/lib/format-name";
 import { Button } from "@/components/ui/button";
@@ -115,6 +115,14 @@ export function MeasureDialog({ entry, mode, trigger }: { entry: DisciplineEntry
           <FormField label={isApply ? "Observação" : "Motivo da justificativa"} required={!isApply} hint={isApply ? "Opcional" : undefined}>
             <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} />
           </FormField>
+          {isApply && stepHasDocument(step) && (
+            <a
+              href={`/api/medidas-disciplinares/previa?${new URLSearchParams({ reason: entry.reason, collaboratorId: entry.collaboratorId, dayKey: entry.dayKey, step, note }).toString()}`}
+              className="inline-flex w-fit items-center gap-1.5 rounded-md border border-border-strong bg-surface px-3 py-1.5 text-xs font-medium text-accent hover:bg-accent-soft"
+            >
+              <FileDown className="size-4" /> Baixar o documento para imprimir (sem registrar)
+            </a>
+          )}
           {error && <p className="text-sm text-danger">{error}</p>}
         </DialogBody>
         <DialogFooter>

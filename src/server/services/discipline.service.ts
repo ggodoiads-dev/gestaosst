@@ -246,3 +246,23 @@ export async function listMyOrientations(user: CurrentUser): Promise<MyOrientati
     return [];
   }
 }
+
+/** Dados do documento ANTES de registrar a medida (pra imprimir e colher a assinatura primeiro). Não grava nada. */
+export async function getMeasurePreview(
+  user: CurrentUser,
+  input: { reason: string; collaboratorId: string; dayKey: string; step: string; note: string },
+) {
+  requireDiscipline(user);
+  if (!DISCIPLINE_REASONS.some((r) => r.key === input.reason)) throw new Error("Motivo inválido.");
+  if (!DISCIPLINE_STEPS.some((s) => s.key === input.step)) throw new Error("Medida inválida.");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.dayKey)) throw new Error("Data inválida.");
+  const collaborator = await db.collaborator.findUnique({
+    where: { id: input.collaboratorId },
+    select: { name: true, matricula: true, function: { select: { name: true } }, area: { select: { name: true } } },
+  });
+  if (!collaborator) return null;
+  const applied = await db.disciplinaryMeasure
+    .count({ where: { collaboratorId: input.collaboratorId, reason: input.reason, status: "APLICADA" } })
+    .catch(() => 0);
+  return { collaborator, sequence: applied + 1 };
+}
