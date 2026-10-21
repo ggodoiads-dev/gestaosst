@@ -11,17 +11,22 @@ const base = {
 };
 
 describe("stepHasDocument", () => {
-  it("DTO e comitê não geram documento", () => {
-    expect(stepHasDocument("DTO_1")).toBe(false);
-    expect(stepHasDocument("DTO_2")).toBe(false);
+  it("o comitê não gera documento", () => {
     expect(stepHasDocument("COMITE")).toBe(false);
   });
-  it("advertências e suspensões geram", () => {
-    for (const s of ["ADV_VERBAL", "ADV_ESCRITA_1", "ADV_ESCRITA_2", "SUSPENSAO_1", "SUSPENSAO_3"]) expect(stepHasDocument(s)).toBe(true);
+  it("DTO, advertências e suspensões geram", () => {
+    for (const s of ["DTO_1", "DTO_2", "ADV_VERBAL", "ADV_ESCRITA_1", "ADV_ESCRITA_2", "SUSPENSAO_1", "SUSPENSAO_3"]) expect(stepHasDocument(s)).toBe(true);
   });
 });
 
 describe("buildMeasureDocumentContent", () => {
+  it("DTO é registro de orientação, sem tom de penalidade", () => {
+    const doc = buildMeasureDocumentContent({ ...base, step: "DTO_1", sequence: 1 });
+    expect(doc.title).toBe("REGISTRO DE ORIENTAÇÃO — 1º DTO");
+    expect(doc.paragraphs.join(" ")).toContain("não constitui penalidade");
+    expect(doc.paragraphs.join(" ")).not.toContain("art. 482");
+    expect(doc.isSuspension).toBe(false);
+  });
   it("advertência escrita cita o fato, a medida e a sequência", () => {
     const doc = buildMeasureDocumentContent({ ...base, step: "ADV_ESCRITA_2", sequence: 5 });
     expect(doc.title).toBe("ADVERTÊNCIA ESCRITA — 2ª");
