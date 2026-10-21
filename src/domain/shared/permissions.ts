@@ -60,6 +60,7 @@ export const PERMISSIONS = {
 
   HR_MANAGE: "hr.manage",
   DISCIPLINE_MANAGE: "discipline.manage",
+  CASCADE_MANAGE: "cascade.manage",
 } as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -119,6 +120,7 @@ export const PERMISSION_DESCRIPTIONS: Record<PermissionKey, string> = {
 
   [PERMISSIONS.HR_MANAGE]: "Acessar dados de RH (salário) e importar planilha de colaboradores",
   [PERMISSIONS.DISCIPLINE_MANAGE]: "Ver as pendências de advertência e registrar medidas disciplinares (sem acesso a salário nem a entrevistas de ABS)",
+  [PERMISSIONS.CASCADE_MANAGE]: "Cascateamento de metas (ICs e IVs): criar, editar e atualizar os resultados",
 };
 
 export const ROLE_KEYS = {

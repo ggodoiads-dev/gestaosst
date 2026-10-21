@@ -245,6 +245,9 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
   if (p.has(PERMISSIONS.INDICATORS_VIEW_AREA) || p.has(PERMISSIONS.INDICATORS_VIEW_CONSOLIDATED)) {
     indicadores.push({ href: "/indicadores", label: "Indicadores", icon: "indicators" });
   }
+  if (p.has(PERMISSIONS.INDICATORS_VIEW_CONSOLIDATED) || p.has(PERMISSIONS.CASCADE_MANAGE)) {
+    indicadores.push({ href: "/cascata", label: "Cascateamento (ICs e IVs)", icon: "indicators" });
+  }
   if (p.has(PERMISSIONS.ATTENDANCE_VIEW) || p.has(PERMISSIONS.SCHEDULE_MANAGE) || p.has(PERMISSIONS.HR_MANAGE)) {
     indicadores.push({ href: "/presenca", label: "Presença e Faltas", icon: "schedules" });
   }

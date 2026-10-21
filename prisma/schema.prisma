@@ -104,6 +104,8 @@ model User {
   absenceInterviewsRequested      AbsenceInterview[]           @relation("AbsenceInterviewRequestedBy")
   absenceInterviewsAnswered       AbsenceInterview[]           @relation("AbsenceInterviewAnsweredBy")
   absenceInterviewsConcluded      AbsenceInterview[]           @relation("AbsenceInterviewConcludedBy")
+  cascadeNodesOwned               CascadeNode[]                @relation("CascadeNodeOwner")
+  cascadeValuesUpdated            CascadeValue[]               @relation("CascadeValueBy")
   dtoEvaluationsImported          DtoEvaluation[]              @relation("DtoEvaluationImportedBy")
   dtoJustificationsMade           DtoJustification[]           @relation("DtoJustificationCreatedBy")
   dtoActionsCompleted             DtoAction[]                  @relation("DtoActionCompletedBy")
@@ -1229,6 +1231,52 @@ model QualificationRecord {
 
 /// Advertência (aviso disciplinar) — alimenta o cálculo de benefícios: uma advertência dentro do
 /// período de apuração faz o colaborador perder a cesta básica do mês de referência.
+/// Cascateamento de metas (árvore genealógica): Sonho → Pilar → IC (item de controle: O QUE, o resultado) → IV (item de
+/// verificação: COMO, o processo que fecha o IC) → IVs de IVs, até a rotina de uma pessoa. kind/unit/polarity/pace são texto
+/// validado em código (ver `src/domain/cascade`). `sigoKey` liga o nó a um número que o SIGO já mede sozinho.
+model CascadeNode {
+  id          String   @id @default(uuid())
+  parentId    String?
+  kind        String // SONHO | PILAR | IC | IV
+  name        String
+  description String?
+  ownerUserId String?
+  unit        String   @default("NUMBER") // PERCENT | NUMBER | MINUTES | DAYS | MONEY
+  polarity    String   @default("HIGHER") // HIGHER (maior é melhor) | LOWER (menor é melhor)
+  pace        String   @default("NONE") // NONE | YEAR (meta anual, conta proporcional ao mês) | MONTH (meta do mês)
+  target      Float?
+  impact      String? // ALTO | BAIXO
+  sigoKey     String?
+  seedKey     String?  @unique
+  reviewNote  String?
+  sortOrder   Int      @default(0)
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  parent   CascadeNode?  @relation("CascadeTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children CascadeNode[] @relation("CascadeTree")
+  owner    User?         @relation("CascadeNodeOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  values   CascadeValue[]
+
+  @@index([parentId])
+}
+
+model CascadeValue {
+  id          String   @id @default(uuid())
+  nodeId      String
+  periodKey   String // AAAA-MM
+  value       Float
+  note        String?
+  source      String   @default("MANUAL") // MANUAL | IMPORT
+  updatedById String
+  updatedAt   DateTime @updatedAt
+
+  node      CascadeNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  updatedBy User        @relation("CascadeValueBy", fields: [updatedById], references: [id])
+
+  @@unique([nodeId, periodKey])
+}
+
 /// Medida disciplinar já tratada (aplicada ou dispensada com justificativa) por MOTIVO — cada motivo tem a sua escada
 /// (ver `src/domain/discipline/ladder.ts`). A ocorrência em si é derivada (checklist sem nenhum equipamento feito, falta
 /// injustificada); esta tabela guarda o que o RH/gestor decidiu sobre cada dia. reason/step/status são texto validado em código.
