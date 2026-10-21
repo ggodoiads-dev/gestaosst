@@ -23,6 +23,8 @@ import { Button } from "@/components/ui/button";
 import { formatDate, parseDateOnly } from "@/lib/dates";
 import { attachmentUrl } from "@/lib/attachment-url";
 import { qualificationStatus } from "@/lib/qualification-status";
+import { listMyOrientations } from "@/server/services/discipline.service";
+import { disciplineReasonLabel, disciplineStepLabel } from "@/domain/discipline/ladder";
 import { currentMonthKey, isValidMonthKey, monthLabel, monthRangeUntilToday, monthShortLabel, shiftMonth } from "@/lib/month";
 import type { CurrentUser } from "@/server/auth/current-user";
 
@@ -88,10 +90,11 @@ export default async function MeuPerfilPage({ searchParams }: { searchParams: Pr
     loadMonth(user, collaborator.id, month),
     ...historyKeys.map((k) => (k === month ? Promise.resolve(null) : loadMonth(user, collaborator.id, k))),
   ]);
-  const [myInterviews, myWarningDocuments, myDtos] = await Promise.all([
+  const [myInterviews, myWarningDocuments, myDtos, myOrientations] = await Promise.all([
     listMyInterviews(user).catch(() => []),
     listMyWarningDocuments(user).catch(() => []),
     listMyDtos(user).catch(() => []),
+    listMyOrientations(user).catch(() => []),
   ]);
   const historyData = historyKeys.map((k, i) => ({ month: k, data: k === month ? selected : history[i] }));
 
@@ -346,6 +349,30 @@ export default async function MeuPerfilPage({ searchParams }: { searchParams: Pr
               )}
             </CardContent>
           </Card>
+
+          {myOrientations.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>
+                  <span className="flex items-center gap-2"><ClipboardCheck className="size-4" /> Orientações com a liderança ({myOrientations.length})</span>
+                </CardTitle>
+                <CardDescription>Conversas de orientação (DTO) que a liderança fez e registrou com você. Não são penalidade.</CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-2">
+                {myOrientations.map((o) => (
+                  <div key={o.id} className="rounded-md border border-border px-3 py-2.5 text-sm">
+                    <p className="font-medium text-foreground">
+                      {disciplineStepLabel(o.step)} · {formatDate(o.decidedAt)}
+                    </p>
+                    <p className="text-xs text-foreground-subtle">
+                      Motivo: {disciplineReasonLabel(o.reason)} · ocorrência de {o.dayKey.split("-").reverse().join("/")}
+                    </p>
+                    {o.note && <p className="mt-1 text-xs text-foreground-muted">“{o.note}”</p>}
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
 
           <Card>
             <CardHeader>

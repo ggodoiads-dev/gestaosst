@@ -221,3 +221,28 @@ export async function getMeasureForDocument(user: CurrentUser, id: string) {
   });
   return { measure, sequence };
 }
+
+export type MyOrientation = { id: string; reason: DisciplineReasonKey; dayKey: string; step: "DTO_1" | "DTO_2"; note: string | null; decidedAt: Date };
+
+/** As conversas de orientação (1º e 2º DTO) que a liderança registrou com o próprio colaborador — ele vê no Meu Perfil. */
+export async function listMyOrientations(user: CurrentUser): Promise<MyOrientation[]> {
+  const collaborator = await db.collaborator.findUnique({ where: { userId: user.id }, select: { id: true } });
+  if (!collaborator) return [];
+  try {
+    const rows = await db.disciplinaryMeasure.findMany({
+      where: { collaboratorId: collaborator.id, status: "APLICADA", step: { in: ["DTO_1", "DTO_2"] } },
+      orderBy: { decidedAt: "desc" },
+    });
+    return rows.map((r) => ({
+      id: r.id,
+      reason: r.reason as DisciplineReasonKey,
+      dayKey: dayKeyOf(r.referenceDate),
+      step: r.step as "DTO_1" | "DTO_2",
+      note: r.note,
+      decidedAt: r.decidedAt,
+    }));
+  } catch (error) {
+    console.error("[discipline] orientações indisponíveis:", error);
+    return [];
+  }
+}
