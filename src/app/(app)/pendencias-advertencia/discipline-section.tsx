@@ -110,7 +110,7 @@ export function MeasureDialog({ entry, mode, trigger }: { entry: DisciplineEntry
               </Select>
             </FormField>
           ) : (
-            <p className="text-foreground-subtle">Não gera medida e não avança a escada. O motivo fica registrado.</p>
+            <p className="text-foreground-subtle">Não gera medida e não avança a escada. O motivo fica registrado.{entry.reason === "FALTA" && " A falta deixa de contar como injustificada nos dias de benefício."}</p>
           )}
           <FormField label={isApply ? "Observação" : "Motivo da justificativa"} required={!isApply} hint={isApply ? "Opcional" : undefined}>
             <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} />

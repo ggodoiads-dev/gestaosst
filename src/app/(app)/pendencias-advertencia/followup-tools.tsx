@@ -190,7 +190,8 @@ export function DismissNoteButton({ noteId, label, kind }: { noteId: string; lab
           <p className="font-medium text-foreground">{label}</p>
           <p className="text-foreground-subtle">
             O lançamento continua na escala, mas sai desta fila: {kind === "FALTA" ? "não cobra advertência nem " : "não cobra "}
-            entrevista de ABS. O motivo fica registrado na observação do dia.
+            entrevista de ABS.{kind === "FALTA" && " A falta deixa de contar como injustificada (não pesa nos dias de benefício nem na cesta básica)."} O motivo fica
+            registrado na observação do dia.
           </p>
           <Textarea
             value={reason}
@@ -246,7 +247,7 @@ export function BulkDismissButton({ noteIds, onDone }: { noteIds: string[]; onDo
         </DialogHeader>
         <DialogBody className="flex flex-col gap-3 text-sm">
           <p className="text-foreground-subtle">
-            Todos saem da fila (sem advertência e sem entrevista de ABS) e o mesmo motivo fica registrado em cada um. Os lançamentos continuam na escala.
+            Todos saem da fila (sem advertência e sem entrevista de ABS) e o mesmo motivo fica registrado em cada um. Os lançamentos continuam na escala, e as faltas deixam de contar como injustificadas nos dias de benefício e na cesta básica.
           </p>
           <Textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} placeholder="Ex: folga de banco de horas, erro de escala..." />
         </DialogBody>

@@ -58,18 +58,25 @@ export async function dismissAbsenceNote(user: CurrentUser, noteId: string, reas
   const note = await db.scheduleDayNote.findUniqueOrThrow({ where: { id: noteId } });
   if (note.status !== "FALTA" && note.status !== "ATESTADO") throw new Error("Só dá pra justificar por aqui falta ou atestado.");
 
-  const entry = `Justificado pelo RH: ${trimmed}`;
+  // Falta justificada deixa de ser "falta injustificada": o status vira OUTRO (o dia continua de folga na escala). Assim ela sai da
+  // fila, da escada de medidas E da conta de dias de benefício/cesta básica. O motivo fica na observação do dia e na auditoria.
+  const entry = note.status === "FALTA" ? `Falta justificada pelo RH: ${trimmed}` : `Justificado pelo RH: ${trimmed}`;
   await db.scheduleDayNote.update({
     where: { id: noteId },
-    data: { warningApplied: true, absenceInterviewDone: true, notes: note.notes ? `${note.notes} — ${entry}` : entry },
+    data: {
+      warningApplied: true,
+      absenceInterviewDone: true,
+      ...(note.status === "FALTA" ? { status: "OUTRO" as const } : {}),
+      notes: note.notes ? `${note.notes} — ${entry}` : entry,
+    },
   });
   await recordAudit({
     userId: user.id,
     action: "UPDATE",
     entityType: "ScheduleDayNote",
     entityId: noteId,
-    previousValue: { warningApplied: note.warningApplied, absenceInterviewDone: note.absenceInterviewDone },
-    newValue: { warningApplied: true, absenceInterviewDone: true, justification: trimmed },
+    previousValue: { status: note.status, warningApplied: note.warningApplied, absenceInterviewDone: note.absenceInterviewDone },
+    newValue: { status: note.status === "FALTA" ? "OUTRO" : note.status, warningApplied: true, absenceInterviewDone: true, justification: trimmed },
   });
 }
 

@@ -177,10 +177,21 @@ async function decide(user: CurrentUser, input: DecideInput, status: "APLICADA" 
   // Falta: tratar a medida também tira a falta da fila de advertência (mesmo marcador que já existia).
   if (input.reason === "FALTA") {
     const next = noonOf(input.dayKey);
-    await db.scheduleDayNote.updateMany({
+    const notes = await db.scheduleDayNote.findMany({
       where: { collaboratorId: input.collaboratorId, status: "FALTA", date: { gte: new Date(`${input.dayKey}T00:00:00Z`), lt: new Date(next.getTime() + 12 * 3600 * 1000) } },
-      data: { warningApplied: true },
+      select: { id: true, notes: true },
     });
+    for (const n of notes) {
+      // Aplicada: continua sendo falta injustificada (conta nos benefícios). Dispensada = falta justificada: sai da conta de benefício.
+      const entry = `Falta justificada: ${note}`;
+      await db.scheduleDayNote.update({
+        where: { id: n.id },
+        data:
+          status === "DISPENSADA"
+            ? { warningApplied: true, status: "OUTRO", notes: n.notes ? `${n.notes} — ${entry}` : entry }
+            : { warningApplied: true },
+      });
+    }
   }
   await recordAudit({
     userId: user.id,
