@@ -304,17 +304,17 @@ async function buildCollaboratorChecklistDays(collaboratorId: string, from: Date
     const completedIds = new Set([
       ...(completedByDay.get(key) ?? []),
       ...justifiedItemIds(justificationsByKey.get(`${collaboratorId}|${key}`)),
-      // Equipamento bloqueado/em manutenção naquele dia não podia ser inspecionado: não fica pendente.
-      ...required.filter((e) => unavailable(e.id, key)).map((e) => e.id),
     ]);
+    // Equipamento bloqueado/em manutenção naquele dia não podia ser inspecionado: não era exigido (nem feito, nem pendente).
+    const dayRequired = required.filter((e) => !unavailable(e.id, key));
     days.push({
       date,
       status,
       // `future` = ainda não fechou (hoje e adiante): fica fora das contas de cumprimento (D-1).
       future: date > closedDay,
-      required,
-      completed: required.filter((e) => completedIds.has(e.id)),
-      pending: required.filter((e) => !completedIds.has(e.id)),
+      required: dayRequired,
+      completed: dayRequired.filter((e) => completedIds.has(e.id)),
+      pending: dayRequired.filter((e) => !completedIds.has(e.id)),
     });
   }
 
@@ -442,15 +442,16 @@ async function computeCompliancePeriodStats(from: Date, toInclusive: Date): Prom
       const computed = dayStatusFor(date, c);
       const status = note ? note.overrideStatus : computed;
       if (status !== "TRABALHO") continue;
+      // Equipamento bloqueado/em manutenção naquele dia não podia ser inspecionado: não era exigido. Se nada era exigível, não há turno cobrado.
+      const dayRequired = required.filter((e) => !unavailable(e.id, dayKey));
+      if (dayRequired.length === 0) continue;
       scheduledAnyDay = true;
       // Sem login não há como cumprir: tudo que é cobrado fica pendente.
       const completedIds = new Set([
         ...(c.userId ? (completedByKey.get(`${c.userId}|${dayKey}`) ?? []) : []),
         ...justifiedItemIds(justificationsByKey.get(`${c.id}|${dayKey}`)),
-        // Equipamento bloqueado/em manutenção naquele dia não podia ser inspecionado: não fica pendente.
-        ...required.filter((e) => unavailable(e.id, dayKey)).map((e) => e.id),
       ]);
-      const pendingToday = required.filter((e) => !completedIds.has(e.id)).length;
+      const pendingToday = dayRequired.filter((e) => !completedIds.has(e.id)).length;
       pendingTotal += pendingToday;
       shiftsRequired++;
       personRequired++;
@@ -557,16 +558,17 @@ async function computeDayProgress(
     const doneIds = new Set([
       ...(c.userId ? (doneByUser.get(c.userId) ?? []) : []),
       ...justifiedItemIds(justificationsByKey.get(`${c.id}|${todayKey}`)),
-      // Equipamento bloqueado/em manutenção no dia não podia ser inspecionado: não fica pendente (igual ao detalhe do dia).
-      ...required.filter((e) => unavailable(e.id, todayKey)).map((e) => e.id),
     ]);
-    const missing = required.filter((e) => !doneIds.has(e.id)).map((e) => ({ id: e.id, code: e.code }));
+    // Equipamento bloqueado/em manutenção no dia não podia ser inspecionado: sai da conta (nem feito, nem pendente) — igual ao detalhe.
+    const dayRequired = required.filter((e) => !unavailable(e.id, todayKey));
+    if (dayRequired.length === 0) continue;
+    const missing = dayRequired.filter((e) => !doneIds.has(e.id)).map((e) => ({ id: e.id, code: e.code }));
     const entry: TodayProgressEntry = {
       id: c.id,
       name: c.name,
       areaName: c.area?.name ?? null,
-      done: required.length - missing.length,
-      required: required.length,
+      done: dayRequired.length - missing.length,
+      required: dayRequired.length,
       noAccess: !c.userId,
       missing,
     };
@@ -703,17 +705,20 @@ export async function getCollaboratorChecklistDayDetail(
   const justifiedIds = justifiedItemIds(dayJustifications);
   // Equipamento bloqueado/em manutenção no dia não podia ser inspecionado: conta como concluído, não pendente.
   const unavailableIds = new Set(required.filter((e) => unavailable(e.id, params.dayKey)).map((e) => e.id));
-  const doneIds = new Set([...executions.flatMap((e) => e.keys), ...justifiedIds, ...unavailableIds]);
-  const missing = required.filter((e) => !doneIds.has(e.id));
-  const justified = required
+  const dayRequired = required.filter((e) => !unavailableIds.has(e.id));
+  const doneIds = new Set([...executions.flatMap((e) => e.keys), ...justifiedIds]);
+  const missing = dayRequired.filter((e) => !doneIds.has(e.id));
+  const justified = dayRequired
     .filter((e) => justifiedIds.has(e.id) && !executions.some((x) => x.keys.includes(e.id)))
     .map((e) => ({ ...e, justification: dayJustifications.find((j) => j.itemId === e.id)! }));
   // Justificativa que não conta como cumprido (ex: "Outro") fica visível junto do item que continua faltando.
   const notCounting = new Map(dayJustifications.filter((j) => !j.countsAsCompliant).map((j) => [j.itemId, j]));
   return {
     collaborator: { id: collaborator.id, name: collaborator.name, area: collaborator.area?.name ?? null, hasLogin: !!collaborator.userId },
-    required: required.length,
-    doneCount: required.length - missing.length,
+    required: dayRequired.length,
+    /** Equipamentos bloqueados/em manutenção no dia: não eram exigidos e ficam fora da conta. */
+    unavailableCount: unavailableIds.size,
+    doneCount: dayRequired.length - missing.length,
     missing: missing.map((e) => ({ ...e, note: notCounting.get(e.id) ?? null })),
     justified,
     executions: executions.map((e) => e.detail),
