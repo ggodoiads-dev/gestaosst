@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { functionGroupRank, groupByFunction } from "./function-groups";
+import { functionGroupRank, groupByFunction, groupByTurno } from "./function-groups";
 
 describe("groupByFunction", () => {
   it("amarradores primeiro, depois operadores, depois o resto e sem função por último", () => {
@@ -17,5 +17,19 @@ describe("groupByFunction", () => {
   it("rank ignora acento e caixa", () => {
     expect(functionGroupRank("AMARRADOR")).toBe(0);
     expect(functionGroupRank("Operador de Empilhadeira")).toBe(1);
+  });
+});
+
+describe("groupByTurno", () => {
+  it("separa por turno e deixa sem turno por último", () => {
+    const people = [
+      { n: "A", t: "Turno B" },
+      { n: "B", t: null },
+      { n: "C", t: "Turno A" },
+      { n: "D", t: "Turno A" },
+    ];
+    const groups = groupByTurno(people, (p) => p.t);
+    expect(groups.map((g) => g.turnoName)).toEqual(["Turno A", "Turno B", null]);
+    expect(groups[0].entries.map((p) => p.n)).toEqual(["C", "D"]);
   });
 });

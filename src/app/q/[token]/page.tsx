@@ -13,7 +13,7 @@ import { formatDate } from "@/lib/dates";
 import { EquipmentStatusBadge, CriticalityBadge } from "@/components/domain/status-badges";
 import { Badge } from "@/components/ui/badge";
 import { Award } from "lucide-react";
-import { groupByFunction } from "@/domain/qualification/function-groups";
+import { groupByFunction, groupByTurno } from "@/domain/qualification/function-groups";
 import { PublicPhoto } from "./public-photo";
 import { AttachmentViewerLink } from "./attachment-viewer-link";
 import type { Equipment, EquipmentType, Area, Collaborator } from "@/generated/prisma/client";
@@ -107,7 +107,7 @@ export default async function QrResolverPage({
   const area = await db.area.findUnique({ where: { qrToken: token } });
   if (area) {
     const [collaborators, documents] = await Promise.all([
-      db.collaborator.findMany({ where: { areaId: area.id, active: true }, include: { function: { select: { name: true } } }, orderBy: { name: "asc" } }),
+      db.collaborator.findMany({ where: { areaId: area.id, active: true }, include: { function: { select: { name: true } }, turno: { select: { name: true } } }, orderBy: { name: "asc" } }),
       getAreaPublicOverview(area),
     ]);
     const summaries = await Promise.all(
@@ -363,7 +363,7 @@ function PublicAreaView({
   baseUrl,
 }: {
   area: Area;
-  entries: { collaborator: Collaborator & { function?: { name: string } | null }; summary: QualificationSummary; photoUrl: string | null }[];
+  entries: { collaborator: Collaborator & { function?: { name: string } | null; turno?: { name: string } | null }; summary: QualificationSummary; photoUrl: string | null }[];
   overview: AreaOverview;
   baseUrl: string;
 }) {
@@ -441,8 +441,12 @@ function PublicAreaView({
               <h2 className="text-sm font-semibold text-foreground">{group.functionName ?? "Sem função cadastrada"}</h2>
               <span className="text-xs text-foreground-subtle">{group.entries.length}</span>
             </div>
-            {/* Padrinhos primeiro dentro de cada função */}
-            {[...group.entries]
+            {groupByTurno(group.entries, (e) => e.collaborator.turno?.name ?? null).map((turnoGroup) => (
+              <div key={turnoGroup.turnoName ?? "sem-turno"} className="flex flex-col gap-2.5">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-foreground-subtle">
+                  {turnoGroup.turnoName ?? "Sem turno"} · {turnoGroup.entries.length}
+                </p>
+                {[...turnoGroup.entries]
               .sort((a, b) => Number(!!b.summary.padrinho) - Number(!!a.summary.padrinho))
               .map(({ collaborator, summary, photoUrl }) => (
                 <div
@@ -471,6 +475,8 @@ function PublicAreaView({
                   <QualificationList summary={summary} baseUrl={baseUrl} />
                 </div>
               ))}
+              </div>
+            ))}
           </section>
         ))}
       </div>
