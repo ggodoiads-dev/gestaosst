@@ -84,16 +84,26 @@ async function loadUnavailability(upToDayKey: string): Promise<(equipmentId: str
     type Interval = { start: number; end: number | null };
     const byEquipment = new Map<string, Interval[]>();
     const lastEventAt = new Map<string, number>();
+    // Dois "motivos" independentes: bloqueio (até ser liberado) e manutenção (até ser concluída). Concluir a manutenção
+    // não libera um equipamento que continua bloqueado por uma não conformidade — só o evento de liberação faz isso.
+    const state = new Map<string, { blocked: boolean; maintenance: boolean }>();
     for (const e of events) {
-      const list = byEquipment.get(e.equipmentId) ?? [];
       const t = e.occurredAt.getTime();
       lastEventAt.set(e.equipmentId, t);
-      const open = list[list.length - 1];
-      if ((UNAVAILABLE_START_EVENTS as readonly string[]).includes(e.type)) {
-        if (!open || open.end !== null) list.push({ start: t, end: null });
-      } else if (open && open.end === null) {
-        open.end = t;
+      const st = state.get(e.equipmentId) ?? { blocked: false, maintenance: false };
+      const wasUnavailable = st.blocked || st.maintenance;
+      if (e.type === "EQUIPAMENTO_BLOQUEADO") st.blocked = true;
+      else if (e.type === "MANUTENCAO_INICIADA") st.maintenance = true;
+      else if (e.type === "MANUTENCAO_CONCLUIDA") st.maintenance = false;
+      else if (e.type === "EQUIPAMENTO_LIBERADO") {
+        st.blocked = false;
+        st.maintenance = false;
       }
+      state.set(e.equipmentId, st);
+      const isUnavailable = st.blocked || st.maintenance;
+      const list = byEquipment.get(e.equipmentId) ?? [];
+      if (!wasUnavailable && isUnavailable) list.push({ start: t, end: null });
+      else if (wasUnavailable && !isUnavailable && list.length > 0) list[list.length - 1].end = t;
       byEquipment.set(e.equipmentId, list);
     }
     // Bloqueado agora mas sem período aberto no histórico (ex: status mudado direto no cadastro).
