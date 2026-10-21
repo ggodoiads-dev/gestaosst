@@ -14,7 +14,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
   const code = url.searchParams.get("code") ?? "LOG20-EQ-0055";
-  const equipment = await db.equipment.findFirst({ where: { code }, select: { id: true, code: true, name: true, status: true, active: true, areaId: true, createdAt: true, area: { select: { name: true } } } });
+  const equipment = await db.equipment.findFirst({ where: { code }, select: { id: true, code: true, name: true, status: true, active: true, areaId: true, area: { select: { name: true } } } });
   if (!equipment) return NextResponse.json({ error: "not found" }, { status: 404 });
   const [events, areaHistory, assignments] = await Promise.all([
     db.equipmentEvent.findMany({ where: { equipmentId: equipment.id }, orderBy: { occurredAt: "asc" }, select: { type: true, description: true, occurredAt: true } }),
