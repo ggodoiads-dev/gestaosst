@@ -92,6 +92,7 @@ async function loadRows(periodKeys: string[]): Promise<TmaStatsRow[]> {
   const rows = await db.tmaTruck.findMany({
     where: { periodKey: { in: periodKeys } },
     select: {
+      periodKey: true,
       status: true,
       agendamento: true,
       apresentacao: true,

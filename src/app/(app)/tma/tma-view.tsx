@@ -26,7 +26,7 @@ export function TmaViewClient({ months, selected, year, month, ytd, importedAt }
           </select>
         </label>
         <p className="text-xs text-foreground-subtle">
-          Fonte: planilha de controle de atendimento (Ambev).
+          Fonte: planilha de controle de atendimento (Ambev). TMA = coluna TMA dos caminhões liberados com agendamento.
           {importedAt && <> Última importação em {new Date(importedAt).toLocaleDateString("pt-BR")}.</>}
         </p>
       </div>
@@ -34,13 +34,13 @@ export function TmaViewClient({ months, selected, year, month, ytd, importedAt }
       <section>
         <h2 className="mb-2 text-sm font-semibold text-foreground">{monthName(selected)}</h2>
         <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-          <Tile label="TMA — tempo de atendimento" value={formatDuration(month.avgTma)} sub={`meta ${formatDuration(TMA_TARGET_MIN)} · entrada no atendimento → liberação`} tone={month.avgTma === null ? "neutral" : within ? "good" : "bad"} />
-          <Tile label="Atendidos em até 3h" value={pct(month.within3h)} sub={`${month.loaded} caminhões liberados`} tone="neutral" />
+          <Tile label="TMA — planilha da Ambev" value={formatDuration(month.avgTma)} sub={`meta ${formatDuration(TMA_TARGET_MIN)} · liberados com agendamento`} tone={month.avgTma === null ? "neutral" : within ? "good" : "bad"} />
+          <Tile label="Com TMA em até 3h" value={pct(month.within3h)} sub={`${month.loaded} caminhões na média`} tone="neutral" />
           <Tile label="TMC — carregamento" value={formatDuration(month.avgTmc)} sub="início → fim do carregamento" tone="neutral" />
           <Tile label="Com agendamento" value={pct(month.withSchedule)} sub={month.onTime === null ? undefined : `${pct(month.onTime)} no horário ou antes`} tone="neutral" />
         </div>
         <div className="mt-2 grid grid-cols-2 gap-2 lg:grid-cols-4">
-          <Tile label="TMA da planilha Ambev" value={formatDuration(month.ambev.avg)} sub="conta a espera no pátio de quem chega antes do agendamento" tone="neutral" small />
+          <Tile label="Tempo de atendimento" value={formatDuration(month.atendimento.avg)} sub={`entrada no atendimento → liberação · ${pct(month.atendimento.within3h)} em até 3h`} tone="neutral" small />
           <Tile label="Não apresentaram" value={String(month.notShown)} sub={`${month.holes} furo(s)`} tone="neutral" small />
           <Tile label="Liberados master" value={String(month.releasedMaster)} sub="fora da média do TMA" tone="neutral" small />
           <Tile label={`Acumulado de ${year}`} value={formatDuration(ytd.avgTma)} sub={`${pct(ytd.within3h)} em até 3h · ${ytd.loaded} caminhões`} tone={ytd.avgTma === null ? "neutral" : ytd.avgTma <= TMA_TARGET_MIN ? "good" : "bad"} small />
@@ -54,7 +54,7 @@ export function TmaViewClient({ months, selected, year, month, ytd, importedAt }
         </div>
         <div className="rounded-md border border-border bg-surface p-3">
           <h3 className="mb-1 text-sm font-semibold text-foreground">Onde o tempo é gasto</h3>
-          <p className="mb-3 text-[11px] text-foreground-subtle">Média de cada etapa. As quatro últimas formam o TMA; o pátio acontece antes da entrada.</p>
+          <p className="mb-3 text-[11px] text-foreground-subtle">Média de cada etapa. As quatro últimas formam o tempo de atendimento (da entrada à liberação); o pátio acontece antes e só entra no TMA de quem chega no horário ou antes.</p>
           <Stages stages={month.stages} />
         </div>
       </section>

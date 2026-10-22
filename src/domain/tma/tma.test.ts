@@ -42,22 +42,34 @@ describe("regra do TMA", () => {
 describe("leitura de uma aba", () => {
   const header = ["DATA DA GRADE", "ARMAZÉM", "TIPO CARRO", "TRANSPORTADORA", "AGENDAMENTO", "APRESENTAÇÃO", "ENTRADA ATENDIMENTO", "CONFERENTE", "LIBERAÇÃO DO VEICULO", "TMA", "STATUS.", "AUX TURNO"];
   const serial = (iso: string) => 25569 + new Date(`${iso}:00Z`).getTime() / 86400000;
-  const row = (status: string, ag: string, ap: string, ea: string, lib: string, tma: number) => [serial("2026-09-30T00:00"), status, "SIDER", "TIRIVA", serial(ag), serial(ap), serial(ea), "NIELSON", serial(lib), tma / 1440, "APRESENTADO", "B"];
-  const grid = [["x"], header, row("LIBERADO", "2026-09-30T20:00", "2026-09-30T19:03", "2026-10-01T09:29", "2026-10-01T12:18", 16 * 60 + 18), row("LIBERADO", "2026-09-30T19:00", "2026-09-30T22:30", "2026-10-01T07:45", "2026-10-01T11:15", 210), ["", "NÃO APRESENTOU"]];
+  const row = (status: string, ag: string | null, ap: string, ea: string, lib: string, tma: number) => [serial("2026-09-30T00:00"), status, "SIDER", "TIRIVA", ag ? serial(ag) : null, serial(ap), serial(ea), "NIELSON", serial(lib), tma / 1440, "APRESENTADO", "B"];
+  const grid = [
+    ["x"],
+    header,
+    row("LIBERADO", "2026-09-30T20:00", "2026-09-30T19:03", "2026-10-01T09:29", "2026-10-01T12:18", 16 * 60 + 18),
+    row("LIBERADO", "2026-09-30T19:00", "2026-09-30T22:30", "2026-10-01T07:45", "2026-10-01T11:15", 210),
+    row("LIBERADO", null, "2026-09-30T10:00", "2026-10-01T08:00", "2026-10-01T10:00", 26 * 60),
+    ["", "NÃO APRESENTOU"],
+  ];
   const parsed = parseTmaSheet(grid);
   it("acha as colunas pelo nome e lê só as linhas com data e status", () => {
-    expect(parsed.rows).toHaveLength(2);
+    expect(parsed.rows).toHaveLength(3);
     expect(parsed.rows[0]).toMatchObject({ status: "LIBERADO", transportadora: "TIRIVA", conferente: "NIELSON", turno: "B", tmaMin: 978, atendimentoMin: 169 });
     expect(parsed.warnings).toEqual([]);
   });
-  it("estatísticas: o TMA é o tempo de atendimento; o da Ambev vem à parte", () => {
-    const stats = computeTmaStats(parsed.rows);
-    expect(stats.loaded).toBe(2);
-    expect(stats.avgTma).toBe(Math.round(((169 + 210) / 2) * 100) / 100);
-    expect(stats.within3h).toBe(50);
-    expect(stats.ambev.avg).toBe((978 + 210) / 2);
+  it("o TMA oficial é o da planilha só dos liberados COM agendamento; o tempo de atendimento vai à parte", () => {
+    const stats = computeTmaStats(parsed.rows.map((r) => ({ ...r, periodKey: "2026-09" })));
+    expect(stats.loaded).toBe(2); // o caminhão sem agendamento (26h) fica de fora
+    expect(stats.avgTma).toBe((978 + 210) / 2);
+    expect(stats.within3h).toBe(0);
+    expect(stats.atendimento.count).toBe(3);
+    expect(stats.atendimento.avg).toBe(Math.round(((169 + 210 + 120) / 3) * 100) / 100);
     expect(stats.onTime).toBe(50);
-    expect(formatDuration(stats.avgTma)).toBe("3:10");
+    expect(formatDuration(stats.avgTma)).toBe("9:54");
+  });
+  it("mês sem coluna de agendamento (layout antigo): todo caminhão liberado vale", () => {
+    const old = parsed.rows.map((r) => ({ ...r, agendamento: null, periodKey: "2026-03" }));
+    expect(computeTmaStats(old).loaded).toBe(3);
   });
   it("aba sem cabeçalho avisa", () => {
     expect(parseTmaSheet([["qualquer"]]).rows).toEqual([]);
@@ -67,6 +79,7 @@ describe("leitura de uma aba", () => {
 describe("chaves do cascateamento", () => {
   it("interpreta as chaves de TMA", () => {
     expect(parseTmaKey("tma.avg")).toEqual({ metric: "avg", ytd: false, stage: null });
+    expect(parseTmaKey("tma.atendimento.ytd")).toEqual({ metric: "atendimento", ytd: true, stage: null });
     expect(parseTmaKey("tma.within3h.ytd")).toEqual({ metric: "within3h", ytd: true, stage: null });
     expect(parseTmaKey("tma.stage:espera")).toEqual({ metric: "stage", ytd: false, stage: "espera" });
     expect(parseTmaKey("tma.stage")).toBeNull();
@@ -74,8 +87,9 @@ describe("chaves do cascateamento", () => {
   });
   it("valor da métrica a partir das estatísticas", () => {
     const stats = computeTmaStats([{ status: "LIBERADO", agendamento: null, apresentacao: null, liberacao: "2026-10-01T10:00", tmaMin: 300, atendimentoMin: 120, patioMin: 10, esperaMin: 20, tmcMin: 40, amarracaoMin: 30, liberacaoMin: 15, transportadora: "A", destino: "B", conferente: "C", turno: "A" }]);
-    expect(tmaMetricValue(stats, parseTmaKey("tma.avg")!)).toBe(120);
-    expect(tmaMetricValue(stats, parseTmaKey("tma.ambev")!)).toBe(300);
+    expect(tmaMetricValue(stats, parseTmaKey("tma.avg")!)).toBe(300);
+    expect(tmaMetricValue(stats, parseTmaKey("tma.atendimento")!)).toBe(120);
+    expect(tmaMetricValue(stats, parseTmaKey("tma.ambev")!)).toBe(300); // apelido antigo do TMA oficial
     expect(tmaMetricValue(stats, parseTmaKey("tma.stage:amarracao")!)).toBe(30);
     expect(tmaMetricValue(stats, parseTmaKey("tma.tmc")!)).toBe(40);
   });

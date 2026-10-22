@@ -71,7 +71,7 @@ export function ImportWizard() {
       for (const sheet of sheets.filter((s) => chosen.has(s.name))) {
         const parsed = parseTmaSheet(grids.get(sheet.name) ?? []);
         const stats = computeTmaStats(parsed.rows);
-        result.push({ periodKey: sheet.periodKey, rows: parsed.rows, warnings: parsed.warnings, loaded: stats.loaded, avg: stats.avgTma, ambev: stats.ambev.avg, within3h: stats.within3h });
+        result.push({ periodKey: sheet.periodKey, rows: parsed.rows, warnings: parsed.warnings, loaded: stats.loaded, avg: stats.avgTma, ambev: stats.atendimento.avg, within3h: stats.within3h });
       }
       setMonths(result);
     } catch (error) {
@@ -168,7 +168,7 @@ export function ImportWizard() {
         <Card>
           <CardHeader>
             <CardTitle>3. Conferir e importar</CardTitle>
-            <CardDescription>TMA = tempo de atendimento (entrada no atendimento → liberação). “TMA Ambev” é o da planilha, que conta a espera no pátio de quem chega antes do agendamento.</CardDescription>
+            <CardDescription>TMA = o da planilha da Ambev, só dos caminhões liberados com agendamento. “Tempo de atendimento” é da entrada no atendimento até a liberação (não conta a espera no pátio).</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             {months.flatMap((m) => m.warnings.map((w) => <p key={m.periodKey + w} className="rounded-md bg-warning-soft px-3 py-2 text-sm text-warning">{monthName(m.periodKey)}: {w}</p>))}
@@ -181,7 +181,7 @@ export function ImportWizard() {
                     <TableHead className="text-right">Liberados</TableHead>
                     <TableHead className="text-right">TMA</TableHead>
                     <TableHead className="text-right">Até 3h</TableHead>
-                    <TableHead className="text-right">TMA Ambev</TableHead>
+                    <TableHead className="text-right">Tempo de atendimento</TableHead>
                     <TableHead>Situação</TableHead>
                   </TableRow>
                 </TableHeader>

@@ -146,7 +146,7 @@ async function resolveOne(key: string, periodKey: string, todayKey: string): Pro
 /** Chave que dá o ACUMULADO DO ANO (YTD) de quem tem um resultado do mês contável. Só vale para contagens (somam). */
 export function ytdKeyOf(sigoKey: string): string | null {
   const tma = parseTmaKey(sigoKey);
-  if (tma) return tma.ytd ? null : sigoKey.replace(/^tma\.(avg|ambev|within3h|tmc|stage)/, "tma.$1.ytd");
+  if (tma) return tma.ytd ? null : sigoKey.replace(/^tma\.(avg|ambev|atendimento|within3h|tmc|stage)/, "tma.$1.ytd");
   const dre = parseDreKey(sigoKey);
   if (dre) return dre.ytd ? null : sigoKey.replace(/^dre\.(avr|ratio):/, "dre.$1.ytd:");
   if (sigoKey === "dto.month.count") return "dto.year.count";
