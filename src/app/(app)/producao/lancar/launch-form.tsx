@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { PRODUCTION_GROUPS, fieldsOfGroup, sanitizeProductionValues, type ProductionValues } from "@/domain/production/fields";
-import { parseProductionMessage } from "@/domain/production/parse";
+import { parseAnyProductionMessage } from "@/domain/production/parse";
 import { loadShiftProductionAction, saveShiftProductionAction } from "@/server/actions/production.actions";
 
 type Turno = { id: string; name: string };
@@ -47,7 +47,7 @@ export function LaunchForm({ turnos, today, initialDay, initialTurnoId }: Props)
   }, [day, turnoId]);
 
   function applyPaste() {
-    const parsed = parseProductionMessage(paste);
+    const parsed = parseAnyProductionMessage(paste);
     if (Object.keys(parsed.values).length === 0) {
       toast.error("Não encontrei os campos do relatório nessa mensagem.");
       return;
@@ -60,11 +60,13 @@ export function LaunchForm({ turnos, today, initialDay, initialTurnoId }: Props)
       if (candidate <= today) nextDay = candidate;
     }
     const nextTurno = parsed.turno ? turnos.find((t) => t.name.toUpperCase() === parsed.turno)?.id : undefined;
-    if (nextDay !== day || (nextTurno && nextTurno !== turnoId)) skipLoad.current = true;
+    const changedReport = nextDay !== day || (!!nextTurno && nextTurno !== turnoId);
+    if (changedReport) skipLoad.current = true;
     setDay(nextDay);
     if (nextTurno) setTurnoId(nextTurno);
-    setFields(toText(parsed.values));
-    setNotes(parsed.notes);
+    // Soma ao que já está na tela: o relatório do líder e o fechamento dos ajudantes do mesmo turno entram no mesmo relatório.
+    setFields((cur) => ({ ...(changedReport ? {} : cur), ...toText(parsed.values) }));
+    if (parsed.notes) setNotes(parsed.notes);
     setWarnings(parsed.unmatched);
     setPaste("");
     toast.success(`${Object.keys(parsed.values).length} campos preenchidos. Confira e salve.`);
@@ -93,7 +95,7 @@ export function LaunchForm({ turnos, today, initialDay, initialTurnoId }: Props)
         <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-foreground">
           <ClipboardPaste className="size-4 text-foreground-subtle" /> Colar o relatório do WhatsApp
         </div>
-        <p className="mb-2 text-xs text-foreground-subtle">Cole a mensagem de fim de turno aqui e os campos abaixo são preenchidos sozinhos. Confira antes de salvar.</p>
+        <p className="mb-2 text-xs text-foreground-subtle">Cole aqui a mensagem de fim de turno do líder ou o fechamento dos ajudantes (seleção): os campos abaixo são preenchidos sozinhos. Pode colar as duas, uma de cada vez. Confira antes de salvar.</p>
         <Textarea value={paste} onChange={(e) => setPaste(e.target.value)} rows={5} placeholder="*GERAL*&#10;Carros Carregados: 21&#10;…" />
         <Button variant="secondary" className="mt-2" onClick={applyPaste} disabled={paste.trim() === ""}>
           Preencher os campos

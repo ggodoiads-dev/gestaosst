@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseProductionMessage } from "./parse";
+import { parseAnyProductionMessage, parseProductionMessage } from "./parse";
 import { sanitizeProductionValues, totalOfGroup } from "./fields";
 
 const MESSAGE = `📋 *RELATÓRIO DE TURNO – A* 21/10/2026
@@ -80,5 +80,71 @@ describe("parseProductionMessage", () => {
 describe("sanitizeProductionValues", () => {
   it("descarta chaves desconhecidas, negativos onde não cabe e lixo", () => {
     expect(sanitizeProductionValues({ carrosCarregados: 5.4, ajusteCarros: -2, rodotrem: -1, foo: 3, frotaFixa: "7" })).toEqual({ carrosCarregados: 5, ajusteCarros: -2 });
+  });
+});
+
+const HELPERS_1 = `fechamento Turno B*
+*Data* 19/10/2026
+
+"ANTÔNIO CARLOS"
+
+🔴*QLP*=
+🔴*Area Seleção*🔴
+⚫*Chapatex*
+
+Stefany:2000
+Quebra:2
+Transf:7
+
+Jessika:2200
+Quebra:1
+
+⚫*Quadro*
+Andrei
+Bom:250
+Reforma:50
+
+🔴*Dpvim pallet*🔴           6915102
+
+Jean/Bernardo
+Bom:135
+Reforma:45
+Oi:3
+PALLET descarte:15
+Chapas transferência:143
+Chapas quebradas:7
+
+⚫*Retrabalho*
+🔴*total chapas:6211`;
+
+const HELPERS_2 = `🟡*fechamento Turno B*
+*Data* 18/10/2026
+*Lider*Endryk Rodrigues
+🔴*Area Seleção*🔴
+Dpvim=6914473
+Bom=171
+Reforma=32
+Descarte =9
+Chapa transferência =147
+
+🔴*total
+Chapas selecionadas =00
+Palltes selecionado = 533
+Chapa dpvim=354`;
+
+describe("fechamento dos ajudantes", () => {
+  it("soma Bom/Reforma/Descarte/Transf/Quebra e lê o total de chapas", () => {
+    const r = parseAnyProductionMessage(HELPERS_1);
+    expect(r.values).toMatchObject({ selecaoBom: 385, selecaoReforma: 95, selecaoDescarte: 15, selecaoTransferencia: 150, selecaoQuebra: 10, selecaoTotalChapas: 6211 });
+    expect(r.date).toEqual({ day: 19, month: 10, year: 2026 });
+    expect(r.turno).toBe("B");
+  });
+  it("lê os totais de pallets e chapas selecionados (formato com igual)", () => {
+    const r = parseAnyProductionMessage(HELPERS_2);
+    expect(r.values).toMatchObject({ selecaoPalletsSelecionados: 533, selecaoChapasSelecionadas: 0, selecaoChapaDpvim: 354, selecaoBom: 171, selecaoReforma: 32, selecaoDescarte: 9, selecaoTransferencia: 147 });
+    expect(r.date).toEqual({ day: 18, month: 10, year: 2026 });
+  });
+  it("a mensagem do líder continua indo para o leitor do líder", () => {
+    expect(parseAnyProductionMessage(MESSAGE).values.carrosCarregados).toBe(21);
   });
 });

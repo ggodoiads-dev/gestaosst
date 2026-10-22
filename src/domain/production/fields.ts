@@ -3,7 +3,7 @@
  * A chave (`key`) é o que fica guardado no banco; o rótulo pode mudar sem mexer nos dados.
  */
 
-export type ProductionGroupKey = "GERAL" | "CARGAS" | "DESCARGAS";
+export type ProductionGroupKey = "GERAL" | "CARGAS" | "DESCARGAS" | "SELECAO";
 
 export type ProductionField = {
   key: string;
@@ -19,6 +19,7 @@ export const PRODUCTION_GROUPS: { key: ProductionGroupKey; label: string; hint: 
   { key: "GERAL", label: "Geral", hint: "Carros do turno e ocorrências" },
   { key: "CARGAS", label: "Cargas", hint: "O que foi carregado nos caminhões" },
   { key: "DESCARGAS", label: "Descargas", hint: "O que foi descarregado" },
+  { key: "SELECAO", label: "Seleção e reforma (ajudantes)", hint: "Fechamento do turno dos ajudantes: pallets e chapas selecionados" },
 ];
 
 export const PRODUCTION_FIELDS: ProductionField[] = [
@@ -47,6 +48,16 @@ export const PRODUCTION_FIELDS: ProductionField[] = [
   { key: "descargaInsumos", label: "Insumos", group: "DESCARGAS", aliases: ["insumos", "insumo"] },
   { key: "descargaDevolucoes", label: "Devoluções", group: "DESCARGAS", aliases: ["devolucoes", "devolucao"] },
   { key: "descargaAlmoxarifado", label: "Almoxarifado", group: "DESCARGAS", aliases: ["almoxarifado", "almox"] },
+
+  { key: "selecaoPalletsSelecionados", label: "Pallets selecionados", group: "SELECAO" },
+  { key: "selecaoChapasSelecionadas", label: "Chapas selecionadas", group: "SELECAO" },
+  { key: "selecaoChapaDpvim", label: "Chapas DPVIM", group: "SELECAO" },
+  { key: "selecaoTotalChapas", label: "Total de chapas", group: "SELECAO" },
+  { key: "selecaoBom", label: "Bom", group: "SELECAO" },
+  { key: "selecaoReforma", label: "Reforma", group: "SELECAO" },
+  { key: "selecaoDescarte", label: "Descarte", group: "SELECAO" },
+  { key: "selecaoTransferencia", label: "Chapas em transferência", group: "SELECAO" },
+  { key: "selecaoQuebra", label: "Quebra", group: "SELECAO" },
 ];
 
 export const PRODUCTION_FIELD_KEYS = PRODUCTION_FIELDS.map((f) => f.key);

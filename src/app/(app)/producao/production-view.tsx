@@ -64,6 +64,14 @@ export function ProductionViewClient({ months, selected, year, month, ytd, repor
               <Tile label="Queda de produto" value={fmt(t.quedaProduto)} sub={`${fmt(t.absOperador)} ABS de operador`} small />
               <Tile label="Fila de carregamento" value={fmt(t.filaCarregamento)} sub={`${fmt(t.ajusteCarros)} de ajuste de carros`} small />
             </div>
+            {(t.selecaoTotalChapas !== undefined || t.selecaoPalletsSelecionados !== undefined) && (
+              <div className="mt-2 grid grid-cols-2 gap-2 lg:grid-cols-4">
+                <Tile label="Total de chapas (seleção)" value={fmt(t.selecaoTotalChapas)} sub={`${fmt(t.selecaoChapaDpvim)} DPVIM · ${fmt(t.selecaoTransferencia)} em transferência`} small />
+                <Tile label="Pallets selecionados" value={fmt(t.selecaoPalletsSelecionados)} sub="fechamento dos ajudantes" small />
+                <Tile label="Reforma" value={fmt(t.selecaoReforma)} sub={`${fmt(t.selecaoBom)} bons · ${fmt(t.selecaoDescarte)} descartados`} small />
+                <Tile label="Quebra" value={fmt(t.selecaoQuebra)} sub="chapas e pallets quebrados" small />
+              </div>
+            )}
           </section>
 
           <section className="grid grid-cols-1 gap-4 xl:grid-cols-3">
@@ -101,7 +109,7 @@ export function ProductionViewClient({ months, selected, year, month, ytd, repor
                         <td className="px-3 py-1.5 text-right tabular-nums text-foreground-muted">{fmt(ytd.totals[f.key])}</td>
                       </tr>
                     ))}
-                    {g.key !== "GERAL" && (
+                    {(g.key === "CARGAS" || g.key === "DESCARGAS") && (
                       <tr className="bg-surface-muted">
                         <td className="px-3 py-1.5 font-semibold text-foreground">Total</td>
                         <td className="px-3 py-1.5 text-right tabular-nums font-semibold text-foreground">{fmt(totalOfGroup(t, g.key))}</td>
