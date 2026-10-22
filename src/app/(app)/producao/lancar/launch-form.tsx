@@ -46,13 +46,13 @@ export function LaunchForm({ turnos, today, initialDay, initialTurnoId }: Props)
     };
   }, [day, turnoId]);
 
-  function applyPaste() {
+  async function applyPaste() {
     const parsed = parseAnyProductionMessage(paste);
     if (Object.keys(parsed.values).length === 0) {
       toast.error("Não encontrei os campos do relatório nessa mensagem.");
       return;
     }
-    // Se a mensagem traz a data e o turno, escolhe eles; o relatório existente desse dia não é carregado por cima do que veio colado.
+    // Se a mensagem traz a data e o turno, escolhe eles e abre o relatório que já existe nesse dia e turno, para o colado somar a ele (nunca substituir).
     let nextDay = day;
     if (parsed.date) {
       const year = parsed.date.year ?? Number(today.slice(0, 4));
@@ -65,8 +65,15 @@ export function LaunchForm({ turnos, today, initialDay, initialTurnoId }: Props)
     setDay(nextDay);
     if (nextTurno) setTurnoId(nextTurno);
     // Soma ao que já está na tela: o relatório do líder e o fechamento dos ajudantes do mesmo turno entram no mesmo relatório.
-    setFields((cur) => ({ ...(changedReport ? {} : cur), ...toText(parsed.values) }));
-    if (parsed.notes) setNotes(parsed.notes);
+    if (changedReport) {
+      const found = await loadShiftProductionAction(nextDay, nextTurno ?? turnoId);
+      setExisting(!!found);
+      setFields({ ...(found ? toText(found.values) : {}), ...toText(parsed.values) });
+      setNotes(parsed.notes || found?.notes || "");
+    } else {
+      setFields((cur) => ({ ...cur, ...toText(parsed.values) }));
+      if (parsed.notes) setNotes(parsed.notes);
+    }
     setWarnings(parsed.unmatched);
     setPaste("");
     toast.success(`${Object.keys(parsed.values).length} campos preenchidos. Confira e salve.`);
