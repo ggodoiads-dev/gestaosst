@@ -52,10 +52,9 @@ export function ProductionViewClient({ months, selected, year, month, ytd, repor
         <>
           <section>
             <h2 className="mb-2 text-sm font-semibold text-foreground">{monthName(selected)}</h2>
-            <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+            <div className="grid grid-cols-2 gap-2 lg:grid-cols-3">
               <Tile label="Carros carregados" value={fmt(t.carrosCarregados)} sub={month.avgLoadedPerDay === null ? undefined : `média de ${fmt(month.avgLoadedPerDay)} por dia`} />
               <Tile label="Carros trabalhados" value={fmt(t.carrosTrabalhados)} sub={month.loadedRate === null ? undefined : `${fmt(month.loadedRate)}% foram carregados`} />
-              <Tile label="Carros amarrados" value={fmt(t.carrosAmarrados)} />
               <Tile label={`Acumulado de ${year}`} value={fmt(ytd.totals.carrosCarregados)} sub={`carros carregados · ${ytd.daysWithReport} dia(s)`} />
             </div>
             <div className="mt-2 grid grid-cols-2 gap-2 lg:grid-cols-4">
@@ -83,7 +82,10 @@ export function ProductionViewClient({ months, selected, year, month, ytd, repor
             <div className="rounded-md border border-border bg-surface p-3">
               <h3 className="mb-1 text-sm font-semibold text-foreground">Carros carregados por turno</h3>
               <p className="mb-3 text-[11px] text-foreground-subtle">Total do mês e média por relatório lançado.</p>
-              <TurnoBars turnos={month.byTurno} />
+              <TurnoBars turnos={month.byTurno} metric="carrosCarregados" />
+              <h3 className="mb-1 mt-5 border-t border-border pt-3 text-sm font-semibold text-foreground">Carros amarrados por turno</h3>
+              <p className="mb-3 text-[11px] text-foreground-subtle">Quem amarra mais. Soma só dos relatórios em que o campo foi preenchido.</p>
+              <TurnoBars turnos={month.byTurno} metric="carrosAmarrados" />
             </div>
           </section>
 
@@ -172,8 +174,8 @@ function DailyChart({ days }: { days: ProductionStats["byDay"] }) {
   );
 }
 
-function TurnoBars({ turnos }: { turnos: TurnoStat[] }) {
-  const rows = turnos.map((t) => ({ turno: t.turno, total: t.totals.carrosCarregados ?? 0, avg: t.reports > 0 ? (t.totals.carrosCarregados ?? 0) / t.reports : 0 }));
+function TurnoBars({ turnos, metric }: { turnos: TurnoStat[]; metric: string }) {
+  const rows = turnos.map((t) => ({ turno: t.turno, total: t.totals[metric] ?? 0, avg: t.reports > 0 ? (t.totals[metric] ?? 0) / t.reports : 0 }));
   const max = Math.max(...rows.map((r) => r.total), 1);
   const sum = rows.reduce((s, r) => s + r.total, 0);
   return (
