@@ -34,7 +34,7 @@ export function countsForAtendimento(row: TmaStatsRow): boolean {
   return row.status === "LIBERADO" && present(row.atendimentoMin) && row.atendimentoMin > 0;
 }
 
-export type GroupStat = { name: string; count: number; avgTma: number | null; within3h: number | null };
+export type GroupStat = { name: string; count: number; avgTma: number | null; within3h: number | null; avgAmarracao: number | null };
 
 function groupBy(rows: TmaStatsRow[], key: (r: TmaStatsRow) => string | null): GroupStat[] {
   const map = new Map<string, TmaStatsRow[]>();
@@ -48,6 +48,7 @@ function groupBy(rows: TmaStatsRow[], key: (r: TmaStatsRow) => string | null): G
       count: list.length,
       avgTma: avg(list.map((r) => r.tmaMin!)),
       within3h: Math.round((list.filter((r) => r.tmaMin! <= TMA_TARGET_MIN).length / list.length) * 1000) / 10,
+      avgAmarracao: avg(list.map((r) => r.amarracaoMin).filter((v): v is number => present(v) && v > 0)),
     }))
     .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "pt-BR"));
 }

@@ -37,12 +37,12 @@ export function TmaViewClient({ months, selected, year, month, ytd, importedAt }
           <Tile label="TMA — planilha da Ambev" value={formatDuration(month.avgTma)} sub={`meta ${formatDuration(TMA_TARGET_MIN)} · liberados com agendamento`} tone={month.avgTma === null ? "neutral" : within ? "good" : "bad"} />
           <Tile label="Com TMA em até 3h" value={pct(month.within3h)} sub={`${month.loaded} caminhões na média`} tone="neutral" />
           <Tile label="TMC — carregamento" value={formatDuration(month.avgTmc)} sub="início → fim do carregamento" tone="neutral" />
-          <Tile label="Com agendamento" value={pct(month.withSchedule)} sub={month.onTime === null ? undefined : `${pct(month.onTime)} no horário ou antes`} tone="neutral" />
+          <Tile label="Tempo de amarração" value={formatDuration(month.stages.amarracao)} sub="fim do carregamento → fim da amarração" tone="neutral" />
         </div>
         <div className="mt-2 grid grid-cols-2 gap-2 lg:grid-cols-4">
           <Tile label="Tempo de atendimento" value={formatDuration(month.atendimento.avg)} sub={`entrada no atendimento → liberação · ${pct(month.atendimento.within3h)} em até 3h`} tone="neutral" small />
-          <Tile label="Não apresentaram" value={String(month.notShown)} sub={`${month.holes} furo(s)`} tone="neutral" small />
-          <Tile label="Liberados master" value={String(month.releasedMaster)} sub="fora da média do TMA" tone="neutral" small />
+          <Tile label="Com agendamento" value={pct(month.withSchedule)} sub={month.onTime === null ? undefined : `${pct(month.onTime)} no horário ou antes`} tone="neutral" small />
+          <Tile label="Não apresentaram" value={String(month.notShown)} sub={`${month.holes} furo(s) · ${month.releasedMaster} liberados master (fora da média)`} tone="neutral" small />
           <Tile label={`Acumulado de ${year}`} value={formatDuration(ytd.avgTma)} sub={`${pct(ytd.within3h)} em até 3h · ${ytd.loaded} caminhões`} tone={ytd.avgTma === null ? "neutral" : ytd.avgTma <= TMA_TARGET_MIN ? "good" : "bad"} small />
         </div>
       </section>
@@ -157,6 +157,7 @@ function GroupTable({ title, rows }: { title: string; rows: GroupStat[] }) {
             <th className="px-3 py-1.5 text-right font-semibold">Liberados</th>
             <th className="px-3 py-1.5 text-right font-semibold">TMA médio</th>
             <th className="px-3 py-1.5 text-right font-semibold">Até 3h</th>
+            <th className="px-3 py-1.5 text-right font-semibold">Amarração</th>
           </tr>
         </thead>
         <tbody>
@@ -166,11 +167,12 @@ function GroupTable({ title, rows }: { title: string; rows: GroupStat[] }) {
               <td className="px-3 py-1.5 text-right tabular-nums text-foreground-muted">{r.count}</td>
               <td className={cn("px-3 py-1.5 text-right tabular-nums font-medium", r.avgTma !== null && r.avgTma > TMA_TARGET_MIN ? "text-danger" : "text-success")}>{formatDuration(r.avgTma)}</td>
               <td className="px-3 py-1.5 text-right tabular-nums text-foreground-muted">{pct(r.within3h)}</td>
+              <td className="px-3 py-1.5 text-right tabular-nums text-foreground-muted">{formatDuration(r.avgAmarracao)}</td>
             </tr>
           ))}
           {shown.length === 0 && (
             <tr>
-              <td colSpan={4} className="px-3 py-5 text-center text-foreground-subtle">Sem dados.</td>
+              <td colSpan={5} className="px-3 py-5 text-center text-foreground-subtle">Sem dados.</td>
             </tr>
           )}
         </tbody>
