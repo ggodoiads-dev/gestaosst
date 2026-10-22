@@ -245,6 +245,9 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
   if (p.has(PERMISSIONS.INDICATORS_VIEW_AREA) || p.has(PERMISSIONS.INDICATORS_VIEW_CONSOLIDATED)) {
     indicadores.push({ href: "/indicadores", label: "Indicadores", icon: "indicators" });
   }
+  if (p.has(PERMISSIONS.INDICATORS_VIEW_CONSOLIDATED) || p.has(PERMISSIONS.PRODUCTIVITY_VIEW) || p.has(PERMISSIONS.PRODUCTIVITY_MANAGE)) {
+    indicadores.push({ href: "/tma", label: "TMA", icon: "indicators" });
+  }
   if (p.has(PERMISSIONS.INDICATORS_VIEW_CONSOLIDATED) || p.has(PERMISSIONS.CASCADE_MANAGE)) {
     indicadores.push({ href: "/cascata", label: "Cascateamento (ICs e IVs)", icon: "indicators" });
   }
@@ -273,6 +276,9 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
   }
   if (p.has(PERMISSIONS.QUALIFICATION_MANAGE)) {
     importacoes.push({ href: "/qualificacoes/importar", label: "Importar ASOs/NRs", icon: "qualificationImport" });
+  }
+  if (p.has(PERMISSIONS.PRODUCTIVITY_MANAGE)) {
+    importacoes.push({ href: "/tma/importar", label: "Importar TMA", icon: "timeClock" });
   }
   if (p.has(PERMISSIONS.HR_MANAGE)) {
     importacoes.push({ href: "/financeiro/dre/importar", label: "Importar DRE", icon: "finance" });

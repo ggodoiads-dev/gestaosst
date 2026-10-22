@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { formatPersonName } from "@/lib/format-name";
 import { formatCascadeValue } from "@/domain/cascade/status";
 import type { CascadeTreeNode } from "@/server/services/cascade.service";
-import { DeleteNodeDialog, NodeDialog, ValueDialog, type ParentOption } from "./cascade-dialogs";
+import { DeleteNodeDialog, NodeDialog, SyncSeedButton, ValueDialog, type ParentOption } from "./cascade-dialogs";
 
 type Owners = { id: string; name: string }[];
 
@@ -188,6 +188,7 @@ export function CascadeTree({ roots, periodKey, canManage, owners }: { roots: Ca
               }
             />
           )}
+          {canManage && <SyncSeedButton />}
           <button type="button" onClick={() => setOpen(new Set(allIds))} className="h-8 rounded-md border border-border-strong bg-surface px-3 text-xs font-medium text-foreground hover:bg-surface-muted">
             Abrir tudo
           </button>

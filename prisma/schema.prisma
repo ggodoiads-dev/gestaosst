@@ -106,6 +106,7 @@ model User {
   absenceInterviewsConcluded      AbsenceInterview[]           @relation("AbsenceInterviewConcludedBy")
   cascadeNodesOwned               CascadeNode[]                @relation("CascadeNodeOwner")
   dreImports                      DreImport[]                  @relation("DreImportedBy")
+  tmaImports                      TmaImport[]                  @relation("TmaImportedBy")
   cascadeValuesUpdated            CascadeValue[]               @relation("CascadeValueBy")
   dtoEvaluationsImported          DtoEvaluation[]              @relation("DtoEvaluationImportedBy")
   dtoJustificationsMade           DtoJustification[]           @relation("DtoJustificationCreatedBy")
@@ -1232,6 +1233,57 @@ model QualificationRecord {
 
 /// Advertência (aviso disciplinar) — alimenta o cálculo de benefícios: uma advertência dentro do
 /// período de apuração faz o colaborador perder a cesta básica do mês de referência.
+/// TMA: um caminhão por linha, importado da planilha de controle de atendimento (usada com a Ambev). Reimportar um mês substitui as linhas
+/// dele. Datas/horas são o relógio da planilha guardado como UTC (sem conversão de fuso); durações em minutos.
+model TmaImport {
+  id           String   @id @default(uuid())
+  periodKey    String // AAAA-MM da aba
+  fileName     String
+  rows         Int
+  importedAt   DateTime @default(now())
+  importedById String
+
+  importedBy User       @relation("TmaImportedBy", fields: [importedById], references: [id])
+  trucks     TmaTruck[]
+}
+
+model TmaTruck {
+  id                 String    @id @default(uuid())
+  importId           String
+  periodKey          String
+  gradeDate          DateTime
+  status             String
+  presentation       String?
+  destino            String?
+  tipoCarro          String?
+  pedido             String?
+  placas             String?
+  motorista          String?
+  transportadora     String?
+  conferente         String?
+  turno              String?
+  checklist          String?
+  agendamento        DateTime?
+  apresentacao       DateTime?
+  entradaAtendimento DateTime?
+  entradaBaia        DateTime?
+  inicioCarregamento DateTime?
+  fimCarregamento    DateTime?
+  fimAmarracao       DateTime?
+  liberacao          DateTime?
+  tmaMin             Float?
+  atendimentoMin     Float?
+  patioMin           Float?
+  esperaMin          Float?
+  tmcMin             Float?
+  amarracaoMin       Float?
+  liberacaoMin       Float?
+
+  import TmaImport @relation(fields: [importId], references: [id], onDelete: Cascade)
+
+  @@index([periodKey])
+}
+
 /// DRE (Demonstrativo de Resultados) importado do export da plataforma financeira: uma linha de conta por mês. Reimportar um
 /// mês substitui as linhas dele. O acumulado do ano (YTD) é somado dos meses, não guardado.
 model DreImport {

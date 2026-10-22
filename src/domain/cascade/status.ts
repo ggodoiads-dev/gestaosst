@@ -97,11 +97,9 @@ export function formatCascadeValue(unit: CascadeUnit, value: number | null): str
     case "PERCENT":
       return `${text}%`;
     case "MINUTES": {
-      const total = Math.round(value * 60);
-      const h = Math.floor(total / 3600);
-      const m = Math.floor((total % 3600) / 60);
-      const s = total % 60;
-      return h > 0 ? `${h}h${String(m).padStart(2, "0")}` : `${m}:${String(s).padStart(2, "0")}`;
+      const total = Math.round(value);
+      if (total < 60) return `${total} min`;
+      return `${Math.floor(total / 60)}h${String(total % 60).padStart(2, "0")}`;
     }
     case "DAYS":
       return `${text} dia(s)`;

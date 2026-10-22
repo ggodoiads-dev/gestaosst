@@ -55,8 +55,9 @@ describe("rollupIvs e diagnose", () => {
 describe("formatCascadeValue", () => {
   it("formata por unidade", () => {
     expect(formatCascadeValue("PERCENT", 97.41)).toBe("97,41%");
-    expect(formatCascadeValue("MINUTES", 3 + 49 / 60)).toBe("3:49");
-    expect(formatCascadeValue("MINUTES", 40)).toBe("40:00");
+    expect(formatCascadeValue("MINUTES", 229)).toBe("3h49");
+    expect(formatCascadeValue("MINUTES", 180)).toBe("3h00");
+    expect(formatCascadeValue("MINUTES", 40)).toBe("40 min");
     expect(formatCascadeValue("MINUTES", 75)).toBe("1h15");
     expect(formatCascadeValue("NUMBER", null)).toBe("—");
   });

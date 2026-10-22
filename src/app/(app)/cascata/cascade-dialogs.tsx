@@ -19,6 +19,32 @@ import {
 } from "@/server/actions/cascade.actions";
 import { UNIT_LABELS, type CascadePace, type CascadePolarity, type CascadeUnit } from "@/domain/cascade/status";
 
+/** Completa a estrutura inicial: cria só o que ainda falta (novos IVs, por exemplo) e não mexe no que já existe. */
+export function SyncSeedButton() {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  return (
+    <Button
+      size="sm"
+      variant="secondary"
+      loading={pending}
+      title="Cria os itens da estrutura inicial que ainda não existem, sem mexer no que você já ajustou"
+      onClick={() =>
+        startTransition(async () => {
+          const res = await seedCascadeAction();
+          if (!res.ok) toast.error(res.error);
+          else {
+            toast.success(res.created ? `${res.created} item(ns) novo(s) na estrutura.` : "A estrutura já está completa.");
+            router.refresh();
+          }
+        })
+      }
+    >
+      Completar estrutura
+    </Button>
+  );
+}
+
 export function SeedButton() {
   const router = useRouter();
   const [pending, startTransition] = useTransition();

@@ -30,6 +30,9 @@ const SEED_DRE_KEYS: Record<string, string> = {
   "ic:pacote-de-manutencao": "dre.avr:114",
   "ic:ebitda": "dre.avr:233",
   "ic:pacote-de-gente": "dre.ratio:033",
+  // TMA e TMC leem da planilha de controle de atendimento importada (tempo de atendimento: entrada no atendimento → liberação).
+  "ic:tma": "tma.avg",
+  "ic:tmc": "tma.tmc",
 };
 
 /**
@@ -443,6 +446,13 @@ const STATIC_IVS: SeedNode[] = [
   // QLP Relatando
   { seedKey: "iv:qlp:ninguem", parentSeedKey: "ic:qlp-relatando", kind: "IV", name: "Ninguém sem relatar no mês", unit: "NUMBER", polarity: "LOWER", target: 0, sigoKey: "guardian.notreported.count", description: "Colaboradores ativos sem nenhum relato no mês." },
   { seedKey: "iv:qlp:relatos", parentSeedKey: "ic:qlp-relatando", kind: "IV", name: "Relatos registrados no mês", unit: "NUMBER", target: null, sigoKey: "guardian.reports.count", description: "Sem meta ainda: informe quantos relatos por mês fecham o IC." },
+  // TMA — tempo de atendimento (entrada no atendimento → liberação), aberto nas etapas que o formam
+  { seedKey: "iv:tma:ate3h", parentSeedKey: "ic:tma", kind: "IV", name: "Atender os caminhões em até 3 horas", unit: "PERCENT", target: null, sigoKey: "tma.within3h", description: "% dos caminhões liberados com atendimento de 3h ou menos. Sem meta ainda: informe quantos % fecham o TMA." },
+  { seedKey: "iv:tma:espera", parentSeedKey: "ic:tma", kind: "IV", name: "Espera no armazém depois de entrar no atendimento", unit: "MINUTES", polarity: "LOWER", target: null, sigoKey: "tma.stage:espera", description: "Da entrada no atendimento até o início do carregamento." },
+  { seedKey: "iv:tma:carga", parentSeedKey: "ic:tma", kind: "IV", name: "Carregamento (TMC)", unit: "MINUTES", polarity: "LOWER", target: 60, sigoKey: "tma.stage:carregamento", description: "Do início ao fim do carregamento. Meta de 1h, da planilha de metas." },
+  { seedKey: "iv:tma:amarracao", parentSeedKey: "ic:tma", kind: "IV", name: "Amarração", unit: "MINUTES", polarity: "LOWER", target: null, sigoKey: "tma.stage:amarracao", description: "Do fim do carregamento ao fim da amarração." },
+  { seedKey: "iv:tma:liberacao", parentSeedKey: "ic:tma", kind: "IV", name: "Liberação do veículo", unit: "MINUTES", polarity: "LOWER", target: null, sigoKey: "tma.stage:liberacao", description: "Do fim da amarração à saída do caminhão." },
+  { seedKey: "iv:tma:ambev", parentSeedKey: "ic:tma", kind: "IV", name: "TMA da planilha da Ambev (com a espera no pátio)", unit: "MINUTES", polarity: "LOWER", target: 180, sigoKey: "tma.ambev", description: "O TMA da planilha da Ambev: conta a espera no pátio de quem chega antes do agendamento." },
   // Check list empilhadeira
   { seedKey: "iv:emp:diario", parentSeedKey: "ic:check-list-empilhadeira", kind: "IV", name: "Toda empilhadeira com checklist todo dia", unit: "PERCENT", target: 100, sigoKey: "forklift.checklist.pct", description: "% de empilhadeira-dia com checklist concluído no mês (só dias fechados; bloqueadas ficam de fora)." },
   { seedKey: "iv:emp:liberadas", parentSeedKey: "ic:check-list-empilhadeira", kind: "IV", name: "Empilhadeiras liberadas para uso", unit: "PERCENT", target: null, sigoKey: "forklift.available.pct", description: "Sem meta ainda: informe o mínimo de empilhadeiras liberadas." },
