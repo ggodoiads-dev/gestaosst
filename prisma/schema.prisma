@@ -107,6 +107,7 @@ model User {
   cascadeNodesOwned               CascadeNode[]                @relation("CascadeNodeOwner")
   dreImports                      DreImport[]                  @relation("DreImportedBy")
   tmaImports                      TmaImport[]                  @relation("TmaImportedBy")
+  shiftProductions                ShiftProduction[]            @relation("ShiftProductionBy")
   cascadeValuesUpdated            CascadeValue[]               @relation("CascadeValueBy")
   dtoEvaluationsImported          DtoEvaluation[]              @relation("DtoEvaluationImportedBy")
   dtoJustificationsMade           DtoJustification[]           @relation("DtoJustificationCreatedBy")
@@ -1340,9 +1341,9 @@ model CascadeNode {
   active      Boolean  @default(true)
   createdAt   DateTime @default(now())
 
-  parent   CascadeNode?  @relation("CascadeTree", fields: [parentId], references: [id], onDelete: Cascade)
-  children CascadeNode[] @relation("CascadeTree")
-  owner    User?         @relation("CascadeNodeOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  parent   CascadeNode?   @relation("CascadeTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children CascadeNode[]  @relation("CascadeTree")
+  owner    User?          @relation("CascadeNodeOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
   values   CascadeValue[]
 
   @@index([parentId])
@@ -1530,10 +1531,11 @@ model Turno {
   createdById    String
   createdAt      DateTime @default(now())
 
-  scheduleType  ScheduleType        @relation(fields: [scheduleTypeId], references: [id])
-  createdBy     User                @relation("TurnoCreatedBy", fields: [createdById], references: [id])
-  collaborators Collaborator[]
-  rollCallUsers UserRollCallTurno[]
+  scheduleType     ScheduleType        @relation(fields: [scheduleTypeId], references: [id])
+  createdBy        User                @relation("TurnoCreatedBy", fields: [createdById], references: [id])
+  collaborators    Collaborator[]
+  rollCallUsers    UserRollCallTurno[]
+  shiftProductions ShiftProduction[]
 }
 
 enum ScheduleDayNoteStatus {
@@ -1833,4 +1835,23 @@ model ActivityArea {
 
   @@id([activityId, areaId])
   @@index([areaId])
+}
+
+/// Relatório de produção do turno (o que o líder manda no WhatsApp ao fim do turno): um por dia + turno. Os números ficam em `values`, com as
+/// chaves do catálogo em src/domain/production/fields.ts (carros carregados, amarrados, descargas...). `date` é o dia do turno, meio-dia UTC.
+model ShiftProduction {
+  id          String   @id @default(uuid())
+  date        DateTime
+  turnoId     String
+  values      Json
+  notes       String?
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  turno     Turno @relation(fields: [turnoId], references: [id])
+  createdBy User  @relation("ShiftProductionBy", fields: [createdById], references: [id])
+
+  @@unique([date, turnoId])
+  @@index([date])
 }

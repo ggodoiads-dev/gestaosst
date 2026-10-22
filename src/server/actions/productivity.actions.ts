@@ -16,6 +16,7 @@ function toResult(fn: () => Promise<unknown>): Promise<ActionResult> {
       if (error instanceof z.ZodError) {
         return { ok: false as const, error: error.issues[0]?.message ?? "Dados inválidos." };
       }
+      if (error instanceof Error && error.message.startsWith("A produtividade por pessoa vale só")) return { ok: false as const, error: error.message };
       console.error(error);
       return { ok: false as const, error: "Não foi possível concluir a operação." };
     });

@@ -212,8 +212,11 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
   if (p.has(PERMISSIONS.SCHEDULE_MANAGE) || user.canRollCall) {
     rh.push({ href: "/chamada", label: "Fazer Chamada", icon: "rollCall" });
   }
+  if (user.canRollCall || p.has(PERMISSIONS.PRODUCTIVITY_MANAGE) || p.has(PERMISSIONS.PRODUCTIVITY_MANAGE_TEAM)) {
+    rh.push({ href: "/producao/lancar", label: "Lançar Produção do Turno", icon: "productivity" });
+  }
   if (p.has(PERMISSIONS.SCHEDULE_MANAGE) || user.canRollCall || p.has(PERMISSIONS.PRODUCTIVITY_MANAGE) || p.has(PERMISSIONS.PRODUCTIVITY_MANAGE_TEAM)) {
-    rh.push({ href: "/lancar-produtividade", label: "Lançar Produtividade", icon: "productivity" });
+    rh.push({ href: "/lancar-produtividade", label: "Lançar Produtividade dos Ajudantes", icon: "productivity" });
   }
   if (p.has(PERMISSIONS.PRODUCTIVITY_SELF_LOG) || p.has(PERMISSIONS.PRODUCTIVITY_SELF_VIEW)) {
     rh.push({ href: "/minha-produtividade", label: "Minha Produtividade", icon: "productivity" });
@@ -244,6 +247,10 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
   const indicadores: NavItem[] = [];
   if (p.has(PERMISSIONS.INDICATORS_VIEW_AREA) || p.has(PERMISSIONS.INDICATORS_VIEW_CONSOLIDATED)) {
     indicadores.push({ href: "/indicadores", label: "Indicadores", icon: "indicators" });
+  }
+  if (p.has(PERMISSIONS.INDICATORS_VIEW_CONSOLIDATED) || p.has(PERMISSIONS.PRODUCTIVITY_VIEW) || p.has(PERMISSIONS.PRODUCTIVITY_MANAGE) || p.has(PERMISSIONS.PRODUCTIVITY_MANAGE_TEAM) || user.canRollCall) {
+    indicadores.push({ href: "/producao", label: "Produção", icon: "productivity" });
+    indicadores.push({ href: "/produtividade", label: "Produtividade dos Ajudantes", icon: "productivity" });
   }
   if (p.has(PERMISSIONS.INDICATORS_VIEW_CONSOLIDATED) || p.has(PERMISSIONS.PRODUCTIVITY_VIEW) || p.has(PERMISSIONS.PRODUCTIVITY_MANAGE)) {
     indicadores.push({ href: "/tma", label: "TMA", icon: "indicators" });

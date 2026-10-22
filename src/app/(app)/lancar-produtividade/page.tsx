@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { formatDate, parseDateOnly } from "@/lib/dates";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { ProductivityCalendarClient } from "../indicadores/productivity-calendar-client";
+import { isWarehouseHelper } from "@/domain/production/helpers";
 import { ChecklistComplianceCollaboratorPicker } from "../indicadores/checklist-compliance-collaborator-picker";
 
 const MONTH_LABELS = [
@@ -75,31 +76,35 @@ export default async function LancarProdutividadePage({
 
   const user = await requireUser();
 
-  const [collaborators, activities] = await Promise.all([
+  const [allCollaborators, activities] = await Promise.all([
     listActiveCollaboratorsForSupervision(user),
     listActiveActivitiesForProductivityLog(user),
   ]);
 
-  const [rangeReport, goals] = collaboratorId
+  // Por pessoa só os ajudantes de armazém; o restante da produção é lançado por turno (Produção).
+  const collaborators = allCollaborators.filter(isWarehouseHelper);
+  const selectedId = collaborators.some((c) => c.id === collaboratorId) ? collaboratorId : undefined;
+
+  const [rangeReport, goals] = selectedId
     ? await Promise.all([
-        getProductivityRange(user, { collaboratorId, from: rangeFrom, to: rangeTo }),
-        getProductivityGoalsProgress(user, { collaboratorId, month: refDate.getMonth() + 1, year: refDate.getFullYear() }),
+        getProductivityRange(user, { collaboratorId: selectedId, from: rangeFrom, to: rangeTo }),
+        getProductivityGoalsProgress(user, { collaboratorId: selectedId, month: refDate.getMonth() + 1, year: refDate.getFullYear() }),
       ])
     : [null, []];
 
   return (
     <>
       <PageHeader
-        title="Lançar Produtividade"
-        description="Lance o que cada colaborador da sua equipe produziu — mesma equipe da Chamada."
+        title="Produtividade dos ajudantes"
+        description="Lançamento por pessoa, só para os ajudantes de armazém. Carros carregados, amarrados, cargas e descargas são lançados por turno, em Produção."
         actions={
-          collaboratorId && (
+          selectedId && (
             <div className="flex flex-wrap items-center gap-2">
               <div className="flex overflow-hidden rounded-md border border-border-strong">
                 {(["dia", "semana", "mes"] as const).map((p) => (
                   <Link
                     key={p}
-                    href={buildHref({ collaboratorId, period: p, ref: localDateKey(refDate) })}
+                    href={buildHref({ collaboratorId: selectedId, period: p, ref: localDateKey(refDate) })}
                     className={cn(
                       "px-3 py-1.5 text-xs font-medium",
                       period === p ? "bg-accent text-accent-foreground" : "bg-surface text-foreground-subtle hover:bg-surface-muted",
@@ -110,13 +115,13 @@ export default async function LancarProdutividadePage({
                 ))}
               </div>
               <Button size="icon" variant="secondary" asChild>
-                <Link href={buildHref({ collaboratorId, period, ref: localDateKey(prevRef) })} aria-label="Anterior">
+                <Link href={buildHref({ collaboratorId: selectedId, period, ref: localDateKey(prevRef) })} aria-label="Anterior">
                   <ChevronLeft className="size-4" />
                 </Link>
               </Button>
               <span className="min-w-40 text-center text-sm font-medium text-foreground">{rangeLabel}</span>
               <Button size="icon" variant="secondary" asChild>
-                <Link href={buildHref({ collaboratorId, period, ref: localDateKey(nextRef) })} aria-label="Próximo">
+                <Link href={buildHref({ collaboratorId: selectedId, period, ref: localDateKey(nextRef) })} aria-label="Próximo">
                   <ChevronRight className="size-4" />
                 </Link>
               </Button>
@@ -127,21 +132,21 @@ export default async function LancarProdutividadePage({
       <PageBody className="flex flex-col gap-5">
         <ChecklistComplianceCollaboratorPicker
           collaborators={collaborators}
-          selectedId={collaboratorId}
+          selectedId={selectedId}
           basePath="/lancar-produtividade"
         />
 
-        {!collaboratorId && (
+        {!selectedId && (
           <Card>
             <CardContent className="py-10 text-center text-sm text-foreground-subtle">
               {collaborators.length === 0
-                ? "Nenhum colaborador na sua área/turno de chamada ainda — peça pro administrador configurar em Acessos."
-                : "Selecione um colaborador pra ver e lançar a produtividade dele."}
+                ? "Nenhum ajudante de armazém na sua equipe. A produtividade por pessoa vale só para ajudantes (confira a função no cadastro do colaborador)."
+                : "Selecione um ajudante pra ver e lançar a produtividade dele."}
             </CardContent>
           </Card>
         )}
 
-        {collaboratorId && rangeReport && (
+        {selectedId && rangeReport && (
           <>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <StatCard label="Dias trabalhados" value={rangeReport.summary.workDays} />
@@ -179,7 +184,7 @@ export default async function LancarProdutividadePage({
             )}
 
             <ProductivityCalendarClient
-              collaboratorId={collaboratorId}
+              collaboratorId={selectedId}
               collaboratorName={rangeReport.collaborator.name}
               activities={activities}
               canEdit

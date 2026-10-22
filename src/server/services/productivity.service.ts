@@ -7,6 +7,7 @@ import { rollCallCollaboratorWhere, type RollCallCollaboratorWhere } from "@/ser
 import type { CurrentUser } from "@/server/auth/current-user";
 import { hasPermission, ForbiddenError } from "@/server/auth/current-user";
 import { PERMISSIONS, type PermissionKey } from "@/domain/shared/permissions";
+import { isWarehouseHelper } from "@/domain/production/helpers";
 
 export type ProductivityEntryInput = {
   collaboratorId: string;
@@ -73,6 +74,10 @@ function productivityCollaboratorScopeWhere(user: CurrentUser): RollCallCollabor
 
 export async function createProductivityEntry(user: CurrentUser, data: ProductivityEntryInput) {
   await assertProductivityAccess(user, data.collaboratorId, LOG_SELF_PERMISSIONS);
+  const target = await db.collaborator.findUniqueOrThrow({ where: { id: data.collaboratorId }, select: { cargo: true } });
+  if (!isWarehouseHelper(target)) {
+    throw new Error("A produtividade por pessoa vale só para ajudantes de armazém. Carros e descargas são lançados por turno, em Produção.");
+  }
 
   const entry = await db.$transaction(async (tx) => {
     const created = await tx.productivityEntry.create({ data: { ...data, createdById: user.id } });
@@ -172,6 +177,8 @@ type PeriodStats = {
   collaboratorsLogged: number;
   totalEntries: number;
   byActivity: { activityId: string; activityName: string; unit: string | null; count: number; totalQuantity: number }[];
+  /** Cada ajudante escalado no período: dias de trabalho, dias com lançamento e total lançado. */
+  byCollaborator: { id: string; name: string; workDays: number; daysLogged: number; entries: number }[];
   missingCollaborators: { id: string; name: string }[];
 };
 
@@ -184,7 +191,8 @@ async function computePeriodStats(
   const rangeEndExclusive = addDays(startOfDay(toInclusive), 1);
 
   const collaborators = await db.collaborator.findMany({
-    where: { active: true, ...(collaboratorScope ?? {}) },
+    // Produtividade por pessoa: só ajudantes de armazém (o resto da produção é lançada por turno).
+    where: { active: true, AND: [{ cargo: { contains: "ajudante", mode: "insensitive" } }, collaboratorScope ?? {}] },
     include: { turno: { include: { scheduleType: true } } },
   });
   const collaboratorIds = collaborators.map((c) => c.id);
@@ -203,6 +211,7 @@ async function computePeriodStats(
 
   let workDays = 0;
   const scheduledCollaboratorIds = new Set<string>();
+  const workDaysByCollaborator = new Map<string, number>();
   for (const c of collaborators) {
     for (let date = rangeStart; date < rangeEndExclusive; date = addDays(date, 1)) {
       const note = notesByKey.get(`${c.id}|${localDateKey(date)}`);
@@ -210,8 +219,17 @@ async function computePeriodStats(
       if (status === "TRABALHO") {
         workDays++;
         scheduledCollaboratorIds.add(c.id);
+        workDaysByCollaborator.set(c.id, (workDaysByCollaborator.get(c.id) ?? 0) + 1);
       }
     }
+  }
+  const daysLoggedByCollaborator = new Map<string, Set<string>>();
+  const entriesByCollaborator = new Map<string, number>();
+  for (const e of entries) {
+    const set = daysLoggedByCollaborator.get(e.collaboratorId) ?? new Set<string>();
+    set.add(localDateKey(e.date));
+    daysLoggedByCollaborator.set(e.collaboratorId, set);
+    entriesByCollaborator.set(e.collaboratorId, (entriesByCollaborator.get(e.collaboratorId) ?? 0) + 1);
   }
 
   const byActivityMap = new Map<string, PeriodStats["byActivity"][number]>();
@@ -236,6 +254,16 @@ async function computePeriodStats(
     collaboratorsLogged: loggedCollaboratorIds.size,
     totalEntries: entries.length,
     byActivity: Array.from(byActivityMap.values()).sort((a, b) => b.count - a.count),
+    byCollaborator: collaborators
+      .filter((c) => scheduledCollaboratorIds.has(c.id))
+      .map((c) => ({
+        id: c.id,
+        name: c.name,
+        workDays: workDaysByCollaborator.get(c.id) ?? 0,
+        daysLogged: daysLoggedByCollaborator.get(c.id)?.size ?? 0,
+        entries: entriesByCollaborator.get(c.id) ?? 0,
+      }))
+      .sort((a, b) => b.entries - a.entries || a.name.localeCompare(b.name, "pt-BR")),
     missingCollaborators: collaborators
       .filter((c) => scheduledCollaboratorIds.has(c.id) && !loggedCollaboratorIds.has(c.id))
       .map((c) => ({ id: c.id, name: c.name })),
