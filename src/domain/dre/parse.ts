@@ -93,8 +93,8 @@ export function parseDreGrid(grid: unknown[][]): ParsedDre {
     const nameWithIndent = m[2];
     const leading = nameWithIndent.length - nameWithIndent.replace(/^\s+/, "").length;
     const name = nameWithIndent.trim();
-    // Os totalizadores ("( = )", "( - )") ficam no nível 0; as subcontas recuam de 3 em 3 espaços.
-    const level = /^\(\s*[=\-+/ ]*\s*\)/.test(name) ? 0 : Math.max(1, Math.round(leading / 3));
+    // Nível pelo recuo: totalizadores sem recuo (nível 0) e subcontas recuando de 3 em 3 espaços (o primeiro espaço é só o separador).
+    const level = Math.round(leading / 3);
     position++;
     blocks.forEach((b) => {
       const values = {
