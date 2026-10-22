@@ -220,6 +220,8 @@ export type QualificationCertificateRef = { attachmentId: string; path: string; 
 export type CollaboratorQualificationSummary = {
   aso: { typeName: string; expiresAt: Date | null; certificate: QualificationCertificateRef } | null;
   nrs: { typeName: string; expiresAt: Date | null; certificate: QualificationCertificateRef }[];
+  /** Integração de segurança (e outras da categoria Integração), com a validade — o padrinho aparece à parte. */
+  integrations: { typeName: string; completedDate: Date; expiresAt: Date | null; certificate: QualificationCertificateRef }[];
   hasAnyRecord: boolean;
   hasAnyExpired: boolean;
   /** Fez a Trilha de Treinamento para Padrinhos (sem validade) — destaque nas fichas e no QR. */
@@ -266,6 +268,9 @@ export async function getCollaboratorQualificationSummary(collaboratorId: string
   return {
     aso: aso ? { typeName: aso.qualificationType.name, expiresAt: aso.expiresAt, certificate: latestCertificate(aso) } : null,
     nrs: nrs.map((r) => ({ typeName: r.qualificationType.name, expiresAt: r.expiresAt, certificate: latestCertificate(r) })),
+    integrations: current
+      .filter((r) => (r.qualificationType.category === "INTEGRACAO" || /integra/i.test(r.qualificationType.name)) && !isPadrinhoQualification(r.qualificationType.name))
+      .map((r) => ({ typeName: r.qualificationType.name, completedDate: r.completedDate, expiresAt: r.expiresAt, certificate: latestCertificate(r) })),
     hasAnyRecord: current.length > 0,
     hasAnyExpired,
     padrinho: padrinhoRecord ? { completedDate: padrinhoRecord.completedDate, certificate: latestCertificate(padrinhoRecord) } : null,
