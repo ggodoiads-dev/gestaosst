@@ -34,12 +34,17 @@ export function TmaViewClient({ months, selected, year, month, ytd, importedAt }
       <section>
         <h2 className="mb-2 text-sm font-semibold text-foreground">{monthName(selected)}</h2>
         <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+          <Tile label="Carros carregados" value={String(month.carregados.total)} sub={`${month.carregados.withSchedule} com agendamento · ${month.carregados.withoutSchedule} sem`} tone="neutral" />
           <Tile label="TMA — planilha da Ambev" value={formatDuration(month.avgTma)} sub={`meta ${formatDuration(TMA_TARGET_MIN)} · liberados com agendamento`} tone={month.avgTma === null ? "neutral" : within ? "good" : "bad"} />
           <Tile label="Com TMA em até 3h" value={pct(month.within3h)} sub={`${month.loaded} caminhões na média`} tone="neutral" />
           <Tile label="TMC — carregamento" value={formatDuration(month.avgTmc)} sub="início → fim do carregamento" tone="neutral" />
-          <Tile label="Tempo de amarração" value={formatDuration(month.stages.amarracao)} sub="fim do carregamento → fim da amarração" tone="neutral" />
         </div>
-        <div className="mt-2 grid grid-cols-2 gap-2 lg:grid-cols-4">
+        <p className="mt-1.5 text-[11px] text-foreground-subtle">
+          Carros carregados = liberados dentro do mês (pela data de liberação), com e sem agendamento. A média do TMA usa só os que tinham agendamento ({month.loaded} caminhões, que
+          podem incluir carros da aba liberados no mês seguinte{month.carregados.outsideMonth > 0 ? `; ${month.carregados.outsideMonth} liberado(s) da aba ficaram fora da contagem de carregados por terem liberação em outro mês ou sem data` : ""}).
+        </p>
+        <div className="mt-2 grid grid-cols-2 gap-2 lg:grid-cols-5">
+          <Tile label="Tempo de amarração" value={formatDuration(month.stages.amarracao)} sub="fim do carregamento → fim da amarração" tone="neutral" small />
           <Tile label="Tempo de atendimento" value={formatDuration(month.atendimento.avg)} sub={`entrada no atendimento → liberação · ${pct(month.atendimento.within3h)} em até 3h`} tone="neutral" small />
           <Tile label="Com agendamento" value={pct(month.withSchedule)} sub={month.onTime === null ? undefined : `${pct(month.onTime)} no horário ou antes`} tone="neutral" small />
           <Tile label="Não apresentaram" value={String(month.notShown)} sub={`${month.holes} furo(s) · ${month.releasedMaster} liberados master (fora da média)`} tone="neutral" small />

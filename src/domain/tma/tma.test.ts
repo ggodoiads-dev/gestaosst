@@ -76,6 +76,21 @@ describe("leitura de uma aba", () => {
   });
 });
 
+describe("carros carregados", () => {
+  const base = { agendamento: null, apresentacao: null, tmaMin: 100, atendimentoMin: 100, patioMin: null, esperaMin: null, tmcMin: null, amarracaoMin: null, liberacaoMin: null, transportadora: null, destino: null, conferente: null, turno: null, periodKey: "2026-09" };
+  it("conta os liberados com liberação dentro do mês, com e sem agendamento", () => {
+    const stats = computeTmaStats([
+      { ...base, status: "LIBERADO", liberacao: "2026-09-10T10:00", agendamento: "2026-09-10T08:00" },
+      { ...base, status: "LIBERADO", liberacao: "2026-09-11T10:00" },
+      { ...base, status: "LIBERADO", liberacao: "2026-10-01T10:00", agendamento: "2026-09-30T23:00" },
+      { ...base, status: "LIBERADO", liberacao: null },
+      { ...base, status: "LIBERADO MASTER", liberacao: "2026-09-12T10:00" },
+    ]);
+    expect(stats.carregados).toEqual({ total: 2, withSchedule: 1, withoutSchedule: 1, outsideMonth: 2 });
+    expect(stats.loaded).toBe(2); // TMA: os dois com agendamento (um deles liberado em outubro)
+  });
+});
+
 describe("chaves do cascateamento", () => {
   it("interpreta as chaves de TMA", () => {
     expect(parseTmaKey("tma.avg")).toEqual({ metric: "avg", ytd: false, stage: null });

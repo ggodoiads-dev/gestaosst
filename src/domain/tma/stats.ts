@@ -34,6 +34,16 @@ export function countsForAtendimento(row: TmaStatsRow): boolean {
   return row.status === "LIBERADO" && present(row.atendimentoMin) && row.atendimentoMin > 0;
 }
 
+/**
+ * Carro carregado = caminhão LIBERADO cuja liberação caiu dentro do mês da aba. Fica de fora quem foi liberado sem data de liberação ou só no mês
+ * seguinte (a aba de setembro traz carros de grade de setembro liberados em outubro, que a aba de outubro também conta).
+ */
+export function countsAsLoaded(row: TmaStatsRow): boolean {
+  if (row.status !== "LIBERADO") return false;
+  if (!row.liberacao) return false;
+  return !row.periodKey || row.liberacao.slice(0, 7) === row.periodKey;
+}
+
 export type GroupStat = { name: string; count: number; avgTma: number | null; within3h: number | null; avgAmarracao: number | null };
 
 function groupBy(rows: TmaStatsRow[], key: (r: TmaStatsRow) => string | null): GroupStat[] {
@@ -54,6 +64,8 @@ function groupBy(rows: TmaStatsRow[], key: (r: TmaStatsRow) => string | null): G
 }
 
 export type TmaStats = {
+  /** Carros carregados (liberados no mês). `withSchedule` entram no TMA oficial; `withoutSchedule` não (sem agendamento o TMA não é avaliável). */
+  carregados: { total: number; withSchedule: number; withoutSchedule: number; outsideMonth: number };
   /** Caminhões que entram na média do TMA oficial. */
   loaded: number;
   /** TMA oficial (planilha da Ambev), em minutos. */
@@ -86,6 +98,7 @@ export function computeTmaStats(rows: TmaStatsRow[]): TmaStats {
   const counted = rows.filter((r) => countsForTma(r, scheduleMonths));
   const atend = rows.filter(countsForAtendimento);
   const loadedAll = rows.filter((r) => r.status === "LIBERADO");
+  const carregados = loadedAll.filter(countsAsLoaded);
   const scheduled = loadedAll.filter((r) => r.agendamento).length;
   const timed = loadedAll.filter((r) => r.agendamento && r.apresentacao);
   const onTime = timed.filter((r) => r.apresentacao! <= r.agendamento!).length;
@@ -99,6 +112,12 @@ export function computeTmaStats(rows: TmaStatsRow[]): TmaStats {
   const positive = (list: (number | null)[]) => list.filter((v): v is number => present(v) && v > 0);
 
   return {
+    carregados: {
+      total: carregados.length,
+      withSchedule: carregados.filter((r) => r.agendamento).length,
+      withoutSchedule: carregados.filter((r) => !r.agendamento).length,
+      outsideMonth: loadedAll.length - carregados.length,
+    },
     loaded: counted.length,
     avgTma: avg(counted.map((r) => r.tmaMin!)),
     within3h: pct1(counted.filter((r) => r.tmaMin! <= TMA_TARGET_MIN).length, counted.length),
