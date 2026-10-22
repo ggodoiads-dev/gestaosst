@@ -49,13 +49,14 @@ export async function createProductivityEntryAction(_prev: ActionResult, formDat
     });
     revalidatePath("/indicadores");
     revalidatePath("/minha-produtividade");
+    revalidatePath("/produtividade", "layout");
   });
 }
 
 export async function deleteProductivityEntryAction(id: string) {
   const user = await requireUser();
   await productivityService.deleteProductivityEntry(user, id);
-  revalidatePath("/produtividade");
+  revalidatePath("/produtividade", "layout");
 }
 
 const goalSchema = z.object({
@@ -89,11 +90,12 @@ export async function upsertProductivityGoalAction(_prev: ActionResult, formData
     });
     revalidatePath("/indicadores");
     revalidatePath("/minha-produtividade");
+    revalidatePath("/produtividade", "layout");
   });
 }
 
 export async function deleteProductivityGoalAction(id: string) {
   const user = await requireUser();
   await productivityService.deleteProductivityGoal(user, id);
-  revalidatePath("/produtividade");
+  revalidatePath("/produtividade", "layout");
 }

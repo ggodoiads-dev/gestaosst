@@ -178,7 +178,7 @@ type PeriodStats = {
   totalEntries: number;
   byActivity: { activityId: string; activityName: string; unit: string | null; count: number; totalQuantity: number }[];
   /** Cada ajudante escalado no período: dias de trabalho, dias com lançamento e total lançado. */
-  byCollaborator: { id: string; name: string; workDays: number; daysLogged: number; entries: number }[];
+  byCollaborator: { id: string; name: string; workDays: number; daysLogged: number; entries: number; quantityByActivity: Record<string, number> }[];
   missingCollaborators: { id: string; name: string }[];
 };
 
@@ -225,7 +225,11 @@ async function computePeriodStats(
   }
   const daysLoggedByCollaborator = new Map<string, Set<string>>();
   const entriesByCollaborator = new Map<string, number>();
+  const quantityByCollaborator = new Map<string, Record<string, number>>();
   for (const e of entries) {
+    const q = quantityByCollaborator.get(e.collaboratorId) ?? {};
+    q[e.activityId] = (q[e.activityId] ?? 0) + (e.quantity ?? 0);
+    quantityByCollaborator.set(e.collaboratorId, q);
     const set = daysLoggedByCollaborator.get(e.collaboratorId) ?? new Set<string>();
     set.add(localDateKey(e.date));
     daysLoggedByCollaborator.set(e.collaboratorId, set);
@@ -262,6 +266,7 @@ async function computePeriodStats(
         workDays: workDaysByCollaborator.get(c.id) ?? 0,
         daysLogged: daysLoggedByCollaborator.get(c.id)?.size ?? 0,
         entries: entriesByCollaborator.get(c.id) ?? 0,
+        quantityByActivity: quantityByCollaborator.get(c.id) ?? {},
       }))
       .sort((a, b) => b.entries - a.entries || a.name.localeCompare(b.name, "pt-BR")),
     missingCollaborators: collaborators

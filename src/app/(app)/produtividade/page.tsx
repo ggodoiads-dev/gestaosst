@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, ClipboardList, Truck } from "lucide-react";
+import { ChevronLeft, ChevronRight, Truck } from "lucide-react";
 import { addMonths } from "date-fns";
 import { formatInTimeZone } from "date-fns-tz";
 import { requireUser } from "@/server/auth/current-user";
@@ -45,14 +45,11 @@ export default async function ProdutividadePage({ searchParams }: { searchParams
     <>
       <PageHeader
         title="Produtividade dos ajudantes"
-        description="Lançamentos por pessoa dos ajudantes de armazém. Carros trabalhados, amarrados e carregados, cargas e descargas ficam em Produção, lançados por turno."
+        description="Produção de cada ajudante de armazém. Clique no nome para ver o dia a dia, as metas e lançar. Carros e descargas ficam em Produção, lançados por turno."
         actions={
           <>
             <Link href="/producao" className="inline-flex h-9 items-center gap-2 rounded-md border border-border-strong bg-surface px-3 text-sm font-medium text-foreground hover:bg-surface-muted">
               <Truck className="size-4" /> Produção por turno
-            </Link>
-            <Link href="/lancar-produtividade" className="inline-flex h-9 items-center gap-2 rounded-md bg-accent px-3 text-sm font-medium text-accent-foreground hover:bg-accent-hover">
-              <ClipboardList className="size-4" /> Lançar produtividade
             </Link>
           </>
         }
@@ -85,7 +82,54 @@ export default async function ProdutividadePage({ searchParams }: { searchParams
           </p>
         )}
 
-        <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <section className="overflow-x-auto rounded-md border border-border bg-surface">
+          <h3 className="border-b border-border bg-surface-muted px-3 py-2 text-sm font-semibold text-foreground">Produtividade por ajudante</h3>
+          <table className="w-full min-w-[560px] text-sm">
+            <thead>
+              <tr className="border-b border-border text-[11px] uppercase tracking-wide text-foreground-subtle">
+                <th className="px-3 py-1.5 text-left font-semibold">Ajudante</th>
+                <th className="px-3 py-1.5 text-left font-semibold">Dias com lançamento</th>
+                {month.byActivity.map((a) => (
+                  <th key={a.activityId} className="px-3 py-1.5 text-right font-semibold">{a.activityName}{a.unit ? ` (${a.unit})` : ""}</th>
+                ))}
+                <th className="w-8" />
+              </tr>
+            </thead>
+            <tbody>
+              {month.byCollaborator.map((c) => {
+                const cover = pct(c.daysLogged, c.workDays) ?? 0;
+                return (
+                  <tr key={c.id} className="border-b border-border last:border-b-0 hover:bg-surface-muted">
+                    <td className="px-3 py-1.5">
+                      <Link href={`/produtividade/${c.id}?period=mes&ref=${selected}-15`} className="font-medium text-foreground hover:text-accent hover:underline">{c.name}</Link>
+                    </td>
+                    <td className="px-3 py-1.5">
+                      <div className="flex items-center gap-2">
+                        <div className="h-1.5 w-24 overflow-hidden rounded-full bg-neutral-soft">
+                          <div className={cn("h-full rounded-full", cover >= 90 ? "bg-success" : cover >= 60 ? "bg-accent" : "bg-warning")} style={{ width: `${Math.min(cover, 100)}%` }} />
+                        </div>
+                        <span className="whitespace-nowrap text-xs tabular-nums text-foreground-muted">{c.daysLogged}/{c.workDays} ({cover}%)</span>
+                      </div>
+                    </td>
+                    {month.byActivity.map((a) => (
+                      <td key={a.activityId} className="px-3 py-1.5 text-right tabular-nums text-foreground">{c.quantityByActivity[a.activityId] ? c.quantityByActivity[a.activityId].toLocaleString("pt-BR") : <span className="text-foreground-subtle">—</span>}</td>
+                    ))}
+                    <td className="px-2 py-1.5 text-right">
+                      <Link href={`/produtividade/${c.id}?period=mes&ref=${selected}-15`} aria-label={`Abrir ${c.name}`} className="text-foreground-subtle hover:text-accent"><ChevronRight className="size-4" /></Link>
+                    </td>
+                  </tr>
+                );
+              })}
+              {month.byCollaborator.length === 0 && (
+                <tr>
+                  <td colSpan={3 + month.byActivity.length} className="px-3 py-6 text-center text-foreground-subtle">Nenhum ajudante escalado neste mês.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </section>
+
+        <section className="grid grid-cols-1 gap-4">
           <div className="overflow-hidden rounded-md border border-border bg-surface">
             <h3 className="border-b border-border bg-surface-muted px-3 py-2 text-sm font-semibold text-foreground">Produção por atividade</h3>
             <table className="w-full text-sm">
@@ -114,45 +158,6 @@ export default async function ProdutividadePage({ searchParams }: { searchParams
                 {month.byActivity.length === 0 && (
                   <tr>
                     <td colSpan={3} className="px-3 py-6 text-center text-foreground-subtle">Nenhum lançamento neste mês.</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="overflow-hidden rounded-md border border-border bg-surface">
-            <h3 className="border-b border-border bg-surface-muted px-3 py-2 text-sm font-semibold text-foreground">Por ajudante</h3>
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-[11px] uppercase tracking-wide text-foreground-subtle">
-                  <th className="px-3 py-1.5 text-left font-semibold">Ajudante</th>
-                  <th className="px-3 py-1.5 text-left font-semibold">Dias com lançamento</th>
-                  <th className="px-3 py-1.5 text-right font-semibold">Lançamentos</th>
-                </tr>
-              </thead>
-              <tbody>
-                {month.byCollaborator.map((c) => {
-                  const cover = pct(c.daysLogged, c.workDays) ?? 0;
-                  return (
-                    <tr key={c.id} className="border-b border-border last:border-b-0">
-                      <td className="px-3 py-1.5">
-                        <Link href={`/lancar-produtividade?collaboratorId=${c.id}&period=mes&ref=${selected}-15`} className="text-foreground hover:text-accent hover:underline">{c.name}</Link>
-                      </td>
-                      <td className="px-3 py-1.5">
-                        <div className="flex items-center gap-2">
-                          <div className="h-1.5 w-24 overflow-hidden rounded-full bg-neutral-soft">
-                            <div className={cn("h-full rounded-full", cover >= 90 ? "bg-success" : cover >= 60 ? "bg-accent" : "bg-warning")} style={{ width: `${Math.min(cover, 100)}%` }} />
-                          </div>
-                          <span className="whitespace-nowrap text-xs tabular-nums text-foreground-muted">{c.daysLogged}/{c.workDays} ({cover}%)</span>
-                        </div>
-                      </td>
-                      <td className="px-3 py-1.5 text-right tabular-nums font-medium text-foreground">{c.entries}</td>
-                    </tr>
-                  );
-                })}
-                {month.byCollaborator.length === 0 && (
-                  <tr>
-                    <td colSpan={3} className="px-3 py-6 text-center text-foreground-subtle">Nenhum ajudante escalado neste mês.</td>
                   </tr>
                 )}
               </tbody>
