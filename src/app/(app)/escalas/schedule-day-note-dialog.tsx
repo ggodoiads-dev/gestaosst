@@ -24,6 +24,7 @@ import {
   type ActionResult,
 } from "@/server/actions/schedule.actions";
 import { useCloseOnSuccess } from "@/lib/use-close-on-success";
+import { formatDateTime } from "@/lib/dates";
 import { parseDateOnly, formatDate } from "@/lib/dates";
 import { attachmentUrl } from "@/lib/attachment-url";
 
@@ -63,6 +64,8 @@ export function ScheduleDayNoteDialog({
     notes: string;
     overrideStatus?: string;
     attachments?: { id: string; filename: string; path: string }[];
+    createdByName?: string;
+    createdAt?: string;
   } | null;
   onClose: () => void;
 }) {
@@ -94,6 +97,12 @@ export function ScheduleDayNoteDialog({
           <input type="hidden" name="overrideStatus" value={overrideStatus} />
           <input type="hidden" name="status" value={status === "none" ? "" : status} />
           <DialogBody className="flex flex-col gap-4">
+            {note?.createdByName && (
+              <p className="rounded-md bg-surface-muted px-3 py-2 text-xs text-foreground-muted">
+                Lançado por <span className="font-semibold text-foreground">{note.createdByName}</span>
+                {note.createdAt ? ` em ${formatDateTime(note.createdAt)}` : ""}
+              </p>
+            )}
             <FormField label="Situação do dia" required>
               <Select value={overrideStatus} onValueChange={setOverrideStatus}>
                 <SelectTrigger><SelectValue /></SelectTrigger>

@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
+import { formatDateTime } from "@/lib/dates";
 import { FormField } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TurnoSelectDialog } from "./turno-select-dialog";
@@ -19,6 +20,8 @@ type DayCellData = {
     notes: string;
     overrideStatus: string;
     attachments: { id: string; filename: string; path: string }[];
+    createdByName?: string;
+    createdAt?: string;
   } | null;
 };
 
@@ -155,7 +158,8 @@ export function ScheduleGridClient({
                     <td key={d.date} className="px-1 py-1 text-center">
                       <button
                         type="button"
-                        title={d.note?.notes}
+                        title={d.note ? (d.note.createdByName ? `${d.note.notes}
+Lançado por ${d.note.createdByName}${d.note.createdAt ? ` em ${formatDateTime(d.note.createdAt)}` : ""}` : d.note.notes) : undefined}
                         onClick={() =>
                           setSelectedCell({
                             collaboratorId: row.collaborator.id,

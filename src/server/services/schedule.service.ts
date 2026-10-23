@@ -233,6 +233,9 @@ export type DayCell = {
         notes: string;
         overrideStatus: ScheduleDayComputedStatus;
         attachments: { id: string; filename: string; path: string }[];
+        /** Quem lançou a observação e quando (ISO). */
+        createdByName?: string;
+        createdAt?: string;
       }
     | null;
 };
@@ -267,7 +270,7 @@ export async function getScheduleGrid(user: CurrentUser, params: { month: number
     collaboratorIds.length > 0
       ? await db.scheduleDayNote.findMany({
           where: { collaboratorId: { in: collaboratorIds }, date: { gte: monthStart, lt: nextMonthStart } },
-          include: { attachments: { orderBy: { uploadedAt: "desc" } } },
+          include: { attachments: { orderBy: { uploadedAt: "desc" } }, createdBy: { select: { name: true } } },
         })
       : [];
 
@@ -292,6 +295,8 @@ export async function getScheduleGrid(user: CurrentUser, params: { month: number
               notes: note.notes,
               overrideStatus: note.overrideStatus,
               attachments: note.attachments.map((a) => ({ id: a.id, filename: a.filename, path: a.path })),
+              createdByName: note.createdBy.name,
+              createdAt: note.createdAt.toISOString(),
             }
           : null,
       });
