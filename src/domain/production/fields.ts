@@ -11,6 +11,8 @@ export type ProductionField = {
   group: ProductionGroupKey;
   /** Aceita número negativo (ex.: ajuste de carros). */
   signed?: boolean;
+  /** Não aparece nas telas (nem no formulário), mas a mensagem do WhatsApp ainda é reconhecida e o valor já guardado é mantido. */
+  hidden?: boolean;
   /** Outros jeitos de escrever o rótulo na mensagem do WhatsApp (sem acento e minúsculo). */
   aliases?: string[];
 };
@@ -26,7 +28,8 @@ export const PRODUCTION_FIELDS: ProductionField[] = [
   { key: "quedaProduto", label: "Queda de produto", group: "GERAL", aliases: ["queda produto", "queda de produto"] },
   { key: "absOperador", label: "ABS de operador", group: "GERAL", aliases: ["abs operador", "abs de operador", "abs operadores"] },
   { key: "carrosTrabalhados", label: "Carros trabalhados", group: "GERAL" },
-  { key: "carrosAmarrados", label: "Carros amarrados", group: "GERAL" },
+  // Todo carro carregado é amarrado, e o controle por carro vem da planilha do TMA: o campo digitado só gerava divergência.
+  { key: "carrosAmarrados", label: "Carros amarrados", group: "GERAL", hidden: true },
   { key: "carrosCarregados", label: "Carros carregados", group: "GERAL" },
   { key: "preCargaRodo", label: "Pré-carga rodo", group: "GERAL", aliases: ["pre carga rodo", "pre-carga rodo", "precarga rodo"] },
   { key: "preCargaTotal", label: "Pré-carga total", group: "GERAL", aliases: ["pre carga total", "pre-carga total", "precarga total"] },
@@ -63,7 +66,7 @@ export const PRODUCTION_FIELDS: ProductionField[] = [
 export const PRODUCTION_FIELD_KEYS = PRODUCTION_FIELDS.map((f) => f.key);
 
 export function fieldsOfGroup(group: ProductionGroupKey): ProductionField[] {
-  return PRODUCTION_FIELDS.filter((f) => f.group === group);
+  return PRODUCTION_FIELDS.filter((f) => f.group === group && !f.hidden);
 }
 
 export type ProductionValues = Record<string, number>;

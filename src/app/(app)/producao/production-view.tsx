@@ -83,9 +83,7 @@ export function ProductionViewClient({ months, selected, year, month, ytd, repor
               <h3 className="mb-1 text-sm font-semibold text-foreground">Carros carregados por turno</h3>
               <p className="mb-3 text-[11px] text-foreground-subtle">Total do mês e média por relatório lançado.</p>
               <TurnoBars turnos={month.byTurno} metric="carrosCarregados" />
-              <h3 className="mb-1 mt-5 border-t border-border pt-3 text-sm font-semibold text-foreground">Carros amarrados por turno</h3>
-              <p className="mb-3 text-[11px] text-foreground-subtle">Quem amarra mais. Soma só dos relatórios em que o campo foi preenchido.</p>
-              <TurnoBars turnos={month.byTurno} metric="carrosAmarrados" />
+              <p className="mt-4 border-t border-border pt-3 text-[11px] text-foreground-subtle">Todo carro carregado é amarrado. O controle de amarração (carros e tempo por turno) está no TMA, carro a carro.</p>
             </div>
           </section>
 
@@ -201,7 +199,6 @@ function TurnoBars({ turnos, metric }: { turnos: TurnoStat[]; metric: string }) 
 
 const TURNO_COLUMNS: { key: string; label: string }[] = [
   { key: "carrosTrabalhados", label: "Trabalhados" },
-  { key: "carrosAmarrados", label: "Amarrados" },
   { key: "carrosCarregados", label: "Carregados" },
   { key: "preCargaTotal", label: "Pré-carga" },
   { key: "quedaProduto", label: "Queda" },
@@ -273,7 +270,6 @@ function ReportLog({ reports, canLog }: { reports: ShiftReport[]; canLog: boolea
                 </button>
                 <span className="tabular-nums text-foreground-muted">{fmt(r.values.carrosCarregados)} carregados</span>
                 <span className="tabular-nums text-foreground-muted">{fmt(r.values.carrosTrabalhados)} trabalhados</span>
-                <span className="tabular-nums text-foreground-muted">{fmt(r.values.carrosAmarrados)} amarrados</span>
                 {r.notes && <span className="text-[11px] text-foreground-subtle">com observações</span>}
                 <span className="ml-auto flex items-center gap-3">
                   {canLog && (
