@@ -214,6 +214,7 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
   }
   if (user.canRollCall || p.has(PERMISSIONS.PRODUCTIVITY_MANAGE) || p.has(PERMISSIONS.PRODUCTIVITY_MANAGE_TEAM)) {
     rh.push({ href: "/producao/lancar", label: "Lançar Produção do Turno", icon: "productivity" });
+    rh.push({ href: "/produtividade/lancar-dia", label: "Lançar o Dia da Equipe", icon: "productivity" });
   }
   if (p.has(PERMISSIONS.PRODUCTIVITY_SELF_LOG) || p.has(PERMISSIONS.PRODUCTIVITY_SELF_VIEW)) {
     rh.push({ href: "/minha-produtividade", label: "Minha Produtividade", icon: "productivity" });

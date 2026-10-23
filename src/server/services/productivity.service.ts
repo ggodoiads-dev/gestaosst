@@ -227,11 +227,47 @@ type PeriodStats = {
   totalEntries: number;
   byActivity: { activityId: string; activityName: string; unit: string | null; count: number; totalQuantity: number }[];
   /** Cada ajudante escalado no período: dias de trabalho, dias com lançamento e total lançado. */
-  byCollaborator: { id: string; name: string; workDays: number; daysLogged: number; entries: number; quantityByActivity: Record<string, number>; countByActivity: Record<string, number> }[];
+  byCollaborator: {
+    id: string;
+    name: string;
+    areaName: string | null;
+    /** Atividades que se esperam dessa pessoa pela área dela (ligadas à área em Atividades, ou com o mesmo nome da área). Vazio = qualquer uma vale. */
+    expectedActivities: { id: string; name: string }[];
+    /** Tem lançamento na atividade esperada (ou em qualquer uma, se a área não tem atividade definida). */
+    covered: boolean;
+    workDays: number;
+    daysLogged: number;
+    entries: number;
+    quantityByActivity: Record<string, number>;
+    countByActivity: Record<string, number>;
+  }[];
   /** Dia a dia (AAAA-MM-DD): quantidade e número de lançamentos de cada atividade. */
   byDay: { day: string; quantityByActivity: Record<string, number>; countByActivity: Record<string, number> }[];
   missingCollaborators: { id: string; name: string }[];
 };
+
+const plainName = (text: string) => text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+
+/** Atividades esperadas de cada área: as ligadas à área em Atividades, mais as que têm o mesmo nome da área (ex.: área "Reforma de Paletes" ↔ atividade "Reforma de paletes"). */
+async function loadExpectedActivitiesByArea(areaIds: string[], collaborators: { areaId: string | null; area: { id: string; name: string } | null }[]) {
+  const result = new Map<string, { id: string; name: string }[]>();
+  const uniqueAreaIds = [...new Set(areaIds)];
+  if (uniqueAreaIds.length === 0) return result;
+  const [links, activities] = await Promise.all([
+    db.activityArea.findMany({ where: { areaId: { in: uniqueAreaIds } }, select: { activityId: true, areaId: true } }),
+    db.activity.findMany({ where: { active: true }, select: { id: true, name: true } }),
+  ]);
+  const byId = new Map(activities.map((a) => [a.id, a]));
+  const areaNames = new Map(collaborators.filter((c) => c.area).map((c) => [c.area!.id, plainName(c.area!.name)]));
+  for (const areaId of uniqueAreaIds) {
+    const picked = new Map<string, { id: string; name: string }>();
+    for (const l of links) if (l.areaId === areaId && byId.has(l.activityId)) picked.set(l.activityId, byId.get(l.activityId)!);
+    const name = areaNames.get(areaId);
+    for (const a of activities) if (name && plainName(a.name) === name) picked.set(a.id, a);
+    result.set(areaId, [...picked.values()]);
+  }
+  return result;
+}
 
 async function computePeriodStats(
   from: Date,
@@ -243,10 +279,14 @@ async function computePeriodStats(
 
   const collaborators = await db.collaborator.findMany({
     // Produtividade por pessoa: só ajudantes de armazém (o resto da produção é lançada por turno).
-    where: { active: true, AND: [{ cargo: { contains: "ajudante", mode: "insensitive" } }, collaboratorScope ?? {}] },
-    include: { turno: { include: { scheduleType: true } } },
+    where: {
+      active: true,
+      AND: [{ OR: [{ cargo: { contains: "ajudante", mode: "insensitive" } }, { cargo: { contains: "reformador", mode: "insensitive" } }] }, collaboratorScope ?? {}],
+    },
+    include: { turno: { include: { scheduleType: true } }, area: { select: { id: true, name: true } } },
   });
   const collaboratorIds = collaborators.map((c) => c.id);
+  const expectedByArea = await loadExpectedActivitiesByArea(collaborators.map((c) => c.areaId).filter((id): id is string => !!id), collaborators);
 
   const [notes, entries] = await Promise.all([
     db.scheduleDayNote.findMany({
@@ -324,9 +364,18 @@ async function computePeriodStats(
     byDay: [...dayMap.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([day, v]) => ({ day, ...v })),
     byCollaborator: collaborators
       .filter((c) => scheduledCollaboratorIds.has(c.id))
-      .map((c) => ({
+      .map((c) => {
+        const expected = (c.areaId ? expectedByArea.get(c.areaId) : undefined) ?? [];
+        const counts = countByCollaborator.get(c.id) ?? {};
+        const covered = expected.length > 0 ? expected.some((a) => (counts[a.id] ?? 0) > 0) : (entriesByCollaborator.get(c.id) ?? 0) > 0;
+        return { c, expected, covered };
+      })
+      .map(({ c, expected, covered }) => ({
         id: c.id,
         name: c.name,
+        areaName: c.area?.name ?? null,
+        expectedActivities: expected,
+        covered,
         workDays: workDaysByCollaborator.get(c.id) ?? 0,
         daysLogged: daysLoggedByCollaborator.get(c.id)?.size ?? 0,
         entries: entriesByCollaborator.get(c.id) ?? 0,
@@ -475,4 +524,37 @@ export async function getAllProductivityGoalsProgress(user: CurrentUser, params:
       percent: goal.targetQuantity > 0 ? Math.round((achieved / goal.targetQuantity) * 100) : 0,
     };
   });
+}
+
+
+export function canLogProductivityForOthers(user: CurrentUser): boolean {
+  return hasPermission(user, PERMISSIONS.PRODUCTIVITY_MANAGE) || hasPermission(user, PERMISSIONS.PRODUCTIVITY_MANAGE_TEAM) || user.canRollCall;
+}
+
+/** Dados para lançar o dia de várias pessoas de uma vez: os ajudantes/reformadores do escopo do usuário (com a área) e as atividades (com as áreas a que pertencem). */
+export async function getDayLaunchData(user: CurrentUser) {
+  if (!canLogProductivityForOthers(user)) throw new ForbiddenError();
+  const collaboratorScope = productivityCollaboratorScopeWhere(user);
+  const scopeForLog = hasPermission(user, PERMISSIONS.PRODUCTIVITY_MANAGE) ? undefined : collaboratorScope;
+  const [collaborators, activities, links, areas] = await Promise.all([
+    db.collaborator.findMany({
+      where: { active: true, AND: [{ OR: [{ cargo: { contains: "ajudante", mode: "insensitive" } }, { cargo: { contains: "reformador", mode: "insensitive" } }] }, scopeForLog ?? {}] },
+      select: { id: true, name: true, areaId: true, area: { select: { name: true } } },
+      orderBy: { name: "asc" },
+    }),
+    db.activity.findMany({ where: { active: true }, select: { id: true, name: true, unit: true }, orderBy: { name: "asc" } }),
+    db.activityArea.findMany({ select: { activityId: true, areaId: true } }),
+    db.area.findMany({ select: { id: true, name: true } }),
+  ]);
+  const areaIdsByActivity = new Map<string, Set<string>>();
+  for (const l of links) areaIdsByActivity.set(l.activityId, (areaIdsByActivity.get(l.activityId) ?? new Set()).add(l.areaId));
+  for (const a of activities) {
+    for (const area of areas) {
+      if (plainName(area.name) === plainName(a.name)) areaIdsByActivity.set(a.id, (areaIdsByActivity.get(a.id) ?? new Set()).add(area.id));
+    }
+  }
+  return {
+    helpers: collaborators.map((c) => ({ id: c.id, name: c.name, areaId: c.areaId, areaName: c.area?.name ?? null })),
+    activities: activities.map((a) => ({ id: a.id, name: a.name, measuresQuantity: measuresQuantity(a), areaIds: [...(areaIdsByActivity.get(a.id) ?? [])] })),
+  };
 }

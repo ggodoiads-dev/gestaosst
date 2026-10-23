@@ -1,11 +1,11 @@
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Truck } from "lucide-react";
+import { ChevronLeft, ChevronRight, ClipboardList, Truck } from "lucide-react";
 import { addMonths } from "date-fns";
 import { formatInTimeZone } from "date-fns-tz";
 import { requireUser, hasPermission } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
 import { displayUnit, isWarehouseHelper, measuresQuantity } from "@/domain/production/helpers";
-import { getAllProductivityGoalsProgress, getProductivityDashboard } from "@/server/services/productivity.service";
+import { canLogProductivityForOthers, getAllProductivityGoalsProgress, getProductivityDashboard } from "@/server/services/productivity.service";
 import { listActivitiesForUser } from "@/server/services/activity.service";
 import { listActiveCollaboratorsForSupervision } from "@/server/services/collaborator.service";
 import { PageHeader, PageBody } from "@/components/domain/page-header";
@@ -68,7 +68,14 @@ export default async function ProdutividadePage({ searchParams }: { searchParams
     return { n: i + 1, value: d && act ? valueOf(d.quantityByActivity, d.countByActivity) : 0 };
   });
 
-  const idle = month.byCollaborator.filter((c) => c.entries === 0);
+  // Cobrança por área: quem é de uma área com atividade definida (ex.: Reforma de Paletes) só conta como "em dia" se lançou ESSA atividade.
+  const idle = month.byCollaborator.filter((c) => !c.covered);
+  const idleGroups = [...new Set(idle.map((c) => c.areaName ?? "Sem área"))].sort((a, b) => a.localeCompare(b, "pt-BR")).map((area) => {
+    const people = idle.filter((c) => (c.areaName ?? "Sem área") === area);
+    const expected = [...new Set(people.flatMap((c) => c.expectedActivities.map((a) => shortActivityName(a.name))))];
+    return { area, people, expected };
+  });
+  const canLog = canLogProductivityForOthers(user);
   const prev = monthKeyOf(addMonths(new Date(year, monthNumber - 1, 1), -1));
   const next = monthKeyOf(addMonths(new Date(year, monthNumber - 1, 1), 1));
   const personHref = (id: string) => `/produtividade/${id}?period=mes&ref=${selected}-15`;
@@ -80,9 +87,16 @@ export default async function ProdutividadePage({ searchParams }: { searchParams
         title="Produtividade dos ajudantes"
         description="Escolha uma atividade para ver quem produziu mais e como foi dia a dia. Clique no nome para abrir a pessoa. Carros e descargas ficam em Produção."
         actions={
-          <Link href="/producao" className="inline-flex h-9 items-center gap-2 rounded-md border border-border-strong bg-surface px-3 text-sm font-medium text-foreground hover:bg-surface-muted">
-            <Truck className="size-4" /> Produção por turno
-          </Link>
+          <>
+            <Link href="/producao" className="inline-flex h-9 items-center gap-2 rounded-md border border-border-strong bg-surface px-3 text-sm font-medium text-foreground hover:bg-surface-muted">
+              <Truck className="size-4" /> Produção por turno
+            </Link>
+            {canLog && (
+              <Link href="/produtividade/lancar-dia" className="inline-flex h-9 items-center gap-2 rounded-md bg-accent px-3 text-sm font-medium text-accent-foreground hover:bg-accent-hover">
+                <ClipboardList className="size-4" /> Lançar o dia da equipe
+              </Link>
+            )}
+          </>
         }
       />
       <PageBody>
@@ -189,17 +203,27 @@ export default async function ProdutividadePage({ searchParams }: { searchParams
         )}
 
         {idle.length > 0 && (
-          <details className="rounded-md border border-border bg-surface px-3 py-2.5">
-            <summary className="cursor-pointer text-sm font-semibold text-foreground">Sem nenhum lançamento em {monthLabel(selected)} ({idle.length})</summary>
-            <p className="mb-1.5 mt-2 text-[11px] text-foreground-subtle">Estavam escalados, mas nenhuma produção foi lançada no nome deles.</p>
-            <p className="text-sm text-foreground-muted">
-              {idle.map((c, i) => (
-                <span key={c.id}>
-                  {i > 0 && " · "}
-                  <Link href={personHref(c.id)} className="hover:text-accent hover:underline">{c.name}</Link>
-                </span>
+          <details className="rounded-md border border-border bg-surface px-3 py-2.5" open>
+            <summary className="cursor-pointer text-sm font-semibold text-foreground">Sem o lançamento esperado em {monthLabel(selected)} ({idle.length})</summary>
+            <p className="mb-2 mt-1 text-[11px] text-foreground-subtle">Por área: cada pessoa é cobrada da atividade da área dela. Se a área não tem atividade definida, vale qualquer lançamento.</p>
+            <div className="flex flex-col gap-2.5">
+              {idleGroups.map((g) => (
+                <div key={g.area}>
+                  <p className="text-xs font-semibold text-foreground">
+                    {g.area}
+                    <span className="ml-2 font-normal text-foreground-subtle">{g.expected.length > 0 ? `esperado: ${g.expected.join(", ")}` : "sem atividade definida para a área"}</span>
+                  </p>
+                  <p className="text-sm text-foreground-muted">
+                    {g.people.map((c, i) => (
+                      <span key={c.id}>
+                        {i > 0 && " · "}
+                        <Link href={personHref(c.id)} className="hover:text-accent hover:underline">{c.name}</Link>
+                      </span>
+                    ))}
+                  </p>
+                </div>
               ))}
-            </p>
+            </div>
           </details>
         )}
 
