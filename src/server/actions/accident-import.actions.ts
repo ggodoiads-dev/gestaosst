@@ -53,7 +53,7 @@ export async function previewAccidentImportAction(
 }
 
 export type CommitResult =
-  | { ok: true; created: number; errors: number }
+  | { ok: true; created: number; errors: number; skipped: number }
   | { ok: false; error: string };
 
 export async function commitAccidentImportAction(rows: AccidentImportRowResult[]): Promise<CommitResult> {

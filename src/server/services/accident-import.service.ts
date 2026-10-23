@@ -8,6 +8,7 @@ import { PERMISSIONS } from "@/domain/shared/permissions";
 import type { AccidentType, AccidentStatus, SifClassification, Criticality } from "@/generated/prisma/enums";
 import {
   ACCIDENT_IMPORT_FIELDS,
+  isLog20Company,
   type AccidentImportField,
   type AccidentImportMapping,
 } from "@/domain/accident/import-fields";
@@ -34,6 +35,7 @@ const FIELD_ALIASES: Record<AccidentImportField, string[]> = {
   isSif: ["esif", "sif"],
   sifClassification: ["classificacaosif", "tiposif", "classifsif"],
   creditNumber: ["credit", "numerocredit", "ncredit", "numerodocredit"],
+  company: ["empresa", "empresaenvolvida", "empregador", "contratada", "companhia"],
   involvedCollaborators: ["envolvidos", "colaboradoresenvolvidos", "vitimas", "acidentado", "acidentados", "nomedoacidentado"],
   status: ["status", "situacao"],
 };
@@ -113,7 +115,9 @@ export function suggestMapping(headers: string[]): AccidentImportMapping {
 
 export type AccidentImportRowResult = {
   rowIndex: number;
-  action: "create" | "error";
+  /** `skip`: linha ignorada de propósito (outra empresa, ou Credit que já foi importado) — não conta como erro. */
+  action: "create" | "error" | "skip";
+  skipReason?: string;
   date: string;
   dateParsed: Date | null;
   time: string | null;
@@ -157,6 +161,11 @@ export async function buildAccidentImportPreview(
   const findArea = (name: string | null) =>
     name ? areas.find((a) => a.name.trim().toLowerCase() === name.trim().toLowerCase()) : undefined;
   const collabByName = new Map(collaborators.map((c) => [normalize(c.name), c.id]));
+  // Credit já cadastrado: reimportar a mesma planilha não duplica.
+  const existingCredits = new Set(
+    (await db.accident.findMany({ where: { creditNumber: { not: null } }, select: { creditNumber: true } })).map((a) => normalize(a.creditNumber ?? "")),
+  );
+  const seenCredits = new Set<string>();
 
   const results: AccidentImportRowResult[] = [];
 
@@ -177,6 +186,7 @@ export async function buildAccidentImportPreview(
     const creditNumber = getCell(row, mapping, "creditNumber");
     const involvedRaw = getCell(row, mapping, "involvedCollaborators");
     const statusRaw = getCell(row, mapping, "status");
+    const companyRaw = getCell(row, mapping, "company");
 
     const involvedNames = involvedRaw
       ? involvedRaw.split(/[,;]/).map((s) => s.trim()).filter(Boolean)
@@ -204,6 +214,40 @@ export async function buildAccidentImportPreview(
       involvedCollaboratorIds,
       unmatchedNames,
     };
+
+    // Planilha do Credit traz também outras empresas: só a LOG20 entra. Linha sem empresa preenchida é importada.
+    if (mapping.company !== undefined && companyRaw && !isLog20Company(companyRaw)) {
+      results.push({
+        ...base,
+        dateParsed: parseDateCell(dateRaw),
+        typeValue: null,
+        severityValue: "MEDIA",
+        isSif: false,
+        sifClassification: null,
+        status: "CONCLUIDO",
+        action: "skip",
+        skipReason: `Outra empresa (${companyRaw})`,
+      });
+      continue;
+    }
+    if (creditNumber) {
+      const key = normalize(creditNumber);
+      if (existingCredits.has(key) || seenCredits.has(key)) {
+        results.push({
+          ...base,
+          dateParsed: parseDateCell(dateRaw),
+          typeValue: null,
+          severityValue: "MEDIA",
+          isSif: false,
+          sifClassification: null,
+          status: "CONCLUIDO",
+          action: "skip",
+          skipReason: existingCredits.has(key) ? "Credit já importado antes" : "Credit repetido na planilha",
+        });
+        continue;
+      }
+      seenCredits.add(key);
+    }
 
     const dateParsed = parseDateCell(dateRaw);
     if (!dateParsed) {
@@ -284,13 +328,18 @@ export async function buildAccidentImportPreview(
 export async function commitAccidentImport(
   user: CurrentUser,
   rows: AccidentImportRowResult[],
-): Promise<{ created: number; errors: number }> {
+): Promise<{ created: number; errors: number; skipped: number }> {
   requirePermission(user, PERMISSIONS.ACCIDENT_MANAGE);
 
   let created = 0;
   let errors = 0;
+  let skipped = 0;
 
   for (const row of rows) {
+    if (row.action === "skip") {
+      skipped++;
+      continue;
+    }
     if (row.action === "error" || !row.dateParsed || !row.typeValue) {
       errors++;
       continue;
@@ -324,8 +373,8 @@ export async function commitAccidentImport(
     action: "CREATE",
     entityType: "AccidentImport",
     entityId: crypto.randomUUID(),
-    newValue: { created, errors, total: rows.length },
+    newValue: { created, errors, skipped, total: rows.length },
   });
 
-  return { created, errors };
+  return { created, errors, skipped };
 }

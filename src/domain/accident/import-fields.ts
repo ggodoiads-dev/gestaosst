@@ -10,6 +10,7 @@ export type AccidentImportField =
   | "isSif"
   | "sifClassification"
   | "creditNumber"
+  | "company"
   | "involvedCollaborators"
   | "status";
 
@@ -25,8 +26,19 @@ export const ACCIDENT_IMPORT_FIELDS: { key: AccidentImportField; label: string; 
   { key: "isSif", label: "É SIF? (Sim/Não)", required: false },
   { key: "sifClassification", label: "Classificação SIF (Precursor/Potencial/Real)", required: false },
   { key: "creditNumber", label: "Nº do Credit", required: false },
+  { key: "company", label: "Empresa (só entram as linhas da LOG20; as outras são ignoradas)", required: false },
   { key: "involvedCollaborators", label: "Colaboradores envolvidos (nomes, separados por vírgula)", required: false },
   { key: "status", label: "Status (Aberto/Em investigação/Concluído)", required: false },
 ];
 
 export type AccidentImportMapping = Partial<Record<AccidentImportField, number>>;
+
+/** Empresa da linha é a LOG20? ("LOG20", "LOG 20", "Log-20 Logística"...). A planilha do Credit traz também outras empresas. */
+export function isLog20Company(company: string): boolean {
+  return company
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "")
+    .includes("log20");
+}

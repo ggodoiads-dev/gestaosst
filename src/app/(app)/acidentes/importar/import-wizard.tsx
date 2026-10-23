@@ -43,7 +43,7 @@ export function ImportWizard() {
   const [rows, setRows] = useState<string[][]>([]);
   const [mapping, setMapping] = useState<AccidentImportMapping>({});
   const [previewRows, setPreviewRows] = useState<AccidentImportRowResult[]>([]);
-  const [result, setResult] = useState<{ created: number; errors: number } | null>(null);
+  const [result, setResult] = useState<{ created: number; errors: number; skipped: number } | null>(null);
 
   function handleUpload() {
     const file = fileInputRef.current?.files?.[0];
@@ -88,13 +88,14 @@ export function ImportWizard() {
         setError(res.error);
         return;
       }
-      setResult({ created: res.created, errors: res.errors });
+      setResult({ created: res.created, errors: res.errors, skipped: res.skipped });
       setStep("done");
     });
   }
 
   const toCreate = previewRows.filter((r) => r.action === "create").length;
   const withErrors = previewRows.filter((r) => r.action === "error").length;
+  const skippedCount = previewRows.filter((r) => r.action === "skip").length;
   const withUnmatchedCollaborators = previewRows.filter((r) => r.unmatchedNames.length > 0).length;
 
   return (
@@ -211,7 +212,7 @@ export function ImportWizard() {
           <CardHeader>
             <CardTitle>3. Revisar e confirmar</CardTitle>
             <CardDescription>
-              {toCreate} registro(s) pronto(s) pra importar{withErrors > 0 ? `, ${withErrors} com erro` : ""}
+              {toCreate} registro(s) pronto(s) pra importar{withErrors > 0 ? `, ${withErrors} com erro` : ""}{skippedCount > 0 ? `, ${skippedCount} ignorado(s) (outra empresa ou Credit já importado)` : ""}
               {withUnmatchedCollaborators > 0
                 ? `. ${withUnmatchedCollaborators} linha(s) com colaborador não encontrado (o acidente é criado assim mesmo, só sem esse envolvido).`
                 : "."}
@@ -260,6 +261,11 @@ export function ImportWizard() {
                     </TableCell>
                     <TableCell>
                       {row.action === "create" && <Badge tone="success">Criar</Badge>}
+                      {row.action === "skip" && (
+                        <Badge tone="neutral" title={row.skipReason}>
+                          Ignorada{row.skipReason ? `: ${row.skipReason}` : ""}
+                        </Badge>
+                      )}
                       {row.action === "error" && (
                         <Badge tone="danger" title={row.error}>
                           Erro
@@ -292,6 +298,7 @@ export function ImportWizard() {
           </CardHeader>
           <CardContent className="flex flex-col gap-2 text-sm text-foreground-subtle">
             <p>{result.created} acidente(s) importado(s).</p>
+            {result.skipped > 0 && <p>{result.skipped} linha(s) ignorada(s) (outra empresa ou Credit já importado).</p>}
             {result.errors > 0 && (
               <p className="flex items-center gap-1.5 text-warning">
                 <AlertTriangle className="size-4" /> {result.errors} linha(s) não importada(s).
