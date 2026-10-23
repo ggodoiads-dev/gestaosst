@@ -13,6 +13,8 @@ import { requirePermission, hasPermission } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
 import type { ScheduleDayNoteStatus } from "@/generated/prisma/enums";
 import { ensureInterviewForNote } from "@/server/services/absence-interview.service";
+import { parseDateOnly } from "@/lib/dates";
+import { contiguousEnd, contiguousStart, isValidVacation, vacationDayKeys, vacationRange } from "@/domain/schedule/vacation";
 
 export type ScheduleTypeInput = {
   name: string;
@@ -365,4 +367,84 @@ export async function markWarningApplied(user: CurrentUser, noteId: string, valu
 export async function markAbsenceInterviewDone(user: CurrentUser, noteId: string, value: boolean) {
   requirePermission(user, PERMISSIONS.HR_MANAGE);
   await db.scheduleDayNote.update({ where: { id: noteId }, data: { absenceInterviewDone: value } });
+}
+
+
+const brDate = (key: string) => `${key.slice(8, 10)}/${key.slice(5, 7)}/${key.slice(0, 4)}`;
+
+/**
+ * Cadastra férias em dias corridos: do primeiro dia, N dias seguidos (inclui folgas, fim de semana e feriado). Cada dia vira uma observação "Férias"
+ * na escala (não trabalha), então a chamada do líder já mostra a pessoa de férias e não deixa marcar presença nem falta. Dias que já têm falta ou
+ * atestado lançados não são trocados (voltam em `skipped` para o RH resolver); os demais são atualizados.
+ */
+export async function registerVacation(user: CurrentUser, input: { collaboratorId: string; startKey: string; days: number }) {
+  requirePermission(user, PERMISSIONS.SCHEDULE_MANAGE);
+  if (!isValidVacation(input.startKey, input.days)) throw new Error("Informe o primeiro dia e de 1 a 60 dias corridos.");
+  await db.collaborator.findUniqueOrThrow({ where: { id: input.collaboratorId }, select: { id: true } });
+
+  const keys = vacationDayKeys(input.startKey, input.days);
+  const { endKey, returnKey } = vacationRange(input.startKey, input.days);
+  const text = `Férias de ${brDate(input.startKey)} a ${brDate(endKey)} (${input.days} dias corridos). Volta em ${brDate(returnKey)}.`;
+
+  const from = new Date(`${input.startKey}T00:00:00Z`);
+  from.setUTCDate(from.getUTCDate() - 1);
+  const to = new Date(`${endKey}T00:00:00Z`);
+  to.setUTCDate(to.getUTCDate() + 2);
+  const existing = await db.scheduleDayNote.findMany({ where: { collaboratorId: input.collaboratorId, date: { gte: from, lt: to } } });
+  const byKey = new Map(existing.map((n) => [localDateKey(n.date), n]));
+
+  let created = 0;
+  let updated = 0;
+  const skipped: string[] = [];
+  await db.$transaction(async (tx) => {
+    for (const key of keys) {
+      const note = byKey.get(key);
+      if (note && (note.status === "FALTA" || note.status === "ATESTADO")) {
+        skipped.push(key);
+        continue;
+      }
+      if (note) {
+        await tx.scheduleDayNote.update({ where: { id: note.id }, data: { overrideStatus: "FOLGA", status: "FERIAS", notes: text } });
+        updated++;
+      } else {
+        await tx.scheduleDayNote.create({
+          data: { collaboratorId: input.collaboratorId, date: parseDateOnly(key), overrideStatus: "FOLGA", status: "FERIAS", notes: text, createdById: user.id },
+        });
+        created++;
+      }
+    }
+  });
+  await recordAudit({
+    userId: user.id,
+    action: "CREATE",
+    entityType: "Vacation",
+    entityId: input.collaboratorId,
+    newValue: { startKey: input.startKey, days: input.days, endKey, returnKey, skipped },
+  });
+  return { created, updated, skipped, endKey, returnKey };
+}
+
+/** Cancela as férias que contêm o dia pedido: apaga a sequência seguida de dias de férias dessa pessoa (só os dias com status Férias e sem anexo). */
+export async function cancelVacation(user: CurrentUser, input: { collaboratorId: string; dateKey: string }) {
+  requirePermission(user, PERMISSIONS.SCHEDULE_MANAGE);
+  const center = new Date(`${input.dateKey}T00:00:00Z`);
+  const from = new Date(center);
+  from.setUTCDate(from.getUTCDate() - 90);
+  const to = new Date(center);
+  to.setUTCDate(to.getUTCDate() + 91);
+  const notes = await db.scheduleDayNote.findMany({
+    where: { collaboratorId: input.collaboratorId, status: "FERIAS", date: { gte: from, lt: to }, attachments: { none: {} } },
+    select: { id: true, date: true },
+  });
+  const keyOf = new Map(notes.map((n) => [localDateKey(n.date), n.id]));
+  const keys = new Set(keyOf.keys());
+  if (!keys.has(input.dateKey)) throw new Error("Esse dia não é de férias.");
+  const start = contiguousStart(input.dateKey, keys);
+  const end = contiguousEnd(input.dateKey, keys);
+  const ids = vacationDayKeys(start, Math.round((new Date(`${end}T00:00:00Z`).getTime() - new Date(`${start}T00:00:00Z`).getTime()) / 86400000) + 1)
+    .map((k) => keyOf.get(k))
+    .filter((id): id is string => !!id);
+  await db.scheduleDayNote.deleteMany({ where: { id: { in: ids } } });
+  await recordAudit({ userId: user.id, action: "DELETE", entityType: "Vacation", entityId: input.collaboratorId, previousValue: { startKey: start, endKey: end, days: ids.length } });
+  return { removed: ids.length, startKey: start, endKey: end };
 }

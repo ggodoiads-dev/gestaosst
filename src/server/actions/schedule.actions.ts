@@ -192,3 +192,46 @@ export async function markAbsenceInterviewDoneAction(noteId: string, value: bool
     revalidatePath("/pendencias-advertencia");
   });
 }
+
+export type VacationResult = { ok: true; message: string } | { ok: false; error: string };
+
+const vacationSchema = z.object({
+  collaboratorId: z.string().min(1, "Escolha o colaborador."),
+  startKey: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Informe o primeiro dia das férias."),
+  days: z.coerce.number().int().min(1, "Informe os dias corridos de férias.").max(60, "No máximo 60 dias corridos."),
+});
+
+export async function registerVacationAction(input: { collaboratorId: string; startKey: string; days: number }): Promise<VacationResult> {
+  try {
+    const user = await requireUser();
+    const parsed = vacationSchema.parse(input);
+    const res = await scheduleService.registerVacation(user, parsed);
+    revalidatePath("/escalas");
+    revalidatePath("/chamada");
+    const end = `${res.endKey.slice(8, 10)}/${res.endKey.slice(5, 7)}`;
+    const back = `${res.returnKey.slice(8, 10)}/${res.returnKey.slice(5, 7)}`;
+    const skipped = res.skipped.length > 0 ? ` ${res.skipped.length} dia(s) com falta ou atestado já lançado foram mantidos.` : "";
+    return { ok: true, message: `Férias cadastradas até ${end}; volta em ${back}.${skipped}` };
+  } catch (error) {
+    if (error instanceof ForbiddenError) return { ok: false, error: error.message };
+    if (error instanceof z.ZodError) return { ok: false, error: error.issues[0]?.message ?? "Dados inválidos." };
+    if (error instanceof Error && /Informe o primeiro dia/.test(error.message)) return { ok: false, error: error.message };
+    console.error("[escala] falha ao cadastrar férias:", error);
+    return { ok: false, error: "Não foi possível cadastrar as férias." };
+  }
+}
+
+export async function cancelVacationAction(collaboratorId: string, dateKey: string): Promise<VacationResult> {
+  try {
+    const user = await requireUser();
+    const res = await scheduleService.cancelVacation(user, { collaboratorId, dateKey });
+    revalidatePath("/escalas");
+    revalidatePath("/chamada");
+    return { ok: true, message: `${res.removed} dia(s) de férias removidos.` };
+  } catch (error) {
+    if (error instanceof ForbiddenError) return { ok: false, error: error.message };
+    if (error instanceof Error && /Esse dia não é de férias/.test(error.message)) return { ok: false, error: error.message };
+    console.error("[escala] falha ao cancelar férias:", error);
+    return { ok: false, error: "Não foi possível cancelar as férias." };
+  }
+}

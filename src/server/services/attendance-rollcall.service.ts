@@ -1,4 +1,5 @@
 import "server-only";
+import { addDaysToKey, contiguousEnd } from "@/domain/schedule/vacation";
 import { startOfDay } from "date-fns";
 import { db } from "@/server/db";
 import { getCollaboratorDayStatus } from "@/domain/schedule/schedule-calendar";
@@ -51,6 +52,8 @@ export type RollCallEntry = {
   offToday: boolean;
   collaborator: { id: string; name: string; functionName: string | null };
   existingNote: { status: ScheduleDayNoteStatus | null; notes: string } | null;
+  /** De férias hoje (cadastradas na escala): aparece travado, sem presença nem falta. `untilKey` = último dia de férias, `returnKey` = dia da volta. */
+  vacation: { untilKey: string; returnKey: string } | null;
 };
 
 /** Colaboradores escalados pra trabalhar hoje, dentro do escopo do usuário — base da tela de
@@ -71,6 +74,7 @@ export async function getTodayRollCall(user: CurrentUser): Promise<RollCallEntry
       ? await db.scheduleDayNote.findMany({ where: { collaboratorId: { in: collaboratorIds }, date: today } })
       : [];
   const notesByCollaborator = new Map(notes.map((n) => [n.collaboratorId, n]));
+  const vacations = await loadVacationsToday(collaboratorIds, today);
 
   return collaborators
     .map((collaborator) => {
@@ -79,6 +83,7 @@ export async function getTodayRollCall(user: CurrentUser): Promise<RollCallEntry
       return {
         collaborator: { id: collaborator.id, name: collaborator.name, functionName: collaborator.function?.name ?? null },
         existingNote: note ? { status: note.status, notes: note.notes } : null,
+        vacation: vacations.get(collaborator.id) ?? null,
         computed,
         picked: user.rollCallCollaboratorIds.has(collaborator.id),
       };
@@ -86,8 +91,30 @@ export async function getTodayRollCall(user: CurrentUser): Promise<RollCallEntry
     // Quem veio do escopo por área/turno só entra se está escalado pra hoje; quem o administrador
     // escolheu pessoalmente entra sempre (marcado "folga hoje" se for o caso) — era o que fazia a
     // chamada "não mostrar todo mundo".
-    .filter((entry) => entry.computed === "TRABALHO" || entry.picked)
-    .map(({ collaborator, existingNote, computed }) => ({ collaborator, existingNote, offToday: computed !== "TRABALHO" }));
+    .filter((entry) => entry.vacation !== null || entry.computed === "TRABALHO" || entry.picked)
+    .map(({ collaborator, existingNote, vacation, computed }) => ({ collaborator, existingNote, vacation, offToday: vacation === null && computed !== "TRABALHO" }));
+}
+
+/** Quem está de férias hoje (nota "Férias" em qualquer horário do dia) e até quando vai a sequência de férias dele. */
+async function loadVacationsToday(collaboratorIds: string[], today: Date): Promise<Map<string, { untilKey: string; returnKey: string }>> {
+  const result = new Map<string, { untilKey: string; returnKey: string }>();
+  if (collaboratorIds.length === 0) return result;
+  const dayStart = today;
+  const dayEnd = new Date(today.getTime() + 24 * 60 * 60 * 1000);
+  const horizon = new Date(today.getTime() + 121 * 24 * 60 * 60 * 1000);
+  const [todays, upcoming] = await Promise.all([
+    db.scheduleDayNote.findMany({ where: { collaboratorId: { in: collaboratorIds }, status: "FERIAS", date: { gte: dayStart, lt: dayEnd } }, select: { collaboratorId: true, date: true } }),
+    db.scheduleDayNote.findMany({ where: { collaboratorId: { in: collaboratorIds }, status: "FERIAS", date: { gte: dayStart, lt: horizon } }, select: { collaboratorId: true, date: true } }),
+  ]);
+  const keyOf = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const keysByCollaborator = new Map<string, Set<string>>();
+  for (const n of upcoming) keysByCollaborator.set(n.collaboratorId, (keysByCollaborator.get(n.collaboratorId) ?? new Set()).add(keyOf(n.date)));
+  for (const n of todays) {
+    const keys = keysByCollaborator.get(n.collaboratorId) ?? new Set<string>();
+    const untilKey = contiguousEnd(keyOf(n.date), keys);
+    result.set(n.collaboratorId, { untilKey, returnKey: addDaysToKey(untilKey, 1) });
+  }
+  return result;
 }
 
 export type RollCallSubmission = {
@@ -112,6 +139,12 @@ export async function submitRollCall(user: CurrentUser, entries: RollCallSubmiss
     select: { id: true },
   });
   const allowedIds = new Set(allowedCollaborators.map((c) => c.id));
+
+  // Quem está de férias não tem presença nem falta: a escala já diz que não trabalha.
+  const onVacation = await loadVacationsToday(collaboratorIds, today);
+  if (onVacation.size > 0) {
+    throw new ForbiddenError("Há colaborador de férias na chamada: férias não aceitam presença nem falta. Atualize a página e envie de novo.");
+  }
 
   for (const entry of absentEntries) {
     if (!allowedIds.has(entry.collaboratorId)) {

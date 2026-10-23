@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { ScheduleGridClient } from "./schedule-grid-client";
+import { VacationDialog } from "./vacation-dialog";
 
 const MONTH_LABELS = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
@@ -78,9 +79,10 @@ export default async function EscalasPage({
     <>
       <PageHeader
         title="Escalas de Trabalho"
-        description="Grade mensal de trabalho/folga por colaborador — clique no nome pra definir o turno, ou num dia pra registrar falta, atestado ou outra observação."
+        description="Grade mensal de trabalho/folga por colaborador — clique no nome pra definir o turno, ou num dia pra registrar falta, atestado ou outra observação. Use Cadastrar férias para lançar o período de uma vez."
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <VacationDialog collaborators={gridRows.map((r) => ({ id: r.collaborator.id, name: r.collaborator.name }))} />
             <Button size="icon" variant="secondary" asChild>
               <Link href={`/escalas?month=${prevMonth}&year=${prevYear}`} aria-label="Mês anterior">
                 <ChevronLeft className="size-4" />

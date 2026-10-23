@@ -21,6 +21,7 @@ import {
 import {
   saveScheduleDayNoteAction,
   deleteScheduleDayNoteAction,
+  cancelVacationAction,
   type ActionResult,
 } from "@/server/actions/schedule.actions";
 import { useCloseOnSuccess } from "@/lib/use-close-on-success";
@@ -74,6 +75,17 @@ export function ScheduleDayNoteDialog({
   const [overrideStatus, setOverrideStatus] = useState(note?.overrideStatus ?? computed);
   const [status, setStatus] = useState(note?.status ?? "none");
   const [isDeleting, startDelete] = useTransition();
+
+  function handleCancelVacation() {
+    if (!window.confirm("Cancelar todas as férias deste período? Os dias voltam para a escala normal.")) return;
+    startDelete(async () => {
+      const res = await cancelVacationAction(collaboratorId, date);
+      if (res.ok) {
+        toast.success(res.message);
+        onClose();
+      } else toast.error(res.error);
+    });
+  }
 
   function handleDelete() {
     if (!note) return;
@@ -154,6 +166,11 @@ export function ScheduleDayNoteDialog({
             {note && (
               <Button type="button" variant="outlineDanger" className="mr-auto" onClick={handleDelete} loading={isDeleting}>
                 Remover
+              </Button>
+            )}
+            {note?.status === "FERIAS" && (
+              <Button type="button" variant="outlineDanger" onClick={handleCancelVacation} loading={isDeleting}>
+                Cancelar férias
               </Button>
             )}
             <DialogClose asChild>

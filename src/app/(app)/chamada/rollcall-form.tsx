@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { formatDate, parseDateOnly } from "@/lib/dates";
 import { submitRollCallAction } from "@/server/actions/attendance-rollcall.actions";
 import type { RollCallEntry } from "@/server/services/attendance-rollcall.service";
 
@@ -25,7 +26,7 @@ export function RollCallForm({ entries }: { entries: RollCallEntry[] }) {
       entries.map((e) => [
         e.collaborator.id,
         {
-          absent: e.existingNote !== null,
+          absent: !e.vacation && e.existingNote !== null,
           status: (e.existingNote?.status as AbsenceStatus) ?? "FALTA",
           notes: e.existingNote?.notes ?? "",
         },
@@ -41,7 +42,7 @@ export function RollCallForm({ entries }: { entries: RollCallEntry[] }) {
 
   function handleSubmit() {
     startTransition(async () => {
-      const payload = entries.map((e) => ({
+      const payload = entries.filter((e) => !e.vacation).map((e) => ({
         collaboratorId: e.collaborator.id,
         absent: rows[e.collaborator.id].absent,
         status: rows[e.collaborator.id].status,
@@ -58,12 +59,29 @@ export function RollCallForm({ entries }: { entries: RollCallEntry[] }) {
   }
 
   const absentCount = Object.values(rows).filter((r) => r.absent).length;
+  const vacationCount = entries.filter((e) => e.vacation).length;
 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-3">
         {entries.map((entry) => {
           const row = rows[entry.collaborator.id];
+          if (entry.vacation) {
+            return (
+              <div key={entry.collaborator.id} className="rounded-md border border-border bg-surface-muted p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="font-medium text-foreground">{entry.collaborator.name}</p>
+                    {entry.collaborator.functionName && <p className="text-xs text-foreground-subtle">{entry.collaborator.functionName}</p>}
+                    <p className="mt-0.5 text-[11px] text-foreground-subtle">
+                      Até {formatDate(parseDateOnly(entry.vacation.untilKey))} · volta em {formatDate(parseDateOnly(entry.vacation.returnKey))}
+                    </p>
+                  </div>
+                  <span className="shrink-0 rounded-md bg-info-soft px-3 py-1.5 text-xs font-semibold text-info">De férias</span>
+                </div>
+              </div>
+            );
+          }
           return (
             <div key={entry.collaborator.id} className="rounded-md border border-border p-3">
               <div className="flex items-center justify-between gap-3">
@@ -129,6 +147,7 @@ export function RollCallForm({ entries }: { entries: RollCallEntry[] }) {
       <div className="flex items-center justify-between gap-3 border-t border-border pt-4">
         <p className="text-sm text-foreground-subtle">
           {absentCount === 0 ? "Todo mundo presente." : `${absentCount} falta(s) registrada(s) — vai direto pra escala.`}
+          {vacationCount > 0 && ` ${vacationCount} de férias (não entra na chamada).`}
         </p>
         <Button onClick={handleSubmit} loading={pending} disabled={done}>
           {done ? "Chamada enviada" : "Registrar chamada"}
