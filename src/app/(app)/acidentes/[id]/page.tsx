@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { requireUser } from "@/server/auth/current-user";
-import { getAccidentDetail } from "@/server/services/accident.service";
+import { getAccidentDetail, listInvolvedPeople } from "@/server/services/accident.service";
 import { listCollaboratorsForUser } from "@/server/services/collaborator.service";
 import { PageHeader, PageBody } from "@/components/domain/page-header";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -35,10 +35,12 @@ export default async function AcidenteDetailPage({
 }) {
   const { id } = await params;
   const user = await requireUser();
-  const [accident, collaborators] = await Promise.all([
+  const [accident, collaborators, involvedPeople] = await Promise.all([
     getAccidentDetail(user, id),
     listCollaboratorsForUser(user, { onlyActive: true }),
+    listInvolvedPeople(user, id),
   ]);
+  const externalPeople = involvedPeople.filter((p) => !p.collaboratorId);
 
   return (
     <>
@@ -144,18 +146,43 @@ export default async function AcidenteDetailPage({
 
           <Card>
             <CardHeader>
-              <CardTitle>Envolvidos ({accident.involvements.length})</CardTitle>
+              <CardTitle>Envolvidos ({accident.involvements.length + externalPeople.length})</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-2">
-              {accident.involvements.length === 0 && (
+              {accident.involvements.length === 0 && externalPeople.length === 0 && (
                 <p className="text-sm text-foreground-subtle">Nenhum colaborador vinculado.</p>
               )}
-              {accident.involvements.map((involvement) => (
-                <div key={involvement.collaboratorId} className="flex items-center justify-between rounded-md border border-border px-3 py-2 text-sm">
-                  <span>{involvement.collaborator.name}</span>
-                  <Badge tone={involvement.role === "VITIMA" ? "danger" : "neutral"}>
-                    {involvement.role === "VITIMA" ? "Envolvido" : "Testemunha"}
-                  </Badge>
+              {accident.involvements.map((involvement) => {
+                const info = involvedPeople.find((p) => p.collaboratorId === involvement.collaboratorId);
+                return (
+                  <div key={involvement.collaboratorId} className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2 text-sm">
+                    <span>
+                      {involvement.collaborator.name}
+                      {(info?.cargo || info?.sap) && (
+                        <span className="block text-[11px] text-foreground-subtle">
+                          {info.cargo}
+                          {info.cargo && info.sap ? " · " : ""}
+                          {info.sap ? `SAP ${info.sap}` : ""}
+                        </span>
+                      )}
+                    </span>
+                    <Badge tone={involvement.role === "VITIMA" ? "danger" : "neutral"}>
+                      {involvement.role === "VITIMA" ? "Envolvido" : "Testemunha"}
+                    </Badge>
+                  </div>
+                );
+              })}
+              {externalPeople.map((p) => (
+                <div key={p.id} className="flex items-center justify-between gap-3 rounded-md border border-dashed border-border px-3 py-2 text-sm">
+                  <span>
+                    {p.name}
+                    <span className="block text-[11px] text-foreground-subtle">
+                      {p.cargo}
+                      {p.cargo && p.sap ? " · " : ""}
+                      {p.sap ? `SAP ${p.sap}` : ""}
+                    </span>
+                  </span>
+                  <Badge tone="warning" title="Veio da planilha do Credit, mas não há colaborador com esse nome no SIGO.">não cadastrado no SIGO</Badge>
                 </div>
               ))}
             </CardContent>

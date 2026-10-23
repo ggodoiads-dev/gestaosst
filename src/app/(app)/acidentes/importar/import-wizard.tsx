@@ -258,6 +258,13 @@ export function ImportWizard() {
                         </Badge>
                       )}
                       {row.involvedCollaboratorIds.length === 0 && row.unmatchedNames.length === 0 && "—"}
+                      {row.involvedPeople?.[0] && (row.involvedPeople[0].cargo || row.involvedPeople[0].sap) && (
+                        <span className="block text-[11px]">
+                          {row.involvedPeople[0].name}
+                          {row.involvedPeople[0].cargo ? ` · ${row.involvedPeople[0].cargo}` : ""}
+                          {row.involvedPeople[0].sap ? ` · SAP ${row.involvedPeople[0].sap}` : ""}
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell>
                       {row.action === "create" && <Badge tone="success">Criar</Badge>}

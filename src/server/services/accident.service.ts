@@ -39,6 +39,17 @@ export function listAccidentsForUser(user: CurrentUser, filters: { status?: Acci
   });
 }
 
+/** Envolvidos como vieram do Credit (nome, SAP, cargo). Leitura tolerante: se a tabela ainda não existir no banco, a tela do acidente continua abrindo. */
+export async function listInvolvedPeople(user: CurrentUser, accidentId: string) {
+  requirePermission(user, PERMISSIONS.ACCIDENT_MANAGE);
+  try {
+    return await db.accidentInvolvedPerson.findMany({ where: { accidentId }, orderBy: { createdAt: "asc" } });
+  } catch (error) {
+    console.error("[acidentes] envolvidos (SAP/cargo) indisponíveis:", error);
+    return [];
+  }
+}
+
 export async function getAccidentDetail(user: CurrentUser, id: string) {
   requirePermission(user, PERMISSIONS.ACCIDENT_MANAGE);
   return db.accident.findUniqueOrThrow({

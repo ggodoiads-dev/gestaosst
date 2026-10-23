@@ -1067,9 +1067,10 @@ model Accident {
   investigatedBy User? @relation("AccidentInvestigatedBy", fields: [investigatedById], references: [id])
   reportedBy     User  @relation("AccidentReportedBy", fields: [reportedById], references: [id])
 
-  involvements AccidentInvolvement[]
-  actions      AccidentAction[]
-  attachments  Attachment[]
+  involvements   AccidentInvolvement[]
+  involvedPeople AccidentInvolvedPerson[]
+  actions        AccidentAction[]
+  attachments    Attachment[]
 
   @@index([status])
   @@index([date])
@@ -1854,4 +1855,20 @@ model ShiftProduction {
 
   @@unique([date, turnoId])
   @@index([date])
+}
+
+/// Pessoa envolvida no acidente como veio da planilha do Credit: nome, nº SAP e cargo. Guarda também quem NÃO é colaborador cadastrado no SIGO
+/// (`collaboratorId` fica vazio nesse caso). Complementa `AccidentInvolvement`, que só liga colaboradores cadastrados.
+model AccidentInvolvedPerson {
+  id             String   @id @default(uuid())
+  accidentId     String
+  name           String
+  sap            String?
+  cargo          String?
+  collaboratorId String?
+  createdAt      DateTime @default(now())
+
+  accident Accident @relation(fields: [accidentId], references: [id], onDelete: Cascade)
+
+  @@index([accidentId])
 }

@@ -35,6 +35,10 @@ const FIELD_ALIASES: Record<AccidentImportField, string[]> = {
   isSif: ["esif", "sif"],
   sifClassification: ["classificacaosif", "tiposif", "classifsif"],
   creditNumber: ["credit", "numerocredit", "ncredit", "numerodocredit"],
+  involvedFirstName: ["primeironome"],
+  involvedLastName: ["ultimonome", "sobrenome"],
+  involvedSap: ["numerodeidentificacaosap", "numerodeidentificacao", "sap"],
+  involvedCargo: ["cargo"],
   company: ["empresa", "empresaenvolvida", "empregador", "contratada", "companhia"],
   involvedCollaborators: ["envolvidos", "colaboradoresenvolvidos", "vitimas", "acidentado", "acidentados", "nomedoacidentado"],
   status: ["status", "situacao"],
@@ -137,6 +141,8 @@ export type AccidentImportRowResult = {
   involvedNames: string[];
   involvedCollaboratorIds: string[];
   unmatchedNames: string[];
+  /** Envolvido como veio da planilha (nome completo, SAP e cargo), com o colaborador cadastrado quando achado. */
+  involvedPeople: { name: string; sap: string | null; cargo: string | null; collaboratorId: string | null }[];
   status: AccidentStatus;
   error?: string;
 };
@@ -156,11 +162,12 @@ export async function buildAccidentImportPreview(
 
   const [areas, collaborators] = await Promise.all([
     db.area.findMany({ where: { active: true } }),
-    db.collaborator.findMany({ where: { active: true }, select: { id: true, name: true } }),
+    db.collaborator.findMany({ where: { active: true }, select: { id: true, name: true, matricula: true } }),
   ]);
   const findArea = (name: string | null) =>
     name ? areas.find((a) => a.name.trim().toLowerCase() === name.trim().toLowerCase()) : undefined;
   const collabByName = new Map(collaborators.map((c) => [normalize(c.name), c.id]));
+  const collabBySap = new Map(collaborators.filter((c) => c.matricula).map((c) => [normalize(c.matricula ?? ""), c.id]));
   // Credit já cadastrado: reimportar a mesma planilha não duplica.
   const existingCredits = new Set(
     (await db.accident.findMany({ where: { creditNumber: { not: null } }, select: { creditNumber: true } })).map((a) => normalize(a.creditNumber ?? "")),
@@ -187,16 +194,27 @@ export async function buildAccidentImportPreview(
     const involvedRaw = getCell(row, mapping, "involvedCollaborators");
     const statusRaw = getCell(row, mapping, "status");
     const companyRaw = getCell(row, mapping, "company");
+    const firstName = getCell(row, mapping, "involvedFirstName");
+    const lastName = getCell(row, mapping, "involvedLastName");
+    const sap = getCell(row, mapping, "involvedSap");
+    const cargo = getCell(row, mapping, "involvedCargo");
 
-    const involvedNames = involvedRaw
-      ? involvedRaw.split(/[,;]/).map((s) => s.trim()).filter(Boolean)
-      : [];
+    // O Credit separa nome e sobrenome em colunas: juntar os dois dá o nome completo do envolvido.
+    const fullName = [firstName, lastName].filter(Boolean).join(" ").trim();
+    const involvedNames = [
+      ...(involvedRaw ? involvedRaw.split(/[,;]/).map((s) => s.trim()).filter(Boolean) : []),
+      ...(fullName ? [fullName] : []),
+    ];
     const involvedCollaboratorIds: string[] = [];
     const unmatchedNames: string[] = [];
+    const involvedPeople: AccidentImportRowResult["involvedPeople"] = [];
     for (const name of involvedNames) {
-      const id = collabByName.get(normalize(name));
-      if (id) involvedCollaboratorIds.push(id);
-      else unmatchedNames.push(name);
+      const isFull = name === fullName;
+      const id = (isFull && sap ? collabBySap.get(normalize(sap)) : undefined) ?? collabByName.get(normalize(name));
+      if (id) {
+        if (!involvedCollaboratorIds.includes(id)) involvedCollaboratorIds.push(id);
+      } else unmatchedNames.push(name);
+      involvedPeople.push({ name, sap: isFull ? sap : null, cargo: isFull ? cargo : null, collaboratorId: id ?? null });
     }
 
     const base = {
@@ -213,6 +231,7 @@ export async function buildAccidentImportPreview(
       involvedNames,
       involvedCollaboratorIds,
       unmatchedNames,
+      involvedPeople,
     };
 
     // Planilha do Credit traz também outras empresas: só a LOG20 entra. Linha sem empresa preenchida é importada.
@@ -345,7 +364,7 @@ export async function commitAccidentImport(
       continue;
     }
     try {
-      await createAccident(user, {
+      const accident = await createAccident(user, {
         date: row.dateParsed,
         time: row.time,
         areaId: row.areaId ?? null,
@@ -361,6 +380,16 @@ export async function commitAccidentImport(
         witnessCollaboratorIds: [],
         status: row.status,
       });
+      // Nome completo, SAP e cargo do envolvido (inclusive quem não é colaborador cadastrado). Se a tabela ainda não existir, o acidente fica criado assim mesmo.
+      if (row.involvedPeople?.length) {
+        try {
+          await db.accidentInvolvedPerson.createMany({
+            data: row.involvedPeople.map((p) => ({ accidentId: accident.id, name: p.name.slice(0, 200), sap: p.sap?.slice(0, 60) ?? null, cargo: p.cargo?.slice(0, 120) ?? null, collaboratorId: p.collaboratorId })),
+          });
+        } catch (peopleError) {
+          console.error("[accident-import] não consegui guardar os envolvidos (SAP/cargo):", peopleError);
+        }
+      }
       created++;
     } catch (error) {
       console.error(`[accident-import] falha ao importar linha ${row.rowIndex}:`, error);

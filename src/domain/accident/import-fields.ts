@@ -12,6 +12,10 @@ export type AccidentImportField =
   | "creditNumber"
   | "company"
   | "involvedCollaborators"
+  | "involvedFirstName"
+  | "involvedLastName"
+  | "involvedSap"
+  | "involvedCargo"
   | "status";
 
 export const ACCIDENT_IMPORT_FIELDS: { key: AccidentImportField; label: string; required: boolean }[] = [
@@ -28,6 +32,10 @@ export const ACCIDENT_IMPORT_FIELDS: { key: AccidentImportField; label: string; 
   { key: "creditNumber", label: "Nº do Credit", required: false },
   { key: "company", label: "Empresa (só entram as linhas da LOG20; as outras são ignoradas)", required: false },
   { key: "involvedCollaborators", label: "Colaboradores envolvidos (nomes, separados por vírgula)", required: false },
+  { key: "involvedFirstName", label: "Envolvido: primeiro nome (junta com o último nome)", required: false },
+  { key: "involvedLastName", label: "Envolvido: último nome / sobrenome", required: false },
+  { key: "involvedSap", label: "Envolvido: número de identificação (SAP)", required: false },
+  { key: "involvedCargo", label: "Envolvido: cargo", required: false },
   { key: "status", label: "Status (Aberto/Em investigação/Concluído)", required: false },
 ];
 
