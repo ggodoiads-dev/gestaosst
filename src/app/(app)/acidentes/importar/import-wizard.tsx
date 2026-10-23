@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { ACCIDENT_IMPORT_FIELDS, type AccidentImportMapping } from "@/domain/accident/import-fields";
+import type { AccidentType } from "@/generated/prisma/enums";
 import {
   uploadAccidentSpreadsheetAction,
   previewAccidentImportAction,
@@ -42,6 +43,7 @@ export function ImportWizard() {
   const [headers, setHeaders] = useState<string[]>([]);
   const [rows, setRows] = useState<string[][]>([]);
   const [mapping, setMapping] = useState<AccidentImportMapping>({});
+  const [defaultType, setDefaultType] = useState<AccidentType>("ACIDENTE_TIPICO");
   const [previewRows, setPreviewRows] = useState<AccidentImportRowResult[]>([]);
   const [result, setResult] = useState<{ created: number; errors: number; skipped: number } | null>(null);
 
@@ -70,7 +72,7 @@ export function ImportWizard() {
   function handleBuildPreview() {
     setError(null);
     startTransition(async () => {
-      const res = await previewAccidentImportAction(rows, mapping);
+      const res = await previewAccidentImportAction(rows, mapping, defaultType);
       if (!res.ok) {
         setError(res.error);
         return;
@@ -157,6 +159,22 @@ export function ImportWizard() {
               ))}
             </div>
 
+            <div className="flex max-w-md flex-col gap-1.5">
+              <label className="text-[13px] font-medium text-foreground-muted">Tipo padrão (para linha sem tipo ou com tipo não reconhecido)</label>
+              <Select value={defaultType} onValueChange={(v) => setDefaultType(v as AccidentType)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(TYPE_LABELS).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             {rows.length > 0 && (
               <div>
                 <p className="mb-1.5 text-xs font-medium text-foreground-subtle">
@@ -196,7 +214,6 @@ export function ImportWizard() {
               loading={pending}
               disabled={
                 mapping.date === undefined ||
-                mapping.type === undefined ||
                 mapping.severity === undefined ||
                 mapping.description === undefined
               }
@@ -239,6 +256,11 @@ export function ImportWizard() {
                     <TableCell>{row.dateParsed ? formatDate(row.dateParsed) : row.date || "—"}</TableCell>
                     <TableCell className="text-foreground-subtle">
                       {row.typeValue ? TYPE_LABELS[row.typeValue] : row.type || "—"}
+                      {row.typeAssumed && row.typeValue && (
+                        <Badge tone="warning" title={row.type ? `"${row.type}" não foi reconhecido: usado o tipo padrão.` : "Sem tipo na planilha: usado o tipo padrão."} className="ml-1.5">
+                          assumido
+                        </Badge>
+                      )}
                     </TableCell>
                     <TableCell className="text-foreground-subtle">{row.severityValue}</TableCell>
                     <TableCell className="text-foreground-subtle">

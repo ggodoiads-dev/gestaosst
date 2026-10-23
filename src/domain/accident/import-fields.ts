@@ -20,7 +20,7 @@ export type AccidentImportField =
 
 export const ACCIDENT_IMPORT_FIELDS: { key: AccidentImportField; label: string; required: boolean }[] = [
   { key: "date", label: "Data", required: true },
-  { key: "type", label: "Tipo (Acidente Típico/Trajeto, Quase Acidente, Doença Ocupacional)", required: true },
+  { key: "type", label: "Tipo (Acidente Típico/Trajeto, Quase Acidente, Doença Ocupacional) — vazio ou não reconhecido usa o tipo padrão", required: false },
   { key: "severity", label: "Severidade (Baixa/Média/Alta/Crítica)", required: true },
   { key: "description", label: "Descrição", required: true },
   { key: "time", label: "Hora", required: false },

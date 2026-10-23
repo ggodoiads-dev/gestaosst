@@ -5,6 +5,7 @@ import { requireUser, requirePermission, ForbiddenError } from "@/server/auth/cu
 import { PERMISSIONS } from "@/domain/shared/permissions";
 import * as accidentImportService from "@/server/services/accident-import.service";
 import type { AccidentImportMapping, AccidentImportRowResult } from "@/server/services/accident-import.service";
+import type { AccidentType } from "@/generated/prisma/enums";
 
 export type UploadResult =
   | { ok: true; headers: string[]; rows: string[][]; suggestedMapping: AccidentImportMapping }
@@ -40,10 +41,11 @@ export type PreviewResult = { ok: true; rows: AccidentImportRowResult[] } | { ok
 export async function previewAccidentImportAction(
   rows: string[][],
   mapping: AccidentImportMapping,
+  defaultType?: AccidentType,
 ): Promise<PreviewResult> {
   try {
     const user = await requireUser();
-    const preview = await accidentImportService.buildAccidentImportPreview(user, rows, mapping);
+    const preview = await accidentImportService.buildAccidentImportPreview(user, rows, mapping, defaultType);
     return { ok: true, rows: preview };
   } catch (error) {
     if (error instanceof ForbiddenError) return { ok: false, error: error.message };

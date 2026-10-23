@@ -122,6 +122,8 @@ export type AccidentImportRowResult = {
   /** `skip`: linha ignorada de propósito (outra empresa, ou Credit que já foi importado) — não conta como erro. */
   action: "create" | "error" | "skip";
   skipReason?: string;
+  /** O tipo não veio na planilha (ou não foi reconhecido) e foi usado o tipo padrão escolhido na importação. */
+  typeAssumed?: boolean;
   date: string;
   dateParsed: Date | null;
   time: string | null;
@@ -157,6 +159,7 @@ export async function buildAccidentImportPreview(
   user: CurrentUser,
   rows: string[][],
   mapping: AccidentImportMapping,
+  defaultType: AccidentType = "ACIDENTE_TIPICO",
 ): Promise<AccidentImportRowResult[]> {
   requirePermission(user, PERMISSIONS.ACCIDENT_MANAGE);
 
@@ -284,21 +287,10 @@ export async function buildAccidentImportPreview(
       continue;
     }
 
-    const typeValue = typeRaw ? (TYPE_ALIASES[normalize(typeRaw)] ?? null) : null;
-    if (!typeValue) {
-      results.push({
-        ...base,
-        dateParsed,
-        typeValue: null,
-        severityValue: "MEDIA",
-        isSif: false,
-        sifClassification: null,
-        status: "CONCLUIDO",
-        action: "error",
-        error: `Tipo "${typeRaw ?? ""}" não reconhecido — use Acidente Típico, Acidente de Trajeto, Quase Acidente ou Doença Ocupacional.`,
-      });
-      continue;
-    }
+    // Tipo não é obrigatório: vazio ou não reconhecido usa o tipo padrão escolhido na tela (marcado como "assumido" na revisão).
+    const recognizedType = typeRaw ? (TYPE_ALIASES[normalize(typeRaw)] ?? null) : null;
+    const typeValue: AccidentType = recognizedType ?? defaultType;
+    const typeAssumed = !recognizedType;
 
     if (!description) {
       results.push({
@@ -329,6 +321,7 @@ export async function buildAccidentImportPreview(
       dateParsed,
       typeValue,
       severityValue: resolveSeverity(severityRaw, "MEDIA"),
+      typeAssumed,
       areaId: matchedArea?.id,
       areaUnmatched,
       isSif,
