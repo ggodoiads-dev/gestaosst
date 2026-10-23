@@ -5,7 +5,7 @@ import { formatInTimeZone } from "date-fns-tz";
 import { requireUser } from "@/server/auth/current-user";
 import { hasPermission } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
-import { isWarehouseHelper } from "@/domain/production/helpers";
+import { displayUnit, isWarehouseHelper } from "@/domain/production/helpers";
 import { getAllProductivityGoalsProgress, getProductivityDashboard } from "@/server/services/productivity.service";
 import { listActivitiesForUser } from "@/server/services/activity.service";
 import { listActiveCollaboratorsForSupervision } from "@/server/services/collaborator.service";
@@ -90,7 +90,7 @@ export default async function ProdutividadePage({ searchParams }: { searchParams
                 <th className="px-3 py-1.5 text-left font-semibold">Ajudante</th>
                 <th className="px-3 py-1.5 text-left font-semibold">Dias com lançamento</th>
                 {month.byActivity.map((a) => (
-                  <th key={a.activityId} className="px-3 py-1.5 text-right font-semibold">{a.activityName}{a.unit ? ` (${a.unit})` : ""}</th>
+                  <th key={a.activityId} title={a.activityName} className="w-32 max-w-32 px-3 py-1.5 text-right align-bottom font-semibold"><span className="line-clamp-3 normal-case tracking-normal">{a.activityName}{displayUnit(a.unit) ? ` (${displayUnit(a.unit)})` : ""}</span></th>
                 ))}
                 <th className="w-8" />
               </tr>
@@ -143,7 +143,7 @@ export default async function ProdutividadePage({ searchParams }: { searchParams
               <tbody>
                 {month.byActivity.map((a) => (
                   <tr key={a.activityId} className="border-b border-border last:border-b-0">
-                    <td className="px-3 py-1.5 text-foreground">{a.activityName}</td>
+                    <td className="px-3 py-1.5 text-foreground">{a.activityName}{a.unit && !displayUnit(a.unit) && <span className="block text-[11px] text-foreground-subtle">{a.unit}</span>}</td>
                     <td className="px-3 py-1.5">
                       <div className="flex items-center gap-2">
                         <div className="h-1.5 w-24 overflow-hidden rounded-full bg-neutral-soft">
@@ -152,7 +152,7 @@ export default async function ProdutividadePage({ searchParams }: { searchParams
                         <span className="tabular-nums text-foreground-muted">{a.count}</span>
                       </div>
                     </td>
-                    <td className="px-3 py-1.5 text-right tabular-nums font-medium text-foreground">{a.unit ? `${a.totalQuantity.toLocaleString("pt-BR")} ${a.unit}` : "—"}</td>
+                    <td className="px-3 py-1.5 text-right tabular-nums font-medium text-foreground">{a.totalQuantity.toLocaleString("pt-BR")}{displayUnit(a.unit) ? ` ${displayUnit(a.unit)}` : ""}</td>
                   </tr>
                 ))}
                 {month.byActivity.length === 0 && (
@@ -190,7 +190,7 @@ export default async function ProdutividadePage({ searchParams }: { searchParams
                         <div className={cn("h-full rounded-full", percent >= 100 ? "bg-success" : percent >= 60 ? "bg-accent" : "bg-warning")} style={{ width: `${Math.min(percent, 100)}%` }} />
                       </div>
                       <span className="whitespace-nowrap text-xs tabular-nums text-foreground-muted">
-                        {achieved}/{goal.targetQuantity}{goal.activity.unit ? ` ${goal.activity.unit}` : ""} ({percent}%)
+                        {achieved}/{goal.targetQuantity}{displayUnit(goal.activity.unit) ? ` ${displayUnit(goal.activity.unit)}` : ""} ({percent}%)
                       </span>
                     </div>
                   </td>

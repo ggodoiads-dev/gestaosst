@@ -65,10 +65,10 @@ export function ProductionViewClient({ months, selected, year, month, ytd, repor
             </div>
             {(t.selecaoTotalChapas !== undefined || t.selecaoPalletsSelecionados !== undefined) && (
               <div className="mt-2 grid grid-cols-2 gap-2 lg:grid-cols-4">
-                <Tile label="Total de chapas (seleção)" value={fmt(t.selecaoTotalChapas)} sub={`${fmt(t.selecaoChapaDpvim)} DPVIM · ${fmt(t.selecaoTransferencia)} em transferência`} small />
-                <Tile label="Pallets selecionados" value={fmt(t.selecaoPalletsSelecionados)} sub="fechamento dos ajudantes" small />
-                <Tile label="Reforma" value={fmt(t.selecaoReforma)} sub={`${fmt(t.selecaoBom)} bons · ${fmt(t.selecaoDescarte)} descartados`} small />
-                <Tile label="Quebra" value={fmt(t.selecaoQuebra)} sub="chapas e pallets quebrados" small />
+                <Tile label="Chapas selecionadas" value={fmt(t.selecaoTotalChapas)} sub={`soma do "total chapas" de cada fechamento · ${fmt(t.selecaoTransferencia)} foram para transferência`} small />
+                <Tile label="Pallets selecionados" value={fmt(t.selecaoPalletsSelecionados)} sub="só dos fechamentos que informam esse total" small />
+                <Tile label="Enviados para reforma" value={fmt(t.selecaoReforma)} sub={`de ${fmt((t.selecaoBom ?? 0) + (t.selecaoReforma ?? 0) + (t.selecaoDescarte ?? 0))} classificados: ${fmt(t.selecaoBom)} bons, ${fmt(t.selecaoReforma)} reforma, ${fmt(t.selecaoDescarte)} descarte`} small />
+                <Tile label="Quebra" value={fmt(t.selecaoQuebra)} sub="soma das linhas de quebra dos fechamentos" small />
               </div>
             )}
           </section>

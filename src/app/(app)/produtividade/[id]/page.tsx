@@ -4,7 +4,7 @@ import { addDays, addMonths, addWeeks, endOfMonth, endOfWeek, startOfMonth, star
 import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
 import { requireUser, hasPermission } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
-import { isWarehouseHelper } from "@/domain/production/helpers";
+import { displayUnit, isWarehouseHelper } from "@/domain/production/helpers";
 import { getProductivityGoalsProgress, getProductivityRange } from "@/server/services/productivity.service";
 import { listActiveActivitiesForProductivityLog } from "@/server/services/activity.service";
 import { PageHeader, PageBody } from "@/components/domain/page-header";
@@ -130,7 +130,7 @@ export default async function AjudanteProdutividadePage({
                   <tr key={r.name} className="border-b border-border last:border-b-0">
                     <td className="px-3 py-1.5 text-foreground">{r.name}</td>
                     <td className="px-3 py-1.5 text-right tabular-nums text-foreground-muted">{r.count}</td>
-                    <td className="px-3 py-1.5 text-right font-medium tabular-nums text-foreground">{r.unit ? `${r.quantity.toLocaleString("pt-BR")} ${r.unit}` : r.quantity.toLocaleString("pt-BR")}</td>
+                    <td className="px-3 py-1.5 text-right font-medium tabular-nums text-foreground">{r.quantity.toLocaleString("pt-BR")}{displayUnit(r.unit) ? ` ${displayUnit(r.unit)}` : ""}</td>
                   </tr>
                 ))}
                 {totalRows.length === 0 && (
@@ -151,7 +151,7 @@ export default async function AjudanteProdutividadePage({
                     <span className="text-foreground">{goal.activity.name}</span>
                     <span className="tabular-nums text-foreground-muted">
                       {achieved}/{goal.targetQuantity}
-                      {goal.activity.unit ? ` ${goal.activity.unit}` : ""} ({percent}%)
+                      {displayUnit(goal.activity.unit) ? ` ${displayUnit(goal.activity.unit)}` : ""} ({percent}%)
                     </span>
                   </div>
                   <div className="mt-1 h-2 overflow-hidden rounded-full bg-neutral-soft">
