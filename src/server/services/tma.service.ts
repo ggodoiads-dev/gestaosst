@@ -97,6 +97,7 @@ async function loadRows(periodKeys: string[]): Promise<TmaStatsRow[]> {
       agendamento: true,
       apresentacao: true,
       liberacao: true,
+      fimAmarracao: true,
       tmaMin: true,
       atendimentoMin: true,
       patioMin: true,
@@ -110,7 +111,7 @@ async function loadRows(periodKeys: string[]): Promise<TmaStatsRow[]> {
       turno: true,
     },
   });
-  return rows.map((r) => ({ ...r, agendamento: iso(r.agendamento), apresentacao: iso(r.apresentacao), liberacao: iso(r.liberacao) }));
+  return rows.map((r) => ({ ...r, agendamento: iso(r.agendamento), apresentacao: iso(r.apresentacao), liberacao: iso(r.liberacao), fimAmarracao: iso(r.fimAmarracao) }));
 }
 
 export type TmaView = {

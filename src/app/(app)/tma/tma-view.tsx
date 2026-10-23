@@ -44,7 +44,7 @@ export function TmaViewClient({ months, selected, year, month, ytd, importedAt }
           podem incluir carros da aba liberados no mês seguinte{month.carregados.outsideMonth > 0 ? `; ${month.carregados.outsideMonth} liberado(s) da aba ficaram fora da contagem de carregados por terem liberação em outro mês ou sem data` : ""}).
         </p>
         <div className="mt-2 grid grid-cols-2 gap-2 lg:grid-cols-5">
-          <Tile label="Tempo de amarração" value={formatDuration(month.stages.amarracao)} sub="fim do carregamento → fim da amarração" tone="neutral" small />
+          <Tile label="Carros amarrados" value={String(month.amarrados.total)} sub={`${pct(month.carregados.total === 0 ? null : Math.round((month.amarrados.total / month.carregados.total) * 1000) / 10)} dos carregados · tempo médio ${formatDuration(month.amarrados.avgAmarracao)}`} tone="neutral" small />
           <Tile label="Tempo de atendimento" value={formatDuration(month.atendimento.avg)} sub={`entrada no atendimento → liberação · ${pct(month.atendimento.within3h)} em até 3h`} tone="neutral" small />
           <Tile label="Com agendamento" value={pct(month.withSchedule)} sub={month.onTime === null ? undefined : `${pct(month.onTime)} no horário ou antes`} tone="neutral" small />
           <Tile label="Não apresentaram" value={String(month.notShown)} sub={`${month.holes} furo(s) · ${month.releasedMaster} liberados master (fora da média)`} tone="neutral" small />
@@ -65,6 +65,7 @@ export function TmaViewClient({ months, selected, year, month, ytd, importedAt }
       </section>
 
       <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <AmarracaoTable rows={month.amarrados.byTurno} total={month.amarrados.total} loaded={month.carregados.total} />
         <GroupTable title="Por transportadora" rows={month.byTransportadora} />
         <GroupTable title="Por destino" rows={month.byDestino} />
         <GroupTable title="Por conferente" rows={month.byConferente} />
@@ -147,6 +148,50 @@ function Stages({ stages }: { stages: TmaStats["stages"] }) {
         );
       })}
     </ul>
+  );
+}
+
+function AmarracaoTable({ rows, total, loaded }: { rows: TmaStats["amarrados"]["byTurno"]; total: number; loaded: number }) {
+  const max = Math.max(...rows.map((r) => r.tied), 1);
+  return (
+    <div className="overflow-hidden rounded-md border border-border bg-surface">
+      <h3 className="border-b border-border bg-surface-muted px-3 py-2 text-sm font-semibold text-foreground">Carros amarrados por turno</h3>
+      <p className="px-3 pt-2 text-[11px] text-foreground-subtle">
+        Vem da planilha: carro carregado no mês com a hora de fim da amarração preenchida ({total} de {loaded}). O tempo é do fim do carregamento ao fim da amarração.
+      </p>
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-border text-[11px] uppercase tracking-wide text-foreground-subtle">
+            <th className="px-3 py-1.5 text-left font-semibold">Turno</th>
+            <th className="px-3 py-1.5 text-left font-semibold">Amarrados</th>
+            <th className="px-3 py-1.5 text-right font-semibold">Carregados</th>
+            <th className="px-3 py-1.5 text-right font-semibold">Tempo médio</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.name} className="border-b border-border last:border-b-0">
+              <td className="px-3 py-1.5 text-foreground">{r.name === "(sem informação)" ? r.name : `Turno ${r.name}`}</td>
+              <td className="px-3 py-1.5">
+                <div className="flex items-center gap-2">
+                  <div className="h-1.5 w-24 overflow-hidden rounded-full bg-neutral-soft">
+                    <div className="h-full rounded-full bg-accent" style={{ width: `${(r.tied / max) * 100}%` }} />
+                  </div>
+                  <span className="tabular-nums font-medium text-foreground">{r.tied}</span>
+                </div>
+              </td>
+              <td className="px-3 py-1.5 text-right tabular-nums text-foreground-muted">{r.loaded}</td>
+              <td className="px-3 py-1.5 text-right tabular-nums text-foreground-muted">{formatDuration(r.avgAmarracao)}</td>
+            </tr>
+          ))}
+          {rows.length === 0 && (
+            <tr>
+              <td colSpan={4} className="px-3 py-5 text-center text-foreground-subtle">Sem dados.</td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
   );
 }
 

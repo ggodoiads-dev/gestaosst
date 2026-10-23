@@ -77,7 +77,7 @@ describe("leitura de uma aba", () => {
 });
 
 describe("carros carregados", () => {
-  const base = { agendamento: null, apresentacao: null, tmaMin: 100, atendimentoMin: 100, patioMin: null, esperaMin: null, tmcMin: null, amarracaoMin: null, liberacaoMin: null, transportadora: null, destino: null, conferente: null, turno: null, periodKey: "2026-09" };
+  const base = { fimAmarracao: null, agendamento: null, apresentacao: null, tmaMin: 100, atendimentoMin: 100, patioMin: null, esperaMin: null, tmcMin: null, amarracaoMin: null, liberacaoMin: null, transportadora: null, destino: null, conferente: null, turno: null, periodKey: "2026-09" };
   it("conta os liberados com liberação dentro do mês, com e sem agendamento", () => {
     const stats = computeTmaStats([
       { ...base, status: "LIBERADO", liberacao: "2026-09-10T10:00", agendamento: "2026-09-10T08:00" },
@@ -88,6 +88,20 @@ describe("carros carregados", () => {
     ]);
     expect(stats.carregados).toEqual({ total: 2, withSchedule: 1, withoutSchedule: 1, outsideMonth: 2 });
     expect(stats.loaded).toBe(2); // TMA: os dois com agendamento (um deles liberado em outubro)
+  });
+  it("carro amarrado é o carregado com fim de amarração, e se divide por turno", () => {
+    const stats = computeTmaStats([
+      { ...base, status: "LIBERADO", liberacao: "2026-09-10T10:00", fimAmarracao: "2026-09-10T09:40", amarracaoMin: 20, turno: "B" },
+      { ...base, status: "LIBERADO", liberacao: "2026-09-11T10:00", fimAmarracao: "2026-09-11T09:30", amarracaoMin: 40, turno: "C" },
+      { ...base, status: "LIBERADO", liberacao: "2026-09-12T10:00", turno: "C" },
+      { ...base, status: "LIBERADO", liberacao: "2026-10-01T10:00", fimAmarracao: "2026-10-01T09:00", amarracaoMin: 30, turno: "B" },
+    ]);
+    expect(stats.amarrados.total).toBe(2);
+    expect(stats.amarrados.avgAmarracao).toBe(30);
+    expect(stats.amarrados.byTurno).toEqual([
+      { name: "B", loaded: 1, tied: 1, avgAmarracao: 20 },
+      { name: "C", loaded: 2, tied: 1, avgAmarracao: 40 },
+    ]);
   });
 });
 
@@ -101,7 +115,7 @@ describe("chaves do cascateamento", () => {
     expect(parseTmaKey("dre.avr:233")).toBeNull();
   });
   it("valor da métrica a partir das estatísticas", () => {
-    const stats = computeTmaStats([{ status: "LIBERADO", agendamento: null, apresentacao: null, liberacao: "2026-10-01T10:00", tmaMin: 300, atendimentoMin: 120, patioMin: 10, esperaMin: 20, tmcMin: 40, amarracaoMin: 30, liberacaoMin: 15, transportadora: "A", destino: "B", conferente: "C", turno: "A" }]);
+    const stats = computeTmaStats([{ status: "LIBERADO", fimAmarracao: null, agendamento: null, apresentacao: null, liberacao: "2026-10-01T10:00", tmaMin: 300, atendimentoMin: 120, patioMin: 10, esperaMin: 20, tmcMin: 40, amarracaoMin: 30, liberacaoMin: 15, transportadora: "A", destino: "B", conferente: "C", turno: "A" }]);
     expect(tmaMetricValue(stats, parseTmaKey("tma.avg")!)).toBe(300);
     expect(tmaMetricValue(stats, parseTmaKey("tma.atendimento")!)).toBe(120);
     expect(tmaMetricValue(stats, parseTmaKey("tma.ambev")!)).toBe(300); // apelido antigo do TMA oficial

@@ -5,7 +5,7 @@ export const TMA_TARGET_MIN = 180;
 
 export type TmaStatsRow = Pick<
   TmaRowInput,
-  "status" | "agendamento" | "apresentacao" | "liberacao" | "tmaMin" | "atendimentoMin" | "patioMin" | "esperaMin" | "tmcMin" | "amarracaoMin" | "liberacaoMin" | "transportadora" | "destino" | "conferente" | "turno"
+  "status" | "agendamento" | "apresentacao" | "liberacao" | "fimAmarracao" | "tmaMin" | "atendimentoMin" | "patioMin" | "esperaMin" | "tmcMin" | "amarracaoMin" | "liberacaoMin" | "transportadora" | "destino" | "conferente" | "turno"
 > & {
   /** AAAA-MM da aba. Serve pra saber se a aba tem a coluna de agendamento (meses antigos não têm). */
   periodKey?: string;
@@ -44,6 +44,13 @@ export function countsAsLoaded(row: TmaStatsRow): boolean {
   return !row.periodKey || row.liberacao.slice(0, 7) === row.periodKey;
 }
 
+/** Carro amarrado = carro carregado (liberado no mês) com a hora de fim da amarração preenchida na planilha. Cada caminhão tem a sua, então o controle é por carro. */
+export function countsAsTied(row: TmaStatsRow): boolean {
+  return countsAsLoaded(row) && !!row.fimAmarracao;
+}
+
+export type TiedByTurno = { name: string; loaded: number; tied: number; avgAmarracao: number | null };
+
 export type GroupStat = { name: string; count: number; avgTma: number | null; within3h: number | null; avgAmarracao: number | null };
 
 function groupBy(rows: TmaStatsRow[], key: (r: TmaStatsRow) => string | null): GroupStat[] {
@@ -64,6 +71,8 @@ function groupBy(rows: TmaStatsRow[], key: (r: TmaStatsRow) => string | null): G
 }
 
 export type TmaStats = {
+  /** Carros amarrados (planilha): quantos dos carregados têm o fim da amarração, o tempo médio e a divisão por turno. */
+  amarrados: { total: number; avgAmarracao: number | null; byTurno: TiedByTurno[] };
   /** Carros carregados (liberados no mês). `withSchedule` entram no TMA oficial; `withoutSchedule` não (sem agendamento o TMA não é avaliável). */
   carregados: { total: number; withSchedule: number; withoutSchedule: number; outsideMonth: number };
   /** Caminhões que entram na média do TMA oficial. */
@@ -99,6 +108,8 @@ export function computeTmaStats(rows: TmaStatsRow[]): TmaStats {
   const atend = rows.filter(countsForAtendimento);
   const loadedAll = rows.filter((r) => r.status === "LIBERADO");
   const carregados = loadedAll.filter(countsAsLoaded);
+  const tied = carregados.filter(countsAsTied);
+  const turnoNames = [...new Set(carregados.map((r) => r.turno ?? "(sem informação)"))].sort((a, b) => a.localeCompare(b, "pt-BR"));
   const scheduled = loadedAll.filter((r) => r.agendamento).length;
   const timed = loadedAll.filter((r) => r.agendamento && r.apresentacao);
   const onTime = timed.filter((r) => r.apresentacao! <= r.agendamento!).length;
@@ -112,6 +123,15 @@ export function computeTmaStats(rows: TmaStatsRow[]): TmaStats {
   const positive = (list: (number | null)[]) => list.filter((v): v is number => present(v) && v > 0);
 
   return {
+    amarrados: {
+      total: tied.length,
+      avgAmarracao: avg(tied.map((r) => r.amarracaoMin).filter((v): v is number => present(v) && v > 0)),
+      byTurno: turnoNames.map((name) => {
+        const mine = carregados.filter((r) => (r.turno ?? "(sem informação)") === name);
+        const mineTied = mine.filter(countsAsTied);
+        return { name, loaded: mine.length, tied: mineTied.length, avgAmarracao: avg(mineTied.map((r) => r.amarracaoMin).filter((v): v is number => present(v) && v > 0)) };
+      }),
+    },
     carregados: {
       total: carregados.length,
       withSchedule: carregados.filter((r) => r.agendamento).length,
