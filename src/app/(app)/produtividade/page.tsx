@@ -17,6 +17,11 @@ import { ProductivityGoalDialog, DeleteProductivityGoalButton } from "../indicad
 const MONTHS = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
 const monthKeyOf = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 const monthLabel = (key: string) => `${MONTHS[Number(key.slice(5, 7)) - 1]} de ${key.slice(0, 4)}`;
+/** "Separação e seleção de chapatex" → "Chapatex": o nome cadastrado é longo demais para título de coluna. */
+function shortActivityName(name: string): string {
+  const n = name.replace(/\s*\(.*$/, "").replace(/^separa[cç][aã]o e sele[cç][aã]o de\s+/i, "").replace(/\.$/, "").trim();
+  return n.charAt(0).toUpperCase() + n.slice(1);
+}
 const pct = (part: number, total: number) => (total === 0 ? null : Math.round((part / total) * 100));
 
 export default async function ProdutividadePage({ searchParams }: { searchParams: Promise<{ periodo?: string }> }) {
@@ -37,7 +42,8 @@ export default async function ProdutividadePage({ searchParams }: { searchParams
   const helpers = allCollaborators.filter(isWarehouseHelper);
   const { month, today } = dashboard;
   const adherence = pct(month.collaboratorsLogged, month.collaboratorsScheduled);
-  const maxCount = Math.max(...month.byActivity.map((a) => a.count), 1);
+  const producers = month.byCollaborator.filter((c) => c.entries > 0);
+  const idle = month.byCollaborator.filter((c) => c.entries === 0);
   const prev = monthKeyOf(addMonths(new Date(Number(selected.slice(0, 4)), Number(selected.slice(5, 7)) - 1, 1), -1));
   const next = monthKeyOf(addMonths(new Date(Number(selected.slice(0, 4)), Number(selected.slice(5, 7)) - 1, 1), 1));
 
@@ -83,87 +89,74 @@ export default async function ProdutividadePage({ searchParams }: { searchParams
         )}
 
         <section className="overflow-x-auto rounded-md border border-border bg-surface">
-          <h3 className="border-b border-border bg-surface-muted px-3 py-2 text-sm font-semibold text-foreground">Produtividade por ajudante</h3>
-          <table className="w-full min-w-[560px] text-sm">
+          <div className="border-b border-border bg-surface-muted px-3 py-2">
+            <h3 className="text-sm font-semibold text-foreground">Quem produziu em {monthLabel(selected)}</h3>
+            <p className="text-[11px] text-foreground-subtle">Quantidade lançada por pessoa em cada atividade. Clique no nome para ver o dia a dia.</p>
+          </div>
+          <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border text-[11px] uppercase tracking-wide text-foreground-subtle">
                 <th className="px-3 py-1.5 text-left font-semibold">Ajudante</th>
-                <th className="px-3 py-1.5 text-left font-semibold">Dias com lançamento</th>
                 {month.byActivity.map((a) => (
-                  <th key={a.activityId} title={a.activityName} className="w-32 max-w-32 px-3 py-1.5 text-right align-bottom font-semibold"><span className="line-clamp-3 normal-case tracking-normal">{a.activityName}{displayUnit(a.unit) ? ` (${displayUnit(a.unit)})` : ""}</span></th>
+                  <th key={a.activityId} title={a.activityName} className="px-2 py-1.5 text-right align-bottom font-semibold">
+                    <span className="line-clamp-3 max-w-28 normal-case tracking-normal">{shortActivityName(a.activityName)}</span>
+                  </th>
                 ))}
+                <th className="px-3 py-1.5 text-right font-semibold">Dias lançados</th>
                 <th className="w-8" />
               </tr>
             </thead>
             <tbody>
-              {month.byCollaborator.map((c) => {
-                const cover = pct(c.daysLogged, c.workDays) ?? 0;
-                return (
-                  <tr key={c.id} className="border-b border-border last:border-b-0 hover:bg-surface-muted">
-                    <td className="px-3 py-1.5">
-                      <Link href={`/produtividade/${c.id}?period=mes&ref=${selected}-15`} className="font-medium text-foreground hover:text-accent hover:underline">{c.name}</Link>
+              {producers.map((c) => (
+                <tr key={c.id} className="border-b border-border hover:bg-surface-muted">
+                  <td className="px-3 py-1.5">
+                    <Link href={`/produtividade/${c.id}?period=mes&ref=${selected}-15`} className="font-medium text-foreground hover:text-accent hover:underline">{c.name}</Link>
+                  </td>
+                  {month.byActivity.map((a) => (
+                    <td key={a.activityId} className="px-2 py-1.5 text-right tabular-nums text-foreground">
+                      {c.quantityByActivity[a.activityId] ? c.quantityByActivity[a.activityId].toLocaleString("pt-BR") : <span className="text-foreground-subtle">—</span>}
                     </td>
-                    <td className="px-3 py-1.5">
-                      <div className="flex items-center gap-2">
-                        <div className="h-1.5 w-24 overflow-hidden rounded-full bg-neutral-soft">
-                          <div className={cn("h-full rounded-full", cover >= 90 ? "bg-success" : cover >= 60 ? "bg-accent" : "bg-warning")} style={{ width: `${Math.min(cover, 100)}%` }} />
-                        </div>
-                        <span className="whitespace-nowrap text-xs tabular-nums text-foreground-muted">{c.daysLogged}/{c.workDays} ({cover}%)</span>
-                      </div>
-                    </td>
-                    {month.byActivity.map((a) => (
-                      <td key={a.activityId} className="px-3 py-1.5 text-right tabular-nums text-foreground">{c.quantityByActivity[a.activityId] ? c.quantityByActivity[a.activityId].toLocaleString("pt-BR") : <span className="text-foreground-subtle">—</span>}</td>
-                    ))}
-                    <td className="px-2 py-1.5 text-right">
-                      <Link href={`/produtividade/${c.id}?period=mes&ref=${selected}-15`} aria-label={`Abrir ${c.name}`} className="text-foreground-subtle hover:text-accent"><ChevronRight className="size-4" /></Link>
-                    </td>
-                  </tr>
-                );
-              })}
-              {month.byCollaborator.length === 0 && (
+                  ))}
+                  <td className="whitespace-nowrap px-3 py-1.5 text-right text-xs tabular-nums text-foreground-muted">{c.daysLogged} de {c.workDays}</td>
+                  <td className="px-2 py-1.5 text-right">
+                    <Link href={`/produtividade/${c.id}?period=mes&ref=${selected}-15`} aria-label={`Abrir ${c.name}`} className="text-foreground-subtle hover:text-accent"><ChevronRight className="size-4" /></Link>
+                  </td>
+                </tr>
+              ))}
+              {producers.length === 0 && (
                 <tr>
-                  <td colSpan={3 + month.byActivity.length} className="px-3 py-6 text-center text-foreground-subtle">Nenhum ajudante escalado neste mês.</td>
+                  <td colSpan={3 + month.byActivity.length} className="px-3 py-6 text-center text-foreground-subtle">Nenhum lançamento neste mês.</td>
                 </tr>
               )}
             </tbody>
+            {producers.length > 0 && (
+              <tfoot>
+                <tr className="bg-surface-muted font-semibold">
+                  <td className="px-3 py-1.5 text-foreground">Total do mês</td>
+                  {month.byActivity.map((a) => (
+                    <td key={a.activityId} className="px-2 py-1.5 text-right tabular-nums text-foreground">{a.totalQuantity.toLocaleString("pt-BR")}</td>
+                  ))}
+                  <td colSpan={2} />
+                </tr>
+              </tfoot>
+            )}
           </table>
         </section>
 
-        <section className="grid grid-cols-1 gap-4">
-          <div className="overflow-hidden rounded-md border border-border bg-surface">
-            <h3 className="border-b border-border bg-surface-muted px-3 py-2 text-sm font-semibold text-foreground">Produção por atividade</h3>
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-[11px] uppercase tracking-wide text-foreground-subtle">
-                  <th className="px-3 py-1.5 text-left font-semibold">Atividade</th>
-                  <th className="px-3 py-1.5 text-left font-semibold">Lançamentos</th>
-                  <th className="px-3 py-1.5 text-right font-semibold">Quantidade</th>
-                </tr>
-              </thead>
-              <tbody>
-                {month.byActivity.map((a) => (
-                  <tr key={a.activityId} className="border-b border-border last:border-b-0">
-                    <td className="px-3 py-1.5 text-foreground">{a.activityName}{a.unit && !displayUnit(a.unit) && <span className="block text-[11px] text-foreground-subtle">{a.unit}</span>}</td>
-                    <td className="px-3 py-1.5">
-                      <div className="flex items-center gap-2">
-                        <div className="h-1.5 w-24 overflow-hidden rounded-full bg-neutral-soft">
-                          <div className="h-full rounded-full bg-accent" style={{ width: `${(a.count / maxCount) * 100}%` }} />
-                        </div>
-                        <span className="tabular-nums text-foreground-muted">{a.count}</span>
-                      </div>
-                    </td>
-                    <td className="px-3 py-1.5 text-right tabular-nums font-medium text-foreground">{a.totalQuantity.toLocaleString("pt-BR")}{displayUnit(a.unit) ? ` ${displayUnit(a.unit)}` : ""}</td>
-                  </tr>
-                ))}
-                {month.byActivity.length === 0 && (
-                  <tr>
-                    <td colSpan={3} className="px-3 py-6 text-center text-foreground-subtle">Nenhum lançamento neste mês.</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
+        {idle.length > 0 && (
+          <section className="rounded-md border border-border bg-surface px-3 py-2.5">
+            <h3 className="text-sm font-semibold text-foreground">Sem lançamento em {monthLabel(selected)} ({idle.length})</h3>
+            <p className="mb-1.5 text-[11px] text-foreground-subtle">Estavam escalados, mas nenhuma produção foi lançada no nome deles.</p>
+            <p className="text-sm text-foreground-muted">
+              {idle.map((c, i) => (
+                <span key={c.id}>
+                  {i > 0 && " · "}
+                  <Link href={`/produtividade/${c.id}?period=mes&ref=${selected}-15`} className="hover:text-accent hover:underline">{c.name}</Link>
+                </span>
+              ))}
+            </p>
+          </section>
+        )}
 
         <section className="overflow-hidden rounded-md border border-border bg-surface">
           <div className="flex items-center justify-between border-b border-border bg-surface-muted px-3 py-2">

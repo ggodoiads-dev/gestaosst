@@ -199,7 +199,9 @@ export async function getProductivityRange(
   await assertProductivityViewAccess(user, params.collaboratorId);
   const { collaborator, days } = await buildCollaboratorDays(params.collaboratorId, params.from, params.to);
 
-  const workDays = days.filter((d) => d.status === "TRABALHO");
+  // Dia que ainda não aconteceu não pode contar como "sem lançamento".
+  const tomorrow = addDays(startOfDay(new Date()), 1);
+  const workDays = days.filter((d) => d.status === "TRABALHO" && d.date < tomorrow);
   const daysWithEntries = workDays.filter((d) => d.entries.length > 0);
 
   return {
@@ -255,8 +257,10 @@ async function computePeriodStats(
   let workDays = 0;
   const scheduledCollaboratorIds = new Set<string>();
   const workDaysByCollaborator = new Map<string, number>();
+  // Só até hoje: dia que ainda não aconteceu não conta como dia de trabalho sem lançamento.
+  const countUntil = new Date(Math.min(rangeEndExclusive.getTime(), addDays(startOfDay(new Date()), 1).getTime()));
   for (const c of collaborators) {
-    for (let date = rangeStart; date < rangeEndExclusive; date = addDays(date, 1)) {
+    for (let date = rangeStart; date < countUntil; date = addDays(date, 1)) {
       const note = notesByKey.get(`${c.id}|${localDateKey(date)}`);
       const status = note ? note.overrideStatus : getCollaboratorDayStatus(date, c);
       if (status === "TRABALHO") {
