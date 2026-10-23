@@ -7,15 +7,34 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { PRODUCTION_GROUPS, fieldsOfGroup, sanitizeProductionValues, type ProductionValues } from "@/domain/production/fields";
-import { parseAnyProductionMessage } from "@/domain/production/parse";
-import { loadShiftProductionAction, saveShiftProductionAction } from "@/server/actions/production.actions";
+import { looksLikeHelpersClosing, parseAnyProductionMessage } from "@/domain/production/parse";
+import { SECTION_LABELS, detailsNote, parseHelpersPeople, shareQuantity, suggestActivityId, type PeopleSection } from "@/domain/production/people";
+import { loadShiftProductionAction, savePeopleEntriesAction, saveShiftProductionAction } from "@/server/actions/production.actions";
 
 type Turno = { id: string; name: string };
-type Props = { turnos: Turno[]; today: string; initialDay: string; initialTurnoId: string };
+type Named = { id: string; name: string };
+type Props = { turnos: Turno[]; today: string; initialDay: string; initialTurnoId: string; helpers: Named[]; activities: Named[] };
+
+/** Uma linha da prévia "lançar também por pessoa": quem, em qual atividade e quanto. */
+type PersonRow = { key: string; section: PeopleSection; nameInMessage: string; collaboratorId: string; activityId: string; quantity: string; notes: string; include: boolean };
 
 const toText = (values: ProductionValues) => Object.fromEntries(Object.entries(values).map(([k, v]) => [k, String(v)]));
 
-export function LaunchForm({ turnos, today, initialDay, initialTurnoId }: Props) {
+/** A mesma pessoa na mesma atividade em dois blocos da mensagem (ex.: duas ordens do DPVIM) vira um lançamento só, com as quantidades somadas. */
+function mergeRows(chosen: PersonRow[]) {
+  const merged = new Map<string, { collaboratorId: string; activityId: string; quantity: number | null; notes: string[] }>();
+  for (const r of chosen) {
+    const key = `${r.collaboratorId}|${r.activityId}`;
+    const q = r.quantity.trim() === "" ? null : Number(r.quantity);
+    const cur = merged.get(key) ?? { collaboratorId: r.collaboratorId, activityId: r.activityId, quantity: null, notes: [] };
+    if (q !== null) cur.quantity = (cur.quantity ?? 0) + q;
+    if (r.notes && !cur.notes.includes(r.notes)) cur.notes.push(r.notes);
+    merged.set(key, cur);
+  }
+  return [...merged.values()].map((m) => ({ collaboratorId: m.collaboratorId, activityId: m.activityId, quantity: m.quantity, notes: m.notes.join(" | ") }));
+}
+
+export function LaunchForm({ turnos, today, initialDay, initialTurnoId, helpers, activities }: Props) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [day, setDay] = useState(initialDay);
@@ -25,6 +44,7 @@ export function LaunchForm({ turnos, today, initialDay, initialTurnoId }: Props)
   const [paste, setPaste] = useState("");
   const [warnings, setWarnings] = useState<string[]>([]);
   const [existing, setExisting] = useState(false);
+  const [rows, setRows] = useState<PersonRow[]>([]);
   const skipLoad = useRef(false);
 
   // Abre preenchido quando já existe relatório para o dia + turno escolhidos (para corrigir).
@@ -48,7 +68,27 @@ export function LaunchForm({ turnos, today, initialDay, initialTurnoId }: Props)
 
   async function applyPaste() {
     const parsed = parseAnyProductionMessage(paste);
-    if (Object.keys(parsed.values).length === 0) {
+    // O fechamento dos ajudantes também vira lançamento por pessoa (prévia abaixo, para conferir).
+    let personRows: PersonRow[] = [];
+    let personWarnings: string[] = [];
+    if (looksLikeHelpersClosing(paste)) {
+      const people = parseHelpersPeople(paste, helpers);
+      personWarnings = people.unrecognized;
+      personRows = people.entries.flatMap((entry, ei) => {
+        const shares = shareQuantity(entry.quantity, entry.people.length);
+        return entry.people.map((p, pi) => ({
+          key: `${ei}-${pi}-${entry.section}`,
+          section: entry.section,
+          nameInMessage: p.text,
+          collaboratorId: p.candidateIds.length === 1 ? p.candidateIds[0] : "",
+          activityId: suggestActivityId(entry.section, activities),
+          quantity: shares[pi] === null || shares[pi] === undefined ? "" : String(shares[pi]),
+          notes: detailsNote(entry, entry.people.length),
+          include: true,
+        }));
+      });
+    }
+    if (Object.keys(parsed.values).length === 0 && personRows.length === 0) {
       toast.error("Não encontrei os campos do relatório nessa mensagem.");
       return;
     }
@@ -74,9 +114,10 @@ export function LaunchForm({ turnos, today, initialDay, initialTurnoId }: Props)
       setFields((cur) => ({ ...cur, ...toText(parsed.values) }));
       if (parsed.notes) setNotes(parsed.notes);
     }
-    setWarnings(parsed.unmatched);
+    setWarnings([...parsed.unmatched, ...personWarnings.map((w) => `${w} (nome não reconhecido)`)]);
+    if (personRows.length > 0) setRows(personRows);
     setPaste("");
-    toast.success(`${Object.keys(parsed.values).length} campos preenchidos. Confira e salve.`);
+    toast.success(`${Object.keys(parsed.values).length} campos preenchidos${personRows.length > 0 ? ` e ${personRows.length} lançamentos por pessoa na prévia` : ""}. Confira e salve.`);
   }
 
   function save() {
@@ -87,12 +128,33 @@ export function LaunchForm({ turnos, today, initialDay, initialTurnoId }: Props)
       if (Number.isFinite(n)) values[key] = n;
     }
     const clean = sanitizeProductionValues(values);
+    const chosen = rows.filter((r) => r.include);
+    if (chosen.some((r) => !r.collaboratorId || !r.activityId)) {
+      toast.error("Escolha o ajudante e a atividade das linhas marcadas (ou desmarque as que não quer lançar).");
+      return;
+    }
     start(async () => {
-      const res = await saveShiftProductionAction({ day, turnoId, values: clean, notes });
-      if (res.ok) {
-        toast.success("Relatório do turno salvo.");
-        router.push(`/producao?periodo=${day.slice(0, 7)}`);
-      } else toast.error(res.error);
+      if (Object.keys(clean).length > 0) {
+        const res = await saveShiftProductionAction({ day, turnoId, values: clean, notes });
+        if (!res.ok) {
+          toast.error(res.error);
+          return;
+        }
+      }
+      let peopleMessage = "";
+      if (chosen.length > 0) {
+        const res = await savePeopleEntriesAction({
+          day,
+          entries: mergeRows(chosen),
+        });
+        if (!res.ok) {
+          toast.error(`O total do turno foi salvo, mas o lançamento por pessoa falhou: ${res.error}`);
+          return;
+        }
+        peopleMessage = ` ${res.created + res.updated} lançamento(s) por pessoa gravados${res.skipped > 0 ? `, ${res.skipped} não puderam ser lançados` : ""}.`;
+      }
+      toast.success(`Relatório do turno salvo.${peopleMessage}`);
+      router.push(`/producao?periodo=${day.slice(0, 7)}`);
     });
   }
 
@@ -102,7 +164,7 @@ export function LaunchForm({ turnos, today, initialDay, initialTurnoId }: Props)
         <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-foreground">
           <ClipboardPaste className="size-4 text-foreground-subtle" /> Colar o relatório do WhatsApp
         </div>
-        <p className="mb-2 text-xs text-foreground-subtle">Cole aqui a mensagem de fim de turno do líder ou o fechamento dos ajudantes (seleção): os campos abaixo são preenchidos sozinhos. Pode colar as duas, uma de cada vez. Confira antes de salvar.</p>
+        <p className="mb-2 text-xs text-foreground-subtle">Cole aqui a mensagem de fim de turno do líder ou o fechamento dos ajudantes (seleção): os campos abaixo são preenchidos sozinhos. No fechamento dos ajudantes, o que cada pessoa fez também aparece para lançar por pessoa. Pode colar as duas mensagens, uma de cada vez. Confira antes de salvar.</p>
         <Textarea value={paste} onChange={(e) => setPaste(e.target.value)} rows={5} placeholder="*GERAL*&#10;Carros Carregados: 21&#10;…" />
         <Button variant="secondary" className="mt-2" onClick={applyPaste} disabled={paste.trim() === ""}>
           Preencher os campos
@@ -152,6 +214,66 @@ export function LaunchForm({ turnos, today, initialDay, initialTurnoId }: Props)
         </section>
       ))}
 
+      {rows.length > 0 && (
+        <section className="rounded-md border border-border bg-surface">
+          <div className="border-b border-border bg-surface-muted px-3 py-2">
+            <h3 className="text-sm font-semibold text-foreground">Lançar também por pessoa</h3>
+            <p className="text-[11px] text-foreground-subtle">
+              Cada linha marcada vira um lançamento na página do ajudante, no dia escolhido acima. Se a pessoa já tem essa atividade nesse dia, o lançamento é atualizado, não duplicado. Nas equipes (ex.: Jean/Bernardo) a quantidade foi dividida igualmente: ajuste se precisar.
+            </p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[720px] text-sm">
+              <thead>
+                <tr className="border-b border-border text-[11px] uppercase tracking-wide text-foreground-subtle">
+                  <th className="w-8 px-2 py-1.5" />
+                  <th className="px-2 py-1.5 text-left font-semibold">Na mensagem</th>
+                  <th className="px-2 py-1.5 text-left font-semibold">Ajudante</th>
+                  <th className="px-2 py-1.5 text-left font-semibold">Atividade</th>
+                  <th className="w-28 px-2 py-1.5 text-right font-semibold">Quantidade</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => {
+                  const incomplete = r.include && (!r.collaboratorId || !r.activityId);
+                  const update = (patch: Partial<PersonRow>) => setRows((cur) => cur.map((x) => (x.key === r.key ? { ...x, ...patch } : x)));
+                  return (
+                    <tr key={r.key} className={`border-b border-border last:border-b-0 ${incomplete ? "bg-warning-soft" : ""}`}>
+                      <td className="px-2 py-1.5 text-center">
+                        <input type="checkbox" checked={r.include} onChange={(e) => update({ include: e.target.checked })} className="size-4 accent-[var(--accent)]" aria-label="Lançar esta linha" />
+                      </td>
+                      <td className="px-2 py-1.5 text-foreground">
+                        {r.nameInMessage || "—"}
+                        <span className="block text-[11px] text-foreground-subtle">{SECTION_LABELS[r.section]}</span>
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <select value={r.collaboratorId} onChange={(e) => update({ collaboratorId: e.target.value })} className="h-8 w-full rounded-md border border-border-strong bg-surface px-1.5 text-sm text-foreground">
+                          <option value="">Escolher…</option>
+                          {helpers.map((h) => (
+                            <option key={h.id} value={h.id}>{h.name}</option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <select value={r.activityId} onChange={(e) => update({ activityId: e.target.value })} className="h-8 w-full rounded-md border border-border-strong bg-surface px-1.5 text-sm text-foreground">
+                          <option value="">Escolher…</option>
+                          {activities.map((a) => (
+                            <option key={a.id} value={a.id}>{a.name}</option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <input type="text" inputMode="numeric" value={r.quantity} onChange={(e) => update({ quantity: e.target.value.replace(/\D/g, "") })} className="h-8 w-full rounded-md border border-border-strong bg-surface px-2 text-right text-sm tabular-nums text-foreground" placeholder="—" />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
       <section className="rounded-md border border-border bg-surface p-3">
         <label className="flex flex-col gap-1 text-xs text-foreground-subtle">
           Observações
@@ -161,7 +283,7 @@ export function LaunchForm({ turnos, today, initialDay, initialTurnoId }: Props)
 
       <div className="flex gap-2">
         <Button onClick={save} loading={pending} disabled={!day || !turnoId}>
-          Salvar relatório do turno
+          Salvar
         </Button>
         <Button variant="ghost" onClick={() => router.push("/producao")}>
           Cancelar

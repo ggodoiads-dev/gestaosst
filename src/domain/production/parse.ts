@@ -1,7 +1,7 @@
 import { PRODUCTION_FIELDS, sanitizeProductionValues, type ProductionField, type ProductionGroupKey, type ProductionValues } from "./fields";
 
 /** Tira acento, emoji, asterisco e pontuação de enfeite; deixa minúsculo. */
-function plain(text: string): string {
+export function plain(text: string): string {
   return text
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")

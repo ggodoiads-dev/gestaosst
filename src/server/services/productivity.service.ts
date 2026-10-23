@@ -91,6 +91,49 @@ export async function createProductivityEntry(user: CurrentUser, data: Productiv
   return entry;
 }
 
+export type ProductivityBatchEntry = { collaboratorId: string; activityId: string; quantity: number | null; notes: string | null };
+
+/**
+ * Lança de uma vez o que cada ajudante fez no dia (vindo do fechamento do turno colado). Refazer o mesmo fechamento não duplica: se a pessoa já tem
+ * lançamento da mesma atividade nesse dia, o dele é atualizado. Cada linha confere o acesso à pessoa; as que não passam voltam em `skipped`.
+ */
+export async function saveProductivityEntriesBatch(user: CurrentUser, params: { date: Date; entries: ProductivityBatchEntry[] }) {
+  let created = 0;
+  let updated = 0;
+  const skipped: { collaboratorId: string; reason: string }[] = [];
+  for (const entry of params.entries.slice(0, 200)) {
+    try {
+      await assertProductivityAccess(user, entry.collaboratorId, LOG_SELF_PERMISSIONS);
+      const target = await db.collaborator.findUniqueOrThrow({ where: { id: entry.collaboratorId }, select: { cargo: true } });
+      if (!isWarehouseHelper(target)) {
+        skipped.push({ collaboratorId: entry.collaboratorId, reason: "Não é ajudante de armazém." });
+        continue;
+      }
+      const quantity = entry.quantity !== null && Number.isFinite(entry.quantity) && entry.quantity >= 0 ? Math.round(entry.quantity) : null;
+      const notes = entry.notes?.trim() ? entry.notes.trim().slice(0, 500) : null;
+      const existing = await db.productivityEntry.findFirst({
+        where: { collaboratorId: entry.collaboratorId, activityId: entry.activityId, date: params.date },
+      });
+      if (existing) {
+        await db.$transaction(async (tx) => {
+          await tx.productivityEntry.update({ where: { id: existing.id }, data: { quantity, notes } });
+          await recordAudit({ userId: user.id, action: "UPDATE", entityType: "ProductivityEntry", entityId: existing.id, previousValue: { quantity: existing.quantity, notes: existing.notes }, newValue: { quantity, notes } }, tx);
+        });
+        updated++;
+      } else {
+        await db.$transaction(async (tx) => {
+          const row = await tx.productivityEntry.create({ data: { collaboratorId: entry.collaboratorId, activityId: entry.activityId, date: params.date, quantity, notes, createdById: user.id } });
+          await recordAudit({ userId: user.id, action: "CREATE", entityType: "ProductivityEntry", entityId: row.id, newValue: { collaboratorId: entry.collaboratorId, activityId: entry.activityId, quantity, notes } }, tx);
+        });
+        created++;
+      }
+    } catch (error) {
+      skipped.push({ collaboratorId: entry.collaboratorId, reason: error instanceof ForbiddenError ? "Sem acesso a esta pessoa." : "Não foi possível lançar." });
+    }
+  }
+  return { created, updated, skipped };
+}
+
 export async function deleteProductivityEntry(user: CurrentUser, id: string) {
   const entry = await db.productivityEntry.findUniqueOrThrow({ where: { id }, select: { collaboratorId: true } });
   await assertProductivityAccess(user, entry.collaboratorId, LOG_SELF_PERMISSIONS);
