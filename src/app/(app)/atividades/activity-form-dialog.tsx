@@ -44,7 +44,7 @@ function ActivityFields({
         <FormField
           label="Unidade de produção"
           htmlFor={`${idPrefix}-unit`}
-          hint="Opcional — ex: caminhões, paletes, chapas. Habilita quantidade em Produtividade"
+          hint="Preencha só se a atividade se mede por quantidade (ex: chapas, paletes, quadros). Deixe vazio para atividades que só contam como feitas, como 5S: elas não terão campo de quantidade"
         >
           <Input id={`${idPrefix}-unit`} name="unit" placeholder="Ex: chapas" defaultValue={defaults?.unit ?? ""} />
         </FormField>

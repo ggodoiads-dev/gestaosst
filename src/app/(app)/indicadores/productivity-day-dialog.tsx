@@ -24,6 +24,7 @@ import {
   type ActionResult,
 } from "@/server/actions/productivity.actions";
 import { useCloseOnSuccess } from "@/lib/use-close-on-success";
+import { displayUnit, measuresQuantity } from "@/domain/production/helpers";
 import { parseDateOnly, formatDate } from "@/lib/dates";
 import type { Activity } from "@/generated/prisma/client";
 
@@ -88,7 +89,7 @@ export function ProductivityDayDialog({
                   <div className="min-w-0">
                     <p className="font-medium truncate">
                       {entry.activity.name}
-                      {entry.quantity != null && ` — ${entry.quantity} ${entry.activity.unit ?? ""}`}
+                      {entry.quantity != null && measuresQuantity(entry.activity) && ` — ${entry.quantity} ${displayUnit(entry.activity.unit) ?? ""}`}
                     </p>
                     {entry.notes && <p className="text-xs text-foreground-subtle truncate">{entry.notes}</p>}
                   </div>
@@ -131,13 +132,17 @@ export function ProductivityDayDialog({
                   </SelectContent>
                 </Select>
               </FormField>
-              <FormField
-                label={selectedActivity?.unit ? `Quantidade (${selectedActivity.unit})` : "Quantidade"}
-                htmlFor="quantity"
-                hint="Opcional"
-              >
-                <Input id="quantity" name="quantity" type="number" min={0} step={1} placeholder="0" />
-              </FormField>
+              {selectedActivity && measuresQuantity(selectedActivity) ? (
+                <FormField
+                  label={displayUnit(selectedActivity.unit) ? `Quantidade (${displayUnit(selectedActivity.unit)})` : "Quantidade"}
+                  htmlFor="quantity"
+                  hint="Opcional"
+                >
+                  <Input id="quantity" name="quantity" type="number" min={0} step={1} placeholder="0" />
+                </FormField>
+              ) : (
+                <p className="text-xs text-foreground-subtle">Esta atividade não se mede por quantidade: o lançamento só registra que foi feita neste dia.</p>
+              )}
               <FormField label="Observação" htmlFor="notes" hint="Opcional">
                 <Textarea id="notes" name="notes" rows={2} placeholder="Opcional" />
               </FormField>

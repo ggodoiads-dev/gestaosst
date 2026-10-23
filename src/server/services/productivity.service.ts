@@ -7,7 +7,7 @@ import { rollCallCollaboratorWhere, type RollCallCollaboratorWhere } from "@/ser
 import type { CurrentUser } from "@/server/auth/current-user";
 import { hasPermission, ForbiddenError } from "@/server/auth/current-user";
 import { PERMISSIONS, type PermissionKey } from "@/domain/shared/permissions";
-import { isWarehouseHelper } from "@/domain/production/helpers";
+import { isWarehouseHelper, measuresQuantity } from "@/domain/production/helpers";
 
 export type ProductivityEntryInput = {
   collaboratorId: string;
@@ -75,6 +75,8 @@ function productivityCollaboratorScopeWhere(user: CurrentUser): RollCallCollabor
 export async function createProductivityEntry(user: CurrentUser, data: ProductivityEntryInput) {
   await assertProductivityAccess(user, data.collaboratorId, LOG_SELF_PERMISSIONS);
   const target = await db.collaborator.findUniqueOrThrow({ where: { id: data.collaboratorId }, select: { cargo: true } });
+  const activity = await db.activity.findUniqueOrThrow({ where: { id: data.activityId }, select: { name: true, unit: true } });
+  if (!measuresQuantity(activity)) data = { ...data, quantity: null };
   if (!isWarehouseHelper(target)) {
     throw new Error("A produtividade por pessoa vale só para ajudantes de armazém. Carros e descargas são lançados por turno, em Produção.");
   }
@@ -101,6 +103,8 @@ export async function saveProductivityEntriesBatch(user: CurrentUser, params: { 
   let created = 0;
   let updated = 0;
   const skipped: { collaboratorId: string; reason: string }[] = [];
+  const activityRows = await db.activity.findMany({ where: { id: { in: [...new Set(params.entries.map((e) => e.activityId))] } }, select: { id: true, name: true, unit: true } });
+  const quantityActivityIds = new Set(activityRows.filter(measuresQuantity).map((a) => a.id));
   for (const entry of params.entries.slice(0, 200)) {
     try {
       await assertProductivityAccess(user, entry.collaboratorId, LOG_SELF_PERMISSIONS);
@@ -109,7 +113,7 @@ export async function saveProductivityEntriesBatch(user: CurrentUser, params: { 
         skipped.push({ collaboratorId: entry.collaboratorId, reason: "Não é ajudante de armazém." });
         continue;
       }
-      const quantity = entry.quantity !== null && Number.isFinite(entry.quantity) && entry.quantity >= 0 ? Math.round(entry.quantity) : null;
+      const quantity = quantityActivityIds.has(entry.activityId) && entry.quantity !== null && Number.isFinite(entry.quantity) && entry.quantity >= 0 ? Math.round(entry.quantity) : null;
       const notes = entry.notes?.trim() ? entry.notes.trim().slice(0, 500) : null;
       const existing = await db.productivityEntry.findFirst({
         where: { collaboratorId: entry.collaboratorId, activityId: entry.activityId, date: params.date },

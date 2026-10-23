@@ -4,7 +4,7 @@ import { addDays, addMonths, addWeeks, endOfMonth, endOfWeek, startOfMonth, star
 import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
 import { requireUser, hasPermission } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
-import { displayUnit, isWarehouseHelper } from "@/domain/production/helpers";
+import { displayUnit, isWarehouseHelper, measuresQuantity } from "@/domain/production/helpers";
 import { getProductivityGoalsProgress, getProductivityRange } from "@/server/services/productivity.service";
 import { listActiveActivitiesForProductivityLog } from "@/server/services/activity.service";
 import { PageHeader, PageBody } from "@/components/domain/page-header";
@@ -66,10 +66,10 @@ export default async function AjudanteProdutividadePage({
   const canEdit = hasPermission(user, PERMISSIONS.PRODUCTIVITY_MANAGE) || hasPermission(user, PERMISSIONS.PRODUCTIVITY_MANAGE_TEAM) || user.canRollCall;
   const href = (p: { period: Period; ref: Date }) => `/produtividade/${id}?period=${p.period}&ref=${dayKey(p.ref)}`;
 
-  const totals = new Map<string, { name: string; unit: string | null; quantity: number; count: number }>();
+  const totals = new Map<string, { name: string; unit: string | null; quantity: number; count: number; byQuantity: boolean }>();
   for (const d of report.days) {
     for (const e of d.entries) {
-      const acc = totals.get(e.activityId) ?? { name: e.activity.name, unit: e.activity.unit, quantity: 0, count: 0 };
+      const acc = totals.get(e.activityId) ?? { name: e.activity.name, unit: e.activity.unit, quantity: 0, count: 0, byQuantity: measuresQuantity(e.activity) };
       acc.quantity += e.quantity ?? 0;
       acc.count += 1;
       totals.set(e.activityId, acc);
@@ -130,7 +130,7 @@ export default async function AjudanteProdutividadePage({
                   <tr key={r.name} className="border-b border-border last:border-b-0">
                     <td className="px-3 py-1.5 text-foreground">{r.name}</td>
                     <td className="px-3 py-1.5 text-right tabular-nums text-foreground-muted">{r.count}</td>
-                    <td className="px-3 py-1.5 text-right font-medium tabular-nums text-foreground">{r.quantity.toLocaleString("pt-BR")}{displayUnit(r.unit) ? ` ${displayUnit(r.unit)}` : ""}</td>
+                    <td className="px-3 py-1.5 text-right font-medium tabular-nums text-foreground">{r.byQuantity ? `${r.quantity.toLocaleString("pt-BR")}${displayUnit(r.unit) ? ` ${displayUnit(r.unit)}` : ""}` : <span className="text-foreground-subtle">sem quantidade</span>}</td>
                   </tr>
                 ))}
                 {totalRows.length === 0 && (

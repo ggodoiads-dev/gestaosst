@@ -4,7 +4,7 @@ import { addMonths } from "date-fns";
 import { formatInTimeZone } from "date-fns-tz";
 import { requireUser, hasPermission } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
-import { displayUnit, isWarehouseHelper } from "@/domain/production/helpers";
+import { displayUnit, isWarehouseHelper, measuresQuantity } from "@/domain/production/helpers";
 import { getAllProductivityGoalsProgress, getProductivityDashboard } from "@/server/services/productivity.service";
 import { listActivitiesForUser } from "@/server/services/activity.service";
 import { listActiveCollaboratorsForSupervision } from "@/server/services/collaborator.service";
@@ -46,9 +46,9 @@ export default async function ProdutividadePage({ searchParams }: { searchParams
 
   // Uma atividade por vez. Atividade sem quantidade (ex.: 5S) é medida pelo número de lançamentos.
   const act = month.byActivity.find((a) => a.activityId === atividade) ?? month.byActivity[0] ?? null;
-  const useQuantity = !!act && act.totalQuantity > 0;
+  const useQuantity = !!act && measuresQuantity({ name: act.activityName, unit: act.unit });
   const unit = act && useQuantity ? displayUnit(act.unit) : null;
-  const metricLabel = useQuantity ? (unit ?? "quantidade") : "lançamentos";
+  const metricLabel = useQuantity ? (unit ?? "quantidade") : "vezes que foi feito";
   const valueOf = (q: Record<string, number>, c: Record<string, number>) => (act ? (useQuantity ? q[act.activityId] : c[act.activityId]) ?? 0 : 0);
 
   const ranking = act
@@ -121,7 +121,7 @@ export default async function ProdutividadePage({ searchParams }: { searchParams
             <section className="grid grid-cols-2 gap-2 lg:grid-cols-5">
               {month.byActivity.map((a) => {
                 const on = act?.activityId === a.activityId;
-                const qty = a.totalQuantity > 0;
+                const qty = measuresQuantity({ name: a.activityName, unit: a.unit });
                 const people = month.byCollaborator.filter((c) => (qty ? c.quantityByActivity[a.activityId] : c.countByActivity[a.activityId])).length;
                 return (
                   <Link
@@ -133,7 +133,7 @@ export default async function ProdutividadePage({ searchParams }: { searchParams
                     <p className="line-clamp-2 min-h-8 text-xs font-medium text-foreground">{shortActivityName(a.activityName)}</p>
                     <p className="mt-1 text-xl font-semibold tabular-nums text-foreground">{qty ? nf(a.totalQuantity) : nf(a.count)}</p>
                     <p className="text-[11px] text-foreground-subtle">
-                      {qty ? (displayUnit(a.unit) ?? "no mês") : "lançamentos"} · {people} {people === 1 ? "pessoa" : "pessoas"}
+                      {qty ? (displayUnit(a.unit) ?? "no mês") : "vezes no mês"} · {people} {people === 1 ? "pessoa" : "pessoas"}
                     </p>
                   </Link>
                 );

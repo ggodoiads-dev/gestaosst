@@ -13,7 +13,8 @@ import { loadShiftProductionAction, savePeopleEntriesAction, saveShiftProduction
 
 type Turno = { id: string; name: string };
 type Named = { id: string; name: string };
-type Props = { turnos: Turno[]; today: string; initialDay: string; initialTurnoId: string; helpers: Named[]; activities: Named[] };
+type ActivityRef = Named & { measuresQuantity: boolean };
+type Props = { turnos: Turno[]; today: string; initialDay: string; initialTurnoId: string; helpers: Named[]; activities: ActivityRef[] };
 
 /** Uma linha da prévia "lançar também por pessoa": quem, em qual atividade e quanto. */
 type PersonRow = { key: string; section: PeopleSection; nameInMessage: string; collaboratorId: string; activityId: string; quantity: string; notes: string; include: boolean };
@@ -82,7 +83,7 @@ export function LaunchForm({ turnos, today, initialDay, initialTurnoId, helpers,
           nameInMessage: p.text,
           collaboratorId: p.candidateIds.length === 1 ? p.candidateIds[0] : "",
           activityId: suggestActivityId(entry.section, activities),
-          quantity: shares[pi] === null || shares[pi] === undefined ? "" : String(shares[pi]),
+          quantity: shares[pi] === null || shares[pi] === undefined || !activities.find((a) => a.id === suggestActivityId(entry.section, activities))?.measuresQuantity ? "" : String(shares[pi]),
           notes: detailsNote(entry, entry.people.length),
           include: true,
         }));
@@ -255,7 +256,7 @@ export function LaunchForm({ turnos, today, initialDay, initialTurnoId, helpers,
                         </select>
                       </td>
                       <td className="px-2 py-1.5">
-                        <select value={r.activityId} onChange={(e) => update({ activityId: e.target.value })} className="h-8 w-full rounded-md border border-border-strong bg-surface px-1.5 text-sm text-foreground">
+                        <select value={r.activityId} onChange={(e) => update({ activityId: e.target.value, ...(activities.find((a) => a.id === e.target.value)?.measuresQuantity === false ? { quantity: "" } : {}) })} className="h-8 w-full rounded-md border border-border-strong bg-surface px-1.5 text-sm text-foreground">
                           <option value="">Escolher…</option>
                           {activities.map((a) => (
                             <option key={a.id} value={a.id}>{a.name}</option>
@@ -263,7 +264,7 @@ export function LaunchForm({ turnos, today, initialDay, initialTurnoId, helpers,
                         </select>
                       </td>
                       <td className="px-2 py-1.5">
-                        <input type="text" inputMode="numeric" value={r.quantity} onChange={(e) => update({ quantity: e.target.value.replace(/\D/g, "") })} className="h-8 w-full rounded-md border border-border-strong bg-surface px-2 text-right text-sm tabular-nums text-foreground" placeholder="—" />
+                        <input type="text" inputMode="numeric" value={r.quantity} disabled={activities.find((a) => a.id === r.activityId)?.measuresQuantity === false} onChange={(e) => update({ quantity: e.target.value.replace(/\D/g, "") })} className="h-8 w-full rounded-md border border-border-strong bg-surface px-2 text-right text-sm tabular-nums text-foreground disabled:bg-surface-muted disabled:opacity-60" placeholder={activities.find((a) => a.id === r.activityId)?.measuresQuantity === false ? "sem quantidade" : "—"} />
                       </td>
                     </tr>
                   );

@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { formatInTimeZone } from "date-fns-tz";
 import { requireUser } from "@/server/auth/current-user";
 import { canLogProduction, listLoggableTurnos } from "@/server/services/production.service";
-import { isWarehouseHelper } from "@/domain/production/helpers";
+import { isWarehouseHelper, measuresQuantity } from "@/domain/production/helpers";
 import { listActiveCollaboratorsForSupervision } from "@/server/services/collaborator.service";
 import { listActiveActivitiesForProductivityLog } from "@/server/services/activity.service";
 import { PageHeader, PageBody } from "@/components/domain/page-header";
@@ -33,7 +33,7 @@ export default async function LancarProducaoPage({ searchParams }: { searchParam
         {turnos.length === 0 ? (
           <div className="rounded-lg border border-dashed border-border-strong bg-surface px-4 py-10 text-center text-sm text-foreground-subtle">Nenhum turno disponível para lançar.</div>
         ) : (
-          <LaunchForm turnos={turnos} today={today} initialDay={initialDay} initialTurnoId={initialTurnoId} helpers={helpers} activities={activities.map((a) => ({ id: a.id, name: a.name }))} />
+          <LaunchForm turnos={turnos} today={today} initialDay={initialDay} initialTurnoId={initialTurnoId} helpers={helpers} activities={activities.map((a) => ({ id: a.id, name: a.name, measuresQuantity: measuresQuantity(a) }))} />
         )}
       </PageBody>
     </>

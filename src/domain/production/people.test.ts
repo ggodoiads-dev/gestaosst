@@ -148,3 +148,14 @@ Amanda
     expect(suggestActivityId("5s", acts)).toBe("4");
   });
 });
+
+describe("atividade mede por quantidade?", () => {
+  it("sem unidade só conta as vezes; 5S nunca tem quantidade, mesmo com texto no campo unidade", async () => {
+    const { measuresQuantity } = await import("./helpers");
+    expect(measuresQuantity({ name: "Separação e seleção de chapatex", unit: "chapas" })).toBe(true);
+    expect(measuresQuantity({ name: "Separação e seleção de chapatex", unit: "VIDROS PARANÁ" })).toBe(true);
+    expect(measuresQuantity({ name: "Amarração sider", unit: null })).toBe(false);
+    expect(measuresQuantity({ name: "Amarração sider", unit: "  " })).toBe(false);
+    expect(measuresQuantity({ name: "5s Geral", unit: "5s Limpeza geral do armazém" })).toBe(false);
+  });
+});
