@@ -223,7 +223,9 @@ type PeriodStats = {
   totalEntries: number;
   byActivity: { activityId: string; activityName: string; unit: string | null; count: number; totalQuantity: number }[];
   /** Cada ajudante escalado no período: dias de trabalho, dias com lançamento e total lançado. */
-  byCollaborator: { id: string; name: string; workDays: number; daysLogged: number; entries: number; quantityByActivity: Record<string, number> }[];
+  byCollaborator: { id: string; name: string; workDays: number; daysLogged: number; entries: number; quantityByActivity: Record<string, number>; countByActivity: Record<string, number> }[];
+  /** Dia a dia (AAAA-MM-DD): quantidade e número de lançamentos de cada atividade. */
+  byDay: { day: string; quantityByActivity: Record<string, number>; countByActivity: Record<string, number> }[];
   missingCollaborators: { id: string; name: string }[];
 };
 
@@ -273,10 +275,20 @@ async function computePeriodStats(
   const daysLoggedByCollaborator = new Map<string, Set<string>>();
   const entriesByCollaborator = new Map<string, number>();
   const quantityByCollaborator = new Map<string, Record<string, number>>();
+  const countByCollaborator = new Map<string, Record<string, number>>();
+  const dayMap = new Map<string, { quantityByActivity: Record<string, number>; countByActivity: Record<string, number> }>();
   for (const e of entries) {
     const q = quantityByCollaborator.get(e.collaboratorId) ?? {};
     q[e.activityId] = (q[e.activityId] ?? 0) + (e.quantity ?? 0);
     quantityByCollaborator.set(e.collaboratorId, q);
+    const c = countByCollaborator.get(e.collaboratorId) ?? {};
+    c[e.activityId] = (c[e.activityId] ?? 0) + 1;
+    countByCollaborator.set(e.collaboratorId, c);
+    const dk = localDateKey(e.date);
+    const dd = dayMap.get(dk) ?? { quantityByActivity: {}, countByActivity: {} };
+    dd.quantityByActivity[e.activityId] = (dd.quantityByActivity[e.activityId] ?? 0) + (e.quantity ?? 0);
+    dd.countByActivity[e.activityId] = (dd.countByActivity[e.activityId] ?? 0) + 1;
+    dayMap.set(dk, dd);
     const set = daysLoggedByCollaborator.get(e.collaboratorId) ?? new Set<string>();
     set.add(localDateKey(e.date));
     daysLoggedByCollaborator.set(e.collaboratorId, set);
@@ -305,6 +317,7 @@ async function computePeriodStats(
     collaboratorsLogged: loggedCollaboratorIds.size,
     totalEntries: entries.length,
     byActivity: Array.from(byActivityMap.values()).sort((a, b) => b.count - a.count),
+    byDay: [...dayMap.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([day, v]) => ({ day, ...v })),
     byCollaborator: collaborators
       .filter((c) => scheduledCollaboratorIds.has(c.id))
       .map((c) => ({
@@ -314,6 +327,7 @@ async function computePeriodStats(
         daysLogged: daysLoggedByCollaborator.get(c.id)?.size ?? 0,
         entries: entriesByCollaborator.get(c.id) ?? 0,
         quantityByActivity: quantityByCollaborator.get(c.id) ?? {},
+        countByActivity: countByCollaborator.get(c.id) ?? {},
       }))
       .sort((a, b) => b.entries - a.entries || a.name.localeCompare(b.name, "pt-BR")),
     missingCollaborators: collaborators
