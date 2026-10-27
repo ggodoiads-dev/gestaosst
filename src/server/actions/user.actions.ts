@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/server/auth/current-user";
 import * as userService from "@/server/services/user.service";
 import { ForbiddenError } from "@/server/auth/current-user";
+import { setUserNavWhitelist } from "@/server/services/nav-access.service";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -30,6 +31,16 @@ function parseAreaIds(formData: FormData) {
 
 function parseFunctionIds(formData: FormData) {
   return formData.getAll("functionIds").map(String).filter(Boolean);
+}
+
+/** O formulário só manda `navRestrict=1` quando mostrou a escolha de abas (perfil Auditor). */
+async function saveNavAccess(admin: Awaited<ReturnType<typeof requireUser>>, userId: string, formData: FormData) {
+  if (formData.get("navRestrict") !== "1") {
+    // Perfil sem escolha de abas (mudou de Auditor para outro): limpa qualquer restrição antiga.
+    await setUserNavWhitelist(admin, userId, []);
+    return;
+  }
+  await setUserNavWhitelist(admin, userId, formData.getAll("navHrefs").map(String).filter(Boolean));
 }
 
 function parseCanRollCall(formData: FormData) {
@@ -66,7 +77,7 @@ export async function createUserAction(_prev: ActionResult, formData: FormData) 
       roleId: formData.get("roleId"),
       unitId: formData.get("unitId") || null,
     });
-    await userService.createUser(admin, {
+    const created = await userService.createUser(admin, {
       ...data,
       areaIds: parseAreaIds(formData),
       functionIds: parseFunctionIds(formData),
@@ -75,6 +86,7 @@ export async function createUserAction(_prev: ActionResult, formData: FormData) 
       rollCallTurnoIds: parseRollCallTurnoIds(formData),
       rollCallCollaboratorIds: parseRollCallCollaboratorIds(formData),
     });
+    if (formData.get("navRestrict") === "1") await saveNavAccess(admin, created.id, formData);
     revalidatePath("/usuarios");
   });
 }
@@ -105,6 +117,7 @@ export async function updateUserAction(_prev: ActionResult, formData: FormData) 
       rollCallTurnoIds: parseRollCallTurnoIds(formData),
       rollCallCollaboratorIds: parseRollCallCollaboratorIds(formData),
     });
+    await saveNavAccess(admin, id, formData);
     revalidatePath("/usuarios");
   });
 }

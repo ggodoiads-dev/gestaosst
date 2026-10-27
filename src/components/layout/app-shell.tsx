@@ -141,11 +141,14 @@ export function AppShell({
   navGroups,
   user,
   alerts,
+  showRico = true,
   children,
 }: {
   navGroups: NavGroup[];
   user: { name: string; email: string; roleKey: string };
   alerts: AlertsSummary;
+  /** Falso para usuário com acesso restrito por abas que não recebeu o Rico. */
+  showRico?: boolean;
   children: React.ReactNode;
 }) {
   const [mobileOpen, setMobileOpen] = React.useState(false);
@@ -332,7 +335,7 @@ export function AppShell({
         </main>
       </div>
 
-      <RicoFloatingWidget />
+      {showRico && <RicoFloatingWidget />}
     </div>
     </RicoProvider>
   );

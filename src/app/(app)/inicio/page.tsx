@@ -18,6 +18,8 @@ import { getExpiringQualifications } from "@/server/services/qualification.servi
 import { getEquipmentDamageCostSummary } from "@/server/services/equipment-damage.service";
 import { RicoAvatar } from "@/components/rico/rico-avatar";
 import { getNavGroups } from "@/components/layout/nav-items";
+import { getUserNavWhitelist } from "@/server/services/nav-access.service";
+import { filterNavGroups } from "@/domain/shared/nav-access";
 import { CommandPalette } from "./command-palette";
 import { formatLongDate, APP_TIMEZONE } from "@/lib/dates";
 import { formatInTimeZone } from "date-fns-tz";
@@ -307,6 +309,37 @@ function QualificationsExpiringCard({ expiring }: { expiring: ExpiringQualificat
 export default async function InicioPage() {
   const user = await requireUser();
   const firstName = user.name.split(" ")[0];
+
+  // Acesso restrito por abas: em vez do painel completo (que mostra números de tudo), só a lista do que ele pode abrir.
+  const whitelist = await getUserNavWhitelist(user);
+  if (whitelist) {
+    const groups = filterNavGroups(getNavGroups(user), new Set(whitelist)).map((g) => ({
+      ...g,
+      items: g.items.filter((i) => i.href !== "/inicio" && i.href !== "/termos-de-uso"),
+    }));
+    return (
+      <PageBody>
+        <div>
+          <h1 className="text-lg font-semibold text-foreground">{greeting()}, {firstName}</h1>
+          <p className="text-sm text-foreground-subtle">Estas são as telas liberadas para o seu acesso.</p>
+        </div>
+        {groups.filter((g) => g.items.length > 0).map((g) => (
+          <Card key={g.key}>
+            <CardHeader>
+              <CardTitle>{g.title ?? "Geral"}</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-wrap gap-2">
+              {g.items.map((i) => (
+                <Link key={i.href} href={i.href} className="rounded-md border border-border-strong bg-surface px-3 py-1.5 text-sm font-medium text-foreground hover:bg-surface-muted">
+                  {i.label}
+                </Link>
+              ))}
+            </CardContent>
+          </Card>
+        ))}
+      </PageBody>
+    );
+  }
 
   const canSeeGestao =
     hasPermission(user, PERMISSIONS.INDICATORS_VIEW_AREA) || hasPermission(user, PERMISSIONS.INDICATORS_VIEW_CONSOLIDATED);

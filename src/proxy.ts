@@ -99,7 +99,10 @@ export async function proxy(request: NextRequest) {
     return response;
   }
 
-  return NextResponse.next();
+  // O layout do app confere, para usuário com acesso restrito por abas, se o caminho pedido está liberado.
+  const headers = new Headers(request.headers);
+  headers.set("x-pathname", pathname);
+  return NextResponse.next({ request: { headers } });
 }
 
 export const config = {

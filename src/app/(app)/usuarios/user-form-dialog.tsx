@@ -23,6 +23,8 @@ import {
   type ActionResult,
 } from "@/server/actions/user.actions";
 import { useCloseOnSuccess } from "@/lib/use-close-on-success";
+import { NavAccessPicker } from "./nav-access-picker";
+import type { SelectableNavGroup } from "@/server/services/nav-access.service";
 import { ROLE_LABELS, type RoleKeyValue } from "@/domain/shared/permissions";
 import type { Area, JobFunction, Role, Unit, User } from "@/generated/prisma/client";
 
@@ -39,6 +41,8 @@ type FormProps = {
   functions: JobFunction[];
   turnos: TurnoOption[];
   collaborators: CollaboratorOption[];
+  /** Abas que o perfil Auditor enxerga (para marcar o que cada auditor pode ver) e o id do perfil. */
+  auditorNav: { roleId: string; groups: SelectableNavGroup[] };
 };
 
 /** Escolha, pessoa por pessoa, de quem o usuário faz a chamada (presença/falta). Guarda a própria
@@ -246,7 +250,7 @@ function RollCallFields({
   );
 }
 
-export function CreateUserDialog({ roles, units, areas, functions, turnos, collaborators }: FormProps) {
+export function CreateUserDialog({ roles, units, areas, functions, turnos, collaborators, auditorNav }: FormProps) {
   const [open, setOpen] = useState(false);
   const [state, formAction, pending] = useActionState(createUserAction, initialState);
   useCloseOnSuccess(pending, state, () => setOpen(false));
@@ -354,6 +358,7 @@ export function CreateUserDialog({ roles, units, areas, functions, turnos, colla
               <Label>Funções lideradas (produtividade do time)</Label>
               <FunctionChecklist functions={functions} selected={selectedFunctions} onToggle={toggleFunction} />
             </div>
+            {roleId === auditorNav.roleId && <NavAccessPicker groups={auditorNav.groups} initial={[]} />}
             <RollCallFields
               areas={areas}
               turnos={turnos}
@@ -386,7 +391,7 @@ type UserWithAreas = Omit<User, "passwordHash"> & { userAreas: { areaId: string 
   userRollCallCollaborators: { collaboratorId: string }[];
 };
 
-export function EditUserDialog({ user, roles, units, areas, functions, turnos, collaborators }: FormProps & { user: UserWithAreas }) {
+export function EditUserDialog({ user, roles, units, areas, functions, turnos, collaborators, auditorNav, navWhitelist }: FormProps & { user: UserWithAreas; navWhitelist: string[] | null }) {
   const [open, setOpen] = useState(false);
   const [state, formAction, pending] = useActionState(updateUserAction, initialState);
   useCloseOnSuccess(pending, state, () => setOpen(false));
@@ -500,6 +505,9 @@ export function EditUserDialog({ user, roles, units, areas, functions, turnos, c
               <Label>Funções lideradas (produtividade do time)</Label>
               <FunctionChecklist functions={functions} selected={selectedFunctions} onToggle={toggleFunction} />
             </div>
+            {roleId === auditorNav.roleId && (
+              <NavAccessPicker groups={auditorNav.groups} initial={navWhitelist ?? auditorNav.groups.flatMap((g) => g.items.map((i) => i.href))} />
+            )}
             <RollCallFields
               areas={areas}
               turnos={turnos}

@@ -5,6 +5,7 @@ import { listUsers, listRoles } from "@/server/services/user.service";
 import { listUnits, listAreas, listActiveJobFunctions } from "@/server/services/masterdata.service";
 import { listCollaboratorsForUser } from "@/server/services/collaborator.service";
 import { listTurnosForSelect } from "@/server/services/schedule.service";
+import { listNavWhitelists, listSelectableNavGroups } from "@/server/services/nav-access.service";
 import { PageHeader, PageBody } from "@/components/domain/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -29,7 +30,7 @@ export default async function UsuariosPage({ searchParams }: { searchParams: Pro
   const user = await requireUser();
   requirePermission(user, PERMISSIONS.USER_MANAGE);
 
-  const [allUsers, roles, units, areas, functions, turnos, activeCollaborators] = await Promise.all([
+  const [allUsers, roles, units, areas, functions, turnos, activeCollaborators, auditorGroups, navWhitelists] = await Promise.all([
     listUsers(),
     listRoles(),
     listUnits(),
@@ -37,7 +38,10 @@ export default async function UsuariosPage({ searchParams }: { searchParams: Pro
     listActiveJobFunctions(),
     listTurnosForSelect(),
     listCollaboratorsForUser(user, { onlyActive: true }),
+    listSelectableNavGroups("AUDITOR"),
+    listNavWhitelists(),
   ]);
+  const auditorNav = { roleId: roles.find((r) => r.key === "AUDITOR")?.id ?? "", groups: auditorGroups };
   const collaboratorOptions = activeCollaborators.map((c) => ({ id: c.id, name: c.name, areaName: c.area?.name ?? null }));
 
   const counts: Record<StatusFilter, number> = {
@@ -74,7 +78,7 @@ export default async function UsuariosPage({ searchParams }: { searchParams: Pro
                 ))}
               </div>
             </div>
-            <CreateUserDialog roles={roles} units={units} areas={areas} functions={functions} turnos={turnos} collaborators={collaboratorOptions} />
+            <CreateUserDialog roles={roles} units={units} areas={areas} functions={functions} turnos={turnos} collaborators={collaboratorOptions} auditorNav={auditorNav} />
           </CardHeader>
           <CardContent className="p-0">
             <Table>
@@ -126,7 +130,7 @@ export default async function UsuariosPage({ searchParams }: { searchParams: Pro
                     <TableCell className="text-foreground-subtle">{formatDateTime(u.lastLoginAt)}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
-                        <EditUserDialog user={u} roles={roles} units={units} areas={areas} functions={functions} turnos={turnos} collaborators={collaboratorOptions} />
+                        <EditUserDialog user={u} roles={roles} units={units} areas={areas} functions={functions} turnos={turnos} collaborators={collaboratorOptions} auditorNav={auditorNav} navWhitelist={navWhitelists[u.id] ?? null} />
                         <ResetPasswordDialog userId={u.id} userName={u.name} />
                         {u.active ? (
                           <SoftDeleteButton

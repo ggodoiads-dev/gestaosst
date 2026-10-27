@@ -1872,3 +1872,13 @@ model AccidentInvolvedPerson {
 
   @@index([accidentId])
 }
+
+/// Abas do menu que um usuário restrito (perfil Auditor) pode ver. Sem linhas = sem restrição. `href` é o caminho do item do menu (ex.: "/financeiro/dre").
+/// Sem relação com User de propósito: nenhuma consulta existente de usuário passa a depender desta tabela.
+model UserNavAccess {
+  userId String
+  href   String
+
+  @@id([userId, href])
+  @@index([userId])
+}
