@@ -310,50 +310,26 @@ export default async function InicioPage() {
   const user = await requireUser();
   const firstName = user.name.split(" ")[0];
 
-  // Acesso restrito por abas: em vez do painel completo (que mostra números de tudo), só a lista do que ele pode abrir.
+  // Acesso restrito por abas (Auditor): a tela inicial é a mesma de todo mundo, mas só mostra os blocos das abas liberadas.
   const whitelist = await getUserNavWhitelist(user);
-  if (whitelist) {
-    const groups = filterNavGroups(getNavGroups(user), new Set(whitelist)).map((g) => ({
-      ...g,
-      items: g.items.filter((i) => i.href !== "/inicio" && i.href !== "/termos-de-uso"),
-    }));
-    return (
-      <PageBody>
-        <div>
-          <h1 className="text-lg font-semibold text-foreground">{greeting()}, {firstName}</h1>
-          <p className="text-sm text-foreground-subtle">Estas são as telas liberadas para o seu acesso.</p>
-        </div>
-        {groups.filter((g) => g.items.length > 0).map((g) => (
-          <Card key={g.key}>
-            <CardHeader>
-              <CardTitle>{g.title ?? "Geral"}</CardTitle>
-            </CardHeader>
-            <CardContent className="flex flex-wrap gap-2">
-              {g.items.map((i) => (
-                <Link key={i.href} href={i.href} className="rounded-md border border-border-strong bg-surface px-3 py-1.5 text-sm font-medium text-foreground hover:bg-surface-muted">
-                  {i.label}
-                </Link>
-              ))}
-            </CardContent>
-          </Card>
-        ))}
-      </PageBody>
-    );
-  }
+  const allowedSet = whitelist ? new Set(whitelist) : null;
+  const allow = (href: string) => !allowedSet || allowedSet.has(href);
 
   const canSeeGestao =
-    hasPermission(user, PERMISSIONS.INDICATORS_VIEW_AREA) || hasPermission(user, PERMISSIONS.INDICATORS_VIEW_CONSOLIDATED);
+    (hasPermission(user, PERMISSIONS.INDICATORS_VIEW_AREA) || hasPermission(user, PERMISSIONS.INDICATORS_VIEW_CONSOLIDATED)) && allow("/indicadores");
+  const canSeeRisk =
+    (hasPermission(user, PERMISSIONS.INDICATORS_VIEW_AREA) || hasPermission(user, PERMISSIONS.INDICATORS_VIEW_CONSOLIDATED)) && allow("/equipamentos");
   const canSeeHr = hasPermission(user, PERMISSIONS.HR_MANAGE);
-  const canSeeChecklistCompliance = hasPermission(user, PERMISSIONS.CHECKLIST_COMPLIANCE_VIEW);
-  const canSeeAccidents = hasPermission(user, PERMISSIONS.ACCIDENT_MANAGE);
-  const canSeeQualifications = hasPermission(user, PERMISSIONS.QUALIFICATION_MANAGE);
-  const canSeeFleet = hasPermission(user, PERMISSIONS.EQUIPMENT_DAMAGE_MANAGE);
+  const canSeeChecklistCompliance = hasPermission(user, PERMISSIONS.CHECKLIST_COMPLIANCE_VIEW) && allow("/indicadores");
+  const canSeeAccidents = hasPermission(user, PERMISSIONS.ACCIDENT_MANAGE) && allow("/acidentes");
+  const canSeeQualifications = hasPermission(user, PERMISSIONS.QUALIFICATION_MANAGE) && allow("/qualificacoes");
+  const canSeeFleet = hasPermission(user, PERMISSIONS.EQUIPMENT_DAMAGE_MANAGE) && allow("/frota");
 
   const [colaboradorSummary, gestaoSummary, riskRanking, hrStats, checklistComplianceDashboard, accidentStats, expiringQualifications, fleetDamageSummary, pendingInterviews] =
     await Promise.all([
       getColaboradorSummary(user),
       canSeeGestao ? getGestaoSummary(user) : Promise.resolve(null),
-      canSeeGestao ? getEquipmentRiskRanking(user, 4) : Promise.resolve([]),
+      canSeeRisk ? getEquipmentRiskRanking(user, 4) : Promise.resolve([]),
       canSeeHr ? getHrDailyStats(user) : Promise.resolve(null),
       canSeeChecklistCompliance ? getChecklistComplianceDashboard(user) : Promise.resolve(null),
       canSeeAccidents ? getAccidentMonthlyStats(user) : Promise.resolve(null),
@@ -368,7 +344,7 @@ export default async function InicioPage() {
     ]);
   const headlineSummary = gestaoSummary ?? colaboradorSummary;
 
-  const navGroups = getNavGroups(user);
+  const navGroups = allowedSet ? filterNavGroups(getNavGroups(user), allowedSet) : getNavGroups(user);
 
   const briefingContext: DailyBriefingContext = {
     seguranca: {
@@ -406,9 +382,11 @@ export default async function InicioPage() {
             </h1>
             <p className="mt-1 text-sm text-white/60">{formatLongDate()}</p>
             <div className="mt-4 max-w-xl">
-              <Suspense fallback={<HeroBriefingSkeleton />}>
-                <HeroBriefingCard user={user} context={briefingContext} />
-              </Suspense>
+              {allow("/rico") && (
+                <Suspense fallback={<HeroBriefingSkeleton />}>
+                  <HeroBriefingCard user={user} context={briefingContext} />
+                </Suspense>
+              )}
             </div>
           </div>
         </div>
@@ -455,10 +433,10 @@ export default async function InicioPage() {
         )}
       </div>
 
-      {gestaoSummary && (
+      {(gestaoSummary || canSeeRisk) && (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 animate-fade-up" style={{ animationDelay: "140ms" }}>
-          <RiskWidget riskRanking={riskRanking} />
-          <EquipmentStatusCard summary={gestaoSummary} />
+          {canSeeRisk && <RiskWidget riskRanking={riskRanking} />}
+          {gestaoSummary && <EquipmentStatusCard summary={gestaoSummary} />}
         </div>
       )}
 
