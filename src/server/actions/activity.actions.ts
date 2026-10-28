@@ -1,6 +1,8 @@
 "use server";
 
 import { z } from "zod";
+import { head } from "@vercel/blob";
+import { DOCUMENT_BLOB_NAME, DOCUMENT_MIME_EXT, MAX_DOCUMENT_SIZE_BYTES } from "@/domain/shared/document-upload";
 import { revalidatePath } from "next/cache";
 import { requireUser, ForbiddenError } from "@/server/auth/current-user";
 import * as activityService from "@/server/services/activity.service";
@@ -112,6 +114,41 @@ export async function uploadActivityDocumentAction(
     if (error instanceof ForbiddenError) return { ok: false, error: error.message };
     console.error(error);
     return { ok: false, error: "Não foi possível enviar o arquivo." };
+  }
+}
+
+/** Registra na atividade um documento que o navegador já enviou direto ao armazenamento (ver `/api/uploads/token`). */
+export async function registerActivityDocumentAction(
+  activityId: string,
+  docType: "POP" | "AR_VR" | "LISTA_TREINAMENTO",
+  uploaded: { pathname: string; filename: string; mimeType: string; size: number },
+): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    if (!DOCUMENT_BLOB_NAME.test(uploaded.pathname) || !DOCUMENT_MIME_EXT[uploaded.mimeType] || uploaded.size <= 0 || uploaded.size > MAX_DOCUMENT_SIZE_BYTES) {
+      return { ok: false, error: "Arquivo inválido." };
+    }
+    // Só registra se o arquivo realmente chegou ao armazenamento.
+    if (process.env.STORAGE_DRIVER === "blob") {
+      try {
+        await head(uploaded.pathname);
+      } catch {
+        return { ok: false, error: "O arquivo não chegou ao armazenamento. Tente enviar de novo." };
+      }
+    }
+    await activityService.attachActivityDocument(user, activityId, docType, {
+      filename: uploaded.filename.slice(0, 200),
+      path: `uploads/${uploaded.pathname}`,
+      mimeType: uploaded.mimeType,
+      size: uploaded.size,
+    });
+    revalidatePath(`/atividades/${activityId}`);
+    revalidatePath("/atividades");
+    return { ok: true };
+  } catch (error) {
+    if (error instanceof ForbiddenError) return { ok: false, error: error.message };
+    console.error(error);
+    return { ok: false, error: "Não foi possível registrar o documento." };
   }
 }
 

@@ -3,6 +3,7 @@ import { mkdir, readFile, writeFile, unlink } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { put, get, del } from "@vercel/blob";
+import { DOCUMENT_MIME_EXT, MAX_DOCUMENT_SIZE_BYTES } from "@/domain/shared/document-upload";
 
 const STORAGE_DRIVER = process.env.STORAGE_DRIVER ?? "local";
 const STORAGE_DIR = process.env.STORAGE_DIR ?? "./storage/uploads";
@@ -115,16 +116,6 @@ export function savePhotoUpload(file: File): Promise<UploadResult> {
   });
 }
 
-const DOCUMENT_MIME_EXT: Record<string, string> = {
-  "application/pdf": "pdf",
-  "application/msword": "doc",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
-  "application/vnd.ms-powerpoint": "ppt",
-  "application/vnd.openxmlformats-officedocument.presentationml.presentation": "pptx",
-  "application/vnd.ms-excel": "xls",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
-};
-const MAX_DOCUMENT_SIZE_BYTES = 20 * 1024 * 1024; // 20MB
 
 /** Salva documentos (POP, AR/VR, certificados) — PDF, Word, PowerPoint ou Excel. */
 export function saveDocumentUpload(file: File): Promise<UploadResult> {

@@ -18,6 +18,8 @@ export default async function AtividadeDetailPage({
   const user = await requireUser();
   const { activity, documents, popDocs, arVrDocs, listaTreinamentoDocs } = await getActivityDetail(user, id);
   const areaLinks = await getActivityAreaLinks(user, id);
+  // Em produção o arquivo vai direto do navegador ao armazenamento (Vercel Blob); em desenvolvimento (disco local) passa pelo servidor.
+  const directUpload = process.env.STORAGE_DRIVER === "blob";
 
   return (
     <>
@@ -39,9 +41,10 @@ export default async function AtividadeDetailPage({
               <CardTitle>Documentos</CardTitle>
             </CardHeader>
             <CardContent className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <ActivityDocumentUpload activityId={activity.id} docType="POP" label="POP" documents={popDocs} />
-              <ActivityDocumentUpload activityId={activity.id} docType="AR_VR" label="AR/VR" documents={arVrDocs} />
+              <ActivityDocumentUpload activityId={activity.id} docType="POP" label="POP" documents={popDocs} directUpload={directUpload} />
+              <ActivityDocumentUpload activityId={activity.id} docType="AR_VR" label="AR/VR" documents={arVrDocs} directUpload={directUpload} />
               <ActivityDocumentUpload
+                directUpload={directUpload}
                 activityId={activity.id}
                 docType="LISTA_TREINAMENTO"
                 label="Lista de Treinamento"
