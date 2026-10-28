@@ -5,7 +5,7 @@ import { FileText, Upload, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { uploadActivityDocumentAction, registerActivityDocumentAction, deleteActivityDocumentAction } from "@/server/actions/activity.actions";
-import { upload } from "@vercel/blob/client";
+import { uploadPresigned } from "@vercel/blob/client";
 import { DOCUMENT_MIME_EXT, MAX_DOCUMENT_SIZE_BYTES, documentMimeType } from "@/domain/shared/document-upload";
 import { SoftDeleteButton } from "@/components/domain/soft-delete-button";
 import { attachmentUrl } from "@/lib/attachment-url";
@@ -48,7 +48,7 @@ export function ActivityDocumentUpload({
       if (directUpload) {
         // Direto do navegador para o armazenamento: o arquivo não passa pelo servidor (que só aceita ~4 MB por requisição).
         const pathname = `${crypto.randomUUID()}.${DOCUMENT_MIME_EXT[mimeType]}`;
-        await upload(pathname, file, {
+        await uploadPresigned(pathname, file, {
           access: "private",
           handleUploadUrl: "/api/uploads/token",
           contentType: mimeType,
