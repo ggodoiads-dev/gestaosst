@@ -267,6 +267,24 @@ function QualificationList({ summary, baseUrl }: { summary: QualificationSummary
           ))}
         </div>
       </div>
+      {summary.cnh.length > 0 && (
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">CNH</p>
+          <div className="mt-1 flex flex-col gap-1.5">
+            {summary.cnh.map((item) => (
+              <div key={item.typeName} className="flex items-center justify-between gap-2 text-sm">
+                <span>{item.typeName}</span>
+                <div className="flex items-center gap-2">
+                  {item.certificate && (
+                    <PublicAttachmentLink baseUrl={baseUrl} attachmentId={item.certificate.attachmentId} mimeType={item.certificate.mimeType} />
+                  )}
+                  <Badge tone={qualificationStatus(item.expiresAt).tone}>{qualificationStatus(item.expiresAt).label}</Badge>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       <div>
         <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Integração de segurança</p>
         {summary.integrations.length === 0 && <p className="mt-1 text-sm text-foreground-subtle">Nenhuma integração registrada.</p>}

@@ -1197,6 +1197,7 @@ enum QualificationCategory {
   NR
   ASO
   INTEGRACAO
+  CNH
   OUTRO
 }
 

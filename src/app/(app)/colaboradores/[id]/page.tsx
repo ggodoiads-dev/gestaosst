@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { addMonths, isSameDay } from "date-fns";
 import { headers } from "next/headers";
 import { AlertTriangle, AlertOctagon, GraduationCap, HardHat, Printer, ClipboardList, ClipboardCheck, QrCode, Clock } from "lucide-react";
 import { requireUser, hasPermission } from "@/server/auth/current-user";
@@ -312,6 +313,12 @@ export default async function ColaboradorDetailPage({
                       collaboratorId: record.collaboratorId,
                       qualificationTypeId: record.qualificationTypeId,
                       completedDate: record.completedDate,
+                      // Vencimento informado à mão (ex.: CNH): só entra preenchido na edição se não for o calculado pela validade do tipo.
+                      expiresAt:
+                        record.expiresAt &&
+                        !(record.qualificationType.validityMonths && isSameDay(addMonths(record.completedDate, record.qualificationType.validityMonths), record.expiresAt))
+                          ? record.expiresAt
+                          : null,
                       notes: record.notes,
                       attachments: record.attachments,
                     }}

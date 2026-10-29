@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useState, useTransition } from "react";
-import { Plus, Pencil, Trash2, FileText } from "lucide-react";
+import { Plus, Trash2, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -88,6 +88,9 @@ export function CreateQualificationRecordDialog({
             <FormField label="Data de conclusão" htmlFor="completedDate" required>
               <Input id="completedDate" name="completedDate" type="date" required />
             </FormField>
+            <FormField label="Vencimento" htmlFor="expiresAt" hint="Opcional — para CNH ou documento com a validade impressa. Vazio = calcula pela validade do tipo">
+              <Input id="expiresAt" name="expiresAt" type="date" />
+            </FormField>
             <FormField label="Observações" htmlFor="notes" hint="Opcional">
               <Textarea id="notes" name="notes" rows={2} />
             </FormField>
@@ -119,6 +122,7 @@ export function EditQualificationRecordDialog({
     collaboratorId: string;
     qualificationTypeId: string;
     completedDate: Date;
+    expiresAt?: Date | null;
     notes: string | null;
     attachments?: { id: string; filename: string; path: string }[];
   };
@@ -182,6 +186,9 @@ export function EditQualificationRecordDialog({
             </FormField>
             <FormField label="Data de conclusão" htmlFor="edit-completedDate" required>
               <Input id="edit-completedDate" name="completedDate" type="date" required defaultValue={toDateInputValue(record.completedDate)} />
+            </FormField>
+            <FormField label="Vencimento" htmlFor="edit-expiresAt" hint="Opcional — vazio = calcula pela validade do tipo">
+              <Input id="edit-expiresAt" name="expiresAt" type="date" defaultValue={record.expiresAt ? toDateInputValue(record.expiresAt) : ""} />
             </FormField>
             <FormField label="Observações" htmlFor="edit-notes" hint="Opcional">
               <Textarea id="edit-notes" name="notes" rows={2} defaultValue={record.notes ?? ""} />

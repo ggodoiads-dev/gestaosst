@@ -90,13 +90,15 @@ export type QualificationRecordInput = {
   collaboratorId: string;
   qualificationTypeId: string;
   completedDate: Date;
+  /** Vencimento informado à mão (ex.: a validade impressa na CNH). Quando vem, vale no lugar da validade em meses do tipo. */
+  expiresAt?: Date | null;
   notes?: string | null;
 };
 
 export async function createQualificationRecord(user: CurrentUser, data: QualificationRecordInput) {
   requirePermission(user, PERMISSIONS.QUALIFICATION_MANAGE);
   const type = await db.qualificationType.findUniqueOrThrow({ where: { id: data.qualificationTypeId } });
-  const expiresAt = type.validityMonths ? addMonths(data.completedDate, type.validityMonths) : null;
+  const expiresAt = data.expiresAt ?? (type.validityMonths ? addMonths(data.completedDate, type.validityMonths) : null);
 
   const record = await db.$transaction(async (tx) => {
     const created = await tx.qualificationRecord.create({
@@ -131,7 +133,7 @@ export async function updateQualificationRecord(user: CurrentUser, id: string, d
   requirePermission(user, PERMISSIONS.QUALIFICATION_MANAGE);
   const before = await db.qualificationRecord.findUniqueOrThrow({ where: { id } });
   const type = await db.qualificationType.findUniqueOrThrow({ where: { id: data.qualificationTypeId } });
-  const expiresAt = type.validityMonths ? addMonths(data.completedDate, type.validityMonths) : null;
+  const expiresAt = data.expiresAt ?? (type.validityMonths ? addMonths(data.completedDate, type.validityMonths) : null);
 
   const record = await db.$transaction(async (tx) => {
     const updated = await tx.qualificationRecord.update({
@@ -220,6 +222,8 @@ export type QualificationCertificateRef = { attachmentId: string; path: string; 
 export type CollaboratorQualificationSummary = {
   aso: { typeName: string; expiresAt: Date | null; certificate: QualificationCertificateRef } | null;
   nrs: { typeName: string; expiresAt: Date | null; certificate: QualificationCertificateRef }[];
+  /** CNH (habilitação), com a validade. */
+  cnh: { typeName: string; expiresAt: Date | null; certificate: QualificationCertificateRef }[];
   /** Integração de segurança (e outras da categoria Integração), com a validade — o padrinho aparece à parte. */
   integrations: { typeName: string; completedDate: Date; expiresAt: Date | null; certificate: QualificationCertificateRef }[];
   hasAnyRecord: boolean;
@@ -268,6 +272,9 @@ export async function getCollaboratorQualificationSummary(collaboratorId: string
   return {
     aso: aso ? { typeName: aso.qualificationType.name, expiresAt: aso.expiresAt, certificate: latestCertificate(aso) } : null,
     nrs: nrs.map((r) => ({ typeName: r.qualificationType.name, expiresAt: r.expiresAt, certificate: latestCertificate(r) })),
+    cnh: current
+      .filter((r) => r.qualificationType.category === "CNH" || /\bcnh\b/i.test(r.qualificationType.name))
+      .map((r) => ({ typeName: r.qualificationType.name, expiresAt: r.expiresAt, certificate: latestCertificate(r) })),
     integrations: current
       .filter((r) => (r.qualificationType.category === "INTEGRACAO" || /integra/i.test(r.qualificationType.name)) && !isPadrinhoQualification(r.qualificationType.name))
       .map((r) => ({ typeName: r.qualificationType.name, completedDate: r.completedDate, expiresAt: r.expiresAt, certificate: latestCertificate(r) })),

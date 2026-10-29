@@ -37,7 +37,7 @@ function toResult(fn: () => Promise<unknown>): Promise<ActionResult> {
 
 const qualificationTypeSchema = z.object({
   name: z.string().trim().min(2, "Informe o nome do tipo de qualificação."),
-  category: z.enum(["NR", "ASO", "INTEGRACAO", "OUTRO"]),
+  category: z.enum(["NR", "ASO", "INTEGRACAO", "CNH", "OUTRO"]),
   validityMonths: z.string().trim().optional().nullable(),
   aliases: z.array(z.string().trim().min(1)).default([]),
 });
@@ -89,6 +89,11 @@ const qualificationRecordSchema = z.object({
     .string()
     .min(1, "Informe a data de conclusão.")
     .regex(/^(19|20)\d{2}-\d{2}-\d{2}$/, "Data de conclusão inválida — confira o ano."),
+  expiresAt: z
+    .string()
+    .regex(/^(19|20)\d{2}-\d{2}-\d{2}$/, "Vencimento inválido — confira o ano.")
+    .optional()
+    .nullable(),
   notes: z.string().trim().optional().nullable(),
 });
 
@@ -99,12 +104,14 @@ export async function createQualificationRecordAction(_prev: ActionResult, formD
       collaboratorId: formData.get("collaboratorId"),
       qualificationTypeId: formData.get("qualificationTypeId"),
       completedDate: formData.get("completedDate"),
+      expiresAt: formData.get("expiresAt") || null,
       notes: formData.get("notes") || null,
     });
     const record = await qualificationService.createQualificationRecord(user, {
       collaboratorId: parsed.collaboratorId,
       qualificationTypeId: parsed.qualificationTypeId,
       completedDate: parseDateOnly(parsed.completedDate),
+      expiresAt: parsed.expiresAt ? parseDateOnly(parsed.expiresAt) : null,
       notes: parsed.notes,
     });
     await maybeAttachQualificationFile(user, record.id, formData);
@@ -121,12 +128,14 @@ export async function updateQualificationRecordAction(_prev: ActionResult, formD
       collaboratorId: formData.get("collaboratorId"),
       qualificationTypeId: formData.get("qualificationTypeId"),
       completedDate: formData.get("completedDate"),
+      expiresAt: formData.get("expiresAt") || null,
       notes: formData.get("notes") || null,
     });
     await qualificationService.updateQualificationRecord(user, id, {
       collaboratorId: parsed.collaboratorId,
       qualificationTypeId: parsed.qualificationTypeId,
       completedDate: parseDateOnly(parsed.completedDate),
+      expiresAt: parsed.expiresAt ? parseDateOnly(parsed.expiresAt) : null,
       notes: parsed.notes,
     });
     await maybeAttachQualificationFile(user, id, formData);

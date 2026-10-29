@@ -35,6 +35,9 @@ const CATEGORY_ALIASES: Record<string, QualificationCategory> = {
   nr: "NR",
   aso: "ASO",
   integracao: "INTEGRACAO",
+  cnh: "CNH",
+  habilitacao: "CNH",
+  carteiradehabilitacao: "CNH",
   outro: "OUTRO",
 };
 

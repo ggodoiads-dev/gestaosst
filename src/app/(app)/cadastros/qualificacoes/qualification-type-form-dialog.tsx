@@ -30,6 +30,7 @@ const CATEGORY_OPTIONS = [
   { value: "NR", label: "NR" },
   { value: "ASO", label: "ASO" },
   { value: "INTEGRACAO", label: "Integração" },
+  { value: "CNH", label: "CNH (habilitação)" },
   { value: "OUTRO", label: "Outro" },
 ];
 

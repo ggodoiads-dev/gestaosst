@@ -12,6 +12,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   NR: "NR",
   ASO: "ASO",
   INTEGRACAO: "Integração",
+  CNH: "CNH",
   OUTRO: "Outro",
 };
 
