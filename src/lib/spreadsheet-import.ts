@@ -96,7 +96,20 @@ export function suggestMapping<F extends string>(
   const normalizedHeaders = headers.map(normalize);
   for (const field of fields) {
     const fieldAliases = aliases[field];
-    const idx = normalizedHeaders.findIndex((h) => fieldAliases.some((a) => h === a || h.includes(a)));
+    // 1º um cabeçalho IDÊNTICO a algum apelido (na ordem de prioridade dos apelidos); 2º um que CONTENHA o apelido. Apelido com "=" na frente só vale idêntico
+    // (ex.: "=tipo" não pode pegar "Tipo SIF"). Antes valia "o primeiro cabeçalho que contivesse qualquer apelido", e planilhas largas como a do Credit casavam errado.
+    let idx = -1;
+    for (const a of fieldAliases) {
+      idx = normalizedHeaders.findIndex((h) => h === a.replace(/^=/, ""));
+      if (idx >= 0) break;
+    }
+    if (idx < 0) {
+      for (const a of fieldAliases) {
+        if (a.startsWith("=")) continue;
+        idx = normalizedHeaders.findIndex((h) => h.includes(a));
+        if (idx >= 0) break;
+      }
+    }
     if (idx >= 0) result[field] = idx;
   }
   return result;

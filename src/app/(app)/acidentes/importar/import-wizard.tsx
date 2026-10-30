@@ -214,7 +214,6 @@ export function ImportWizard() {
               loading={pending}
               disabled={
                 mapping.date === undefined ||
-                mapping.severity === undefined ||
                 mapping.description === undefined
               }
             >

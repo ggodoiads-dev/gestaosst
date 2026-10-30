@@ -7,6 +7,7 @@ import { requirePermission } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
 import type { AccidentType, AccidentStatus, SifClassification, Criticality } from "@/generated/prisma/enums";
 import {
+  ACCIDENT_FIELD_ALIASES,
   ACCIDENT_IMPORT_FIELDS,
   isLog20Company,
   type AccidentImportField,
@@ -23,26 +24,6 @@ import {
 export type { AccidentImportField, AccidentImportMapping };
 export { parseSpreadsheet };
 
-const FIELD_ALIASES: Record<AccidentImportField, string[]> = {
-  date: ["data", "dataocorrencia", "dataacidente", "dataregistro"],
-  time: ["hora", "horario", "horadoacidente"],
-  type: ["tipo", "tipoacidente", "tipodeocorrencia", "tipoocorrencia"],
-  severity: ["severidade", "gravidade"],
-  area: ["area", "local", "setor"],
-  description: ["descricao", "descricaodaocorrencia", "relato", "resumo"],
-  immediateCause: ["causaimediata", "causadireta"],
-  rootCause: ["causaraiz", "causabase", "causafundamental"],
-  isSif: ["esif", "sif"],
-  sifClassification: ["classificacaosif", "tiposif", "classifsif"],
-  creditNumber: ["credit", "numerocredit", "ncredit", "numerodocredit"],
-  involvedFirstName: ["primeironome"],
-  involvedLastName: ["ultimonome", "sobrenome"],
-  involvedSap: ["numerodeidentificacaosap", "numerodeidentificacao", "sap"],
-  involvedCargo: ["cargo"],
-  company: ["empresa", "empresaenvolvida", "empregador", "contratada", "companhia"],
-  involvedCollaborators: ["envolvidos", "colaboradoresenvolvidos", "vitimas", "acidentado", "acidentados", "nomedoacidentado"],
-  status: ["status", "situacao"],
-};
 
 const TYPE_ALIASES: Record<string, AccidentType> = {
   acidentetipico: "ACIDENTE_TIPICO",
@@ -113,7 +94,7 @@ export function suggestMapping(headers: string[]): AccidentImportMapping {
   return suggestMappingGeneric(
     headers,
     ACCIDENT_IMPORT_FIELDS.map((f) => f.key),
-    FIELD_ALIASES,
+    ACCIDENT_FIELD_ALIASES,
   );
 }
 
@@ -237,8 +218,8 @@ export async function buildAccidentImportPreview(
       involvedPeople,
     };
 
-    // Planilha do Credit traz também outras empresas: só a LOG20 entra. Linha sem empresa preenchida é importada.
-    if (mapping.company !== undefined && companyRaw && !isLog20Company(companyRaw)) {
+    // Planilha do Credit traz também outras empresas: só a LOG20 entra. Linha sem empresa preenchida NÃO entra (no Credit, vazio é funcionário da Ambev).
+    if (mapping.company !== undefined && !(companyRaw && isLog20Company(companyRaw))) {
       results.push({
         ...base,
         dateParsed: parseDateCell(dateRaw),
@@ -248,7 +229,7 @@ export async function buildAccidentImportPreview(
         sifClassification: null,
         status: "CONCLUIDO",
         action: "skip",
-        skipReason: `Outra empresa (${companyRaw})`,
+        skipReason: companyRaw ? `Outra empresa (${companyRaw})` : "Empresa não informada (não é da LOG20)",
       });
       continue;
     }
