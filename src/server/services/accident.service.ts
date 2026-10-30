@@ -186,6 +186,24 @@ export async function updateAccidentStatus(user: CurrentUser, id: string, status
   return accident;
 }
 
+/** Cancela vários acidentes de uma vez (cancelamento lógico: nada é apagado, dá para reativar em Cancelados). Ignora os que já estão cancelados. */
+export async function cancelAccidents(user: CurrentUser, ids: string[]) {
+  requirePermission(user, PERMISSIONS.ACCIDENT_MANAGE);
+  const unique = [...new Set(ids)].slice(0, 500);
+  if (unique.length === 0) return { cancelled: 0 };
+  const targets = await db.accident.findMany({ where: { id: { in: unique }, status: { not: "CANCELADA" } }, select: { id: true, status: true } });
+  await db.$transaction(async (tx) => {
+    await tx.accident.updateMany({ where: { id: { in: targets.map((t) => t.id) } }, data: { status: "CANCELADA" } });
+    for (const t of targets) {
+      await recordAudit(
+        { userId: user.id, action: "STATUS_CHANGE", entityType: "Accident", entityId: t.id, previousValue: { status: t.status }, newValue: { status: "CANCELADA", bulk: true } },
+        tx,
+      );
+    }
+  });
+  return { cancelled: targets.length };
+}
+
 /** Anexa uma evidência ao acidente (foto, PDF, apresentação de investigação, etc.) — sempre
  * adiciona, nunca substitui, já que um acidente costuma acumular várias evidências ao longo
  * da investigação. */

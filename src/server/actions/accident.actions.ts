@@ -97,6 +97,19 @@ export async function uploadAccidentAttachmentAction(accidentId: string, formDat
   }
 }
 
+export async function cancelAccidentsAction(ids: string[]): Promise<{ ok: true; cancelled: number } | { ok: false; error: string }> {
+  try {
+    const user = await requireUser();
+    const { cancelled } = await accidentService.cancelAccidents(user, ids);
+    revalidatePath("/acidentes");
+    return { ok: true, cancelled };
+  } catch (error) {
+    if (error instanceof ForbiddenError) return { ok: false, error: error.message };
+    console.error("[acidentes] falha ao cancelar em lote:", error);
+    return { ok: false, error: "Não foi possível cancelar os acidentes selecionados." };
+  }
+}
+
 export async function updateAccidentStatusAction(
   id: string,
   status: "ABERTO" | "EM_INVESTIGACAO" | "CONCLUIDO" | "CANCELADA",

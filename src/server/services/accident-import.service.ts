@@ -152,9 +152,9 @@ export async function buildAccidentImportPreview(
     name ? areas.find((a) => a.name.trim().toLowerCase() === name.trim().toLowerCase()) : undefined;
   const collabByName = new Map(collaborators.map((c) => [normalize(c.name), c.id]));
   const collabBySap = new Map(collaborators.filter((c) => c.matricula).map((c) => [normalize(c.matricula ?? ""), c.id]));
-  // Credit já cadastrado: reimportar a mesma planilha não duplica.
+  // Credit já cadastrado (e não cancelado): reimportar a mesma planilha não duplica; acidente cancelado libera o número para uma nova importação.
   const existingCredits = new Set(
-    (await db.accident.findMany({ where: { creditNumber: { not: null } }, select: { creditNumber: true } })).map((a) => normalize(a.creditNumber ?? "")),
+    (await db.accident.findMany({ where: { creditNumber: { not: null }, status: { not: "CANCELADA" } }, select: { creditNumber: true } })).map((a) => normalize(a.creditNumber ?? "")),
   );
   const seenCredits = new Set<string>();
 

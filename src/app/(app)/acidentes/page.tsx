@@ -16,6 +16,7 @@ import { formatDate } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { CreateAccidentDialog, EditAccidentDialog } from "./accident-form-dialog";
 import { AccidentInsightCard, AccidentInsightSkeleton } from "./accident-insight-card";
+import { BulkCancelToolbar } from "./bulk-cancel-toolbar";
 
 const TYPE_LABELS: Record<string, string> = {
   ACIDENTE_TIPICO: "Acidente típico",
@@ -122,9 +123,11 @@ export default async function AcidentesPage({
             </div>
           </CardHeader>
           <CardContent className="p-0">
+            {activeFilter.key !== "cancelados" && accidents.length > 0 && <BulkCancelToolbar />}
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-8" />
                   <TableHead>Código</TableHead>
                   <TableHead>Data</TableHead>
                   <TableHead>Tipo</TableHead>
@@ -137,9 +140,12 @@ export default async function AcidentesPage({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {accidents.length === 0 && <TableEmpty colSpan={9} />}
+                {accidents.length === 0 && <TableEmpty colSpan={10} />}
                 {accidents.map((accident) => (
                   <TableRow key={accident.id}>
+                    <TableCell className="w-8">
+                      {accident.status !== "CANCELADA" && <input type="checkbox" name="accidentIds" value={accident.id} aria-label={`Selecionar ${accident.code}`} className="size-4 accent-[var(--accent)]" />}
+                    </TableCell>
                     <TableCell className="font-mono text-xs">
                       <Link href={`/acidentes/${accident.id}`} className="text-accent hover:underline">
                         {accident.code}
