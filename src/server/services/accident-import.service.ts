@@ -103,6 +103,12 @@ export type AccidentImportRowResult = {
   /** `skip`: linha ignorada de propósito (outra empresa, ou Credit que já foi importado) — não conta como erro. */
   action: "create" | "error" | "skip";
   skipReason?: string;
+  /** Por que a linha foi ignorada: `company` pode ser revertida na revisão ("importar mesmo assim"); `credit` (já importado) não. */
+  skipKind?: "company" | "credit";
+  /** A linha seria válida se fosse importada (pode ser forçada na revisão). */
+  forceable?: boolean;
+  /** Empresa do Credit diferente da LOG20, mas a pessoa é colaborador da LOG20 no SIGO: a linha entra, e a revisão mostra a divergência. */
+  companyNote?: string;
   /** O tipo não veio na planilha (ou não foi reconhecido) e foi usado o tipo padrão escolhido na importação. */
   typeAssumed?: boolean;
   date: string;
@@ -146,7 +152,7 @@ export async function buildAccidentImportPreview(
 
   const [areas, collaborators] = await Promise.all([
     db.area.findMany({ where: { active: true } }),
-    db.collaborator.findMany({ where: { active: true }, select: { id: true, name: true, matricula: true } }),
+    db.collaborator.findMany({ select: { id: true, name: true, matricula: true } }),
   ]);
   const findArea = (name: string | null) =>
     name ? areas.find((a) => a.name.trim().toLowerCase() === name.trim().toLowerCase()) : undefined;
@@ -219,19 +225,18 @@ export async function buildAccidentImportPreview(
     };
 
     // Planilha do Credit traz também outras empresas: só a LOG20 entra. Linha sem empresa preenchida NÃO entra (no Credit, vazio é funcionário da Ambev).
+    // Exceção: se a pessoa envolvida é colaborador da LOG20 no SIGO (por SAP/matrícula ou nome, inclusive quem já saiu), a linha entra mesmo com outra
+    // empresa no Credit (o cadastro de empresa de lá nem sempre está certo). E qualquer linha ignorada por empresa pode ser importada na revisão.
+    let skipReason: string | null = null;
+    let skipKind: "company" | "credit" | undefined;
+    let companyNote: string | undefined;
     if (mapping.company !== undefined && !(companyRaw && isLog20Company(companyRaw))) {
-      results.push({
-        ...base,
-        dateParsed: parseDateCell(dateRaw),
-        typeValue: null,
-        severityValue: "MEDIA",
-        isSif: false,
-        sifClassification: null,
-        status: "CONCLUIDO",
-        action: "skip",
-        skipReason: companyRaw ? `Outra empresa (${companyRaw})` : "Empresa não informada (não é da LOG20)",
-      });
-      continue;
+      if (involvedCollaboratorIds.length > 0) {
+        companyNote = companyRaw ? `Empresa no Credit: ${companyRaw}` : "Sem empresa no Credit";
+      } else {
+        skipReason = companyRaw ? `Outra empresa (${companyRaw})` : "Empresa não informada (não é da LOG20)";
+        skipKind = "company";
+      }
     }
     if (creditNumber) {
       const key = normalize(creditNumber);
@@ -245,16 +250,22 @@ export async function buildAccidentImportPreview(
           sifClassification: null,
           status: "CONCLUIDO",
           action: "skip",
+          skipKind: "credit",
           skipReason: existingCredits.has(key) ? "Credit já importado antes" : "Credit repetido na planilha",
         });
         continue;
       }
-      seenCredits.add(key);
+      if (!skipReason) seenCredits.add(key);
     }
+    // Daqui em diante a linha é montada por inteiro mesmo se for ignorada por empresa, para poder ser forçada na revisão.
+    const push = (r: AccidentImportRowResult) => {
+      if (skipReason) results.push({ ...r, action: "skip", skipReason, skipKind, forceable: r.action === "create", error: undefined });
+      else results.push({ ...r, companyNote });
+    };
 
     const dateParsed = parseDateCell(dateRaw);
     if (!dateParsed) {
-      results.push({
+      push({
         ...base,
         dateParsed: null,
         typeValue: null,
@@ -274,7 +285,7 @@ export async function buildAccidentImportPreview(
     const typeAssumed = !recognizedType;
 
     if (!description) {
-      results.push({
+      push({
         ...base,
         dateParsed,
         typeValue,
@@ -297,7 +308,7 @@ export async function buildAccidentImportPreview(
     const sifClassification = isSif && sifClassRaw ? (SIF_CLASS_ALIASES[normalize(sifClassRaw)] ?? null) : null;
     const status = statusRaw ? (STATUS_ALIASES[normalize(statusRaw)] ?? "ABERTO") : "CONCLUIDO";
 
-    results.push({
+    push({
       ...base,
       dateParsed,
       typeValue,

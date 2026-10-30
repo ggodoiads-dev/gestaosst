@@ -288,11 +288,36 @@ export function ImportWizard() {
                       )}
                     </TableCell>
                     <TableCell>
-                      {row.action === "create" && <Badge tone="success">Criar</Badge>}
+                      {row.action === "create" && (
+                        <div className="flex flex-col items-start gap-1">
+                          <Badge tone="success">Criar</Badge>
+                          {row.companyNote && <span className="text-[11px] text-warning">{row.companyNote}: é colaborador da LOG20 no SIGO</span>}
+                          {row.skipKind === "company" && (
+                            <button
+                              type="button"
+                              onClick={() => setPreviewRows((cur) => cur.map((r) => (r.rowIndex === row.rowIndex ? { ...r, action: "skip" } : r)))}
+                              className="text-[11px] text-foreground-subtle hover:underline"
+                            >
+                              Desfazer
+                            </button>
+                          )}
+                        </div>
+                      )}
                       {row.action === "skip" && (
-                        <Badge tone="neutral" title={row.skipReason}>
-                          Ignorada{row.skipReason ? `: ${row.skipReason}` : ""}
-                        </Badge>
+                        <div className="flex flex-col items-start gap-1">
+                          <Badge tone="neutral" title={row.skipReason}>
+                            Ignorada{row.skipReason ? `: ${row.skipReason}` : ""}
+                          </Badge>
+                          {row.skipKind === "company" && row.forceable && (
+                            <button
+                              type="button"
+                              onClick={() => setPreviewRows((cur) => cur.map((r) => (r.rowIndex === row.rowIndex ? { ...r, action: "create" } : r)))}
+                              className="text-[11px] font-medium text-accent hover:underline"
+                            >
+                              Importar mesmo assim
+                            </button>
+                          )}
+                        </div>
                       )}
                       {row.action === "error" && (
                         <Badge tone="danger" title={row.error}>
