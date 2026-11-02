@@ -67,13 +67,34 @@ export function LaunchForm({ turnos, today, initialDay, initialTurnoId, helpers,
     };
   }, [day, turnoId]);
 
-  async function applyPaste() {
-    const parsed = parseAnyProductionMessage(paste);
+  // Mensagem compartilhada do WhatsApp pelo app Android: chega no fragmento da URL (#texto=...), que não vai para o servidor.
+  const sharedHandled = useRef(false);
+  useEffect(() => {
+    if (sharedHandled.current) return;
+    sharedHandled.current = true;
+    const hash = window.location.hash;
+    if (!hash.startsWith("#texto=")) return;
+    window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    let shared = "";
+    try {
+      shared = decodeURIComponent(hash.slice("#texto=".length));
+    } catch {
+      return;
+    }
+    if (shared.trim() === "") return;
+    void applyPaste(shared);
+    // Só na abertura da tela: o texto compartilhado é lido uma vez.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function applyPaste(source?: string) {
+    const text = typeof source === "string" ? source : paste;
+    const parsed = parseAnyProductionMessage(text);
     // O fechamento dos ajudantes também vira lançamento por pessoa (prévia abaixo, para conferir).
     let personRows: PersonRow[] = [];
     let personWarnings: string[] = [];
-    if (looksLikeHelpersClosing(paste)) {
-      const people = parseHelpersPeople(paste, helpers);
+    if (looksLikeHelpersClosing(text)) {
+      const people = parseHelpersPeople(text, helpers);
       personWarnings = people.unrecognized;
       personRows = people.entries.flatMap((entry, ei) => {
         const shares = shareQuantity(entry.quantity, entry.people.length);
@@ -167,7 +188,7 @@ export function LaunchForm({ turnos, today, initialDay, initialTurnoId, helpers,
         </div>
         <p className="mb-2 text-xs text-foreground-subtle">Cole aqui a mensagem de fim de turno do líder ou o fechamento dos ajudantes (seleção): os campos abaixo são preenchidos sozinhos. No fechamento dos ajudantes, o que cada pessoa fez também aparece para lançar por pessoa. Pode colar as duas mensagens, uma de cada vez. Confira antes de salvar.</p>
         <Textarea value={paste} onChange={(e) => setPaste(e.target.value)} rows={5} placeholder="*GERAL*&#10;Carros Carregados: 21&#10;…" />
-        <Button variant="secondary" className="mt-2" onClick={applyPaste} disabled={paste.trim() === ""}>
+        <Button variant="secondary" className="mt-2" onClick={() => void applyPaste()} disabled={paste.trim() === ""}>
           Preencher os campos
         </Button>
         {warnings.length > 0 && (
