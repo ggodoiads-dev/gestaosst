@@ -171,3 +171,17 @@ body {
 table {
   font-variant-numeric: tabular-nums;
 }
+
+/* Impressão / PDF dos relatórios: A4, sem o fundo cinza do app e sem quebrar caixas no meio. */
+@media print {
+  @page {
+    size: A4;
+    margin: 12mm;
+  }
+  html,
+  body {
+    background: #ffffff !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

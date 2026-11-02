@@ -218,7 +218,7 @@ export function AppShell({
 
       <aside
         className={cn(
-          "fixed z-50 inset-y-0 left-0 w-64 flex-col bg-brand transition-transform lg:static lg:flex lg:translate-x-0",
+          "fixed z-50 inset-y-0 left-0 w-64 flex-col bg-brand transition-transform lg:static lg:flex lg:translate-x-0 print:hidden",
           mobileOpen ? "flex translate-x-0" : "hidden -translate-x-full",
         )}
       >
@@ -277,7 +277,7 @@ export function AppShell({
       </aside>
 
       <div className="flex flex-1 flex-col min-w-0">
-        <header className="sticky top-0 z-30 flex items-center gap-3 h-14 border-b border-border bg-surface px-3 sm:px-4">
+        <header className="sticky top-0 z-30 flex items-center gap-3 h-14 border-b border-border bg-surface px-3 sm:px-4 print:hidden">
           <button
             className="lg:hidden text-foreground-subtle"
             onClick={() => setMobileOpen(true)}
@@ -335,7 +335,11 @@ export function AppShell({
         </main>
       </div>
 
-      {showRico && <RicoFloatingWidget />}
+      {showRico && (
+        <div className="print:hidden">
+          <RicoFloatingWidget />
+        </div>
+      )}
     </div>
     </RicoProvider>
   );

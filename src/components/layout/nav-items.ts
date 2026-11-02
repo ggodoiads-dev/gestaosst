@@ -253,6 +253,9 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
   if (p.has(PERMISSIONS.INDICATORS_VIEW_CONSOLIDATED) || p.has(PERMISSIONS.PRODUCTIVITY_VIEW) || p.has(PERMISSIONS.PRODUCTIVITY_MANAGE)) {
     indicadores.push({ href: "/tma", label: "TMA", icon: "indicators" });
   }
+  if (p.has(PERMISSIONS.INDICATORS_VIEW_CONSOLIDATED)) {
+    indicadores.push({ href: "/relatorios", label: "Relatórios", icon: "audit" });
+  }
   if (p.has(PERMISSIONS.INDICATORS_VIEW_CONSOLIDATED) || p.has(PERMISSIONS.CASCADE_MANAGE)) {
     indicadores.push({ href: "/cascata", label: "Cascateamento (ICs e IVs)", icon: "indicators" });
   }
