@@ -1898,3 +1898,26 @@ model ChecklistComplianceSnapshot {
   data      Json
   createdAt DateTime @default(now())
 }
+
+/// Desligamentos importados do relatório do RH (base do turnover e do PDCA). Sem chaves estrangeiras de propósito: o vínculo com o
+/// colaborador (quando casa por matrícula ou nome) e quem importou ficam só como ids, e a mesma linha reimportada não duplica (dedupKey).
+model Termination {
+  id              String   @id @default(uuid())
+  dedupKey        String   @unique // matrícula (ou nome) + data do desligamento
+  collaboratorId  String?
+  name            String
+  matricula       String?
+  cargo           String?
+  areaName        String?
+  turnoName       String?
+  admissionDate   DateTime?
+  terminationDate DateTime
+  kind            String // VOLUNTARIO | INVOLUNTARIO | ACORDO | OUTRO | NAO_CLASSIFICADO
+  reason          String?
+  notes           String?
+  importedById    String
+  createdAt       DateTime @default(now())
+
+  @@index([terminationDate])
+  @@index([collaboratorId])
+}

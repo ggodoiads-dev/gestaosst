@@ -230,6 +230,7 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
     rh.push({ href: "/rh/tratativa-ponto", label: "Tratativa de Ponto", icon: "timeClockTreatment" });
     rh.push({ href: "/pendencias-advertencia", label: "Pendências de Advertência", icon: "warningPending" });
     rh.push({ href: "/entrevistas-abs", label: "Entrevistas de ABS", icon: "alert" });
+    rh.push({ href: "/desligamentos", label: "Desligamentos e Turnover", icon: "collaborators" });
   }
   if (!p.has(PERMISSIONS.HR_MANAGE) && p.has(PERMISSIONS.DISCIPLINE_MANAGE)) {
     rh.push({ href: "/pendencias-advertencia", label: "Pendências de Advertência", icon: "warningPending" });
