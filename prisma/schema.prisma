@@ -1921,3 +1921,18 @@ model Termination {
   @@index([terminationDate])
   @@index([collaboratorId])
 }
+
+/// PDCA do turnover, um por ano: metas, causas (Plan), ações (Do), padronização (Act). O acompanhamento (Check) é calculado dos desligamentos.
+model TurnoverPdca {
+  year            Int      @id
+  owner           String?
+  monthlyGoal     Float?
+  ytdGoal         Float?
+  annualGoal      Float?
+  causes          Json     @default("[]")
+  actions         Json     @default("[]")
+  standardization String?
+  updatedById     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}

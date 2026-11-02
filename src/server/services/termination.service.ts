@@ -8,6 +8,7 @@ import { TERMINATION_FIELD_ALIASES, TERMINATION_IMPORT_FIELDS, type TerminationI
 import {
   classifyTermination,
   countsAsTurnover,
+  effectiveKind,
   headcountAt,
   tenureBucket,
   tenureDays,
@@ -179,11 +180,7 @@ export async function getTurnoverView(user: CurrentUser, year: number): Promise<
     return empty;
   }
   const years = [...new Set([year, ...all.map((t) => t.terminationDate.getFullYear())])].sort((a, b) => b - a);
-  // O tipo é relido do motivo guardado: quem foi importado antes de existir a classe "fora do turnover" também é reclassificado, sem mexer no banco.
-  const kindOfRow = (t: (typeof all)[number]): TerminationKind => {
-    const reread = classifyTermination(null, t.reason);
-    return reread === "FORA_TURNOVER" ? reread : (t.kind as TerminationKind);
-  };
+  const kindOfRow = (t: (typeof all)[number]): TerminationKind => effectiveKind(t.kind, t.reason);
   const ofYear = all.filter((t) => t.terminationDate.getFullYear() === year);
   const rows = ofYear.filter((t) => countsAsTurnover(kindOfRow(t)));
   const people = await db.collaborator.findMany({ select: { admissionDate: true, inactivatedAt: true } });

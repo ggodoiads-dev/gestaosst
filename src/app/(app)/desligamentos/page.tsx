@@ -58,11 +58,16 @@ export default async function DesligamentosPage({ searchParams }: { searchParams
         title="Desligamentos e turnover"
         description="Base do turnover da operação. O efetivo de cada mês vem do cadastro de colaboradores (admissão e inativação); os desligamentos vêm da planilha do RH importada aqui. Reimportar o mesmo arquivo não duplica."
         actions={
-          <Button asChild>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="secondary" asChild>
+              <Link href={`/desligamentos/pdca?ano=${year}`}>PDCA do turnover</Link>
+            </Button>
+            <Button asChild>
             <Link href="/desligamentos/importar">
               <Upload className="size-4" /> Importar relatório de desligamentos
             </Link>
-          </Button>
+            </Button>
+          </div>
         }
       />
       <PageBody>

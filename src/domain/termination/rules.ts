@@ -23,6 +23,12 @@ export function countsAsTurnover(kind: TerminationKind): boolean {
   return kind !== "FORA_TURNOVER";
 }
 
+/** Tipo efetivo de um desligamento já guardado: relê o motivo, para que quem entrou antes da classe "fora do turnover" também seja reclassificado sem mexer no banco. */
+export function effectiveKind(storedKind: string, reason: string | null): TerminationKind {
+  const reread = classifyTermination(null, reason);
+  return reread === "FORA_TURNOVER" ? reread : (storedKind as TerminationKind);
+}
+
 /** Lê o tipo e o motivo do desligamento como escritos na planilha e decide a classe. Sem pista clara, fica "sem classificação" (nunca chuta). */
 export function classifyTermination(kindText: string | null, reasonText: string | null): TerminationKind {
   const t = squash(`${kindText ?? ""} ${reasonText ?? ""}`);
