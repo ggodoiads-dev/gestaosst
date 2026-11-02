@@ -585,10 +585,13 @@ async function computeDayProgress(
 /** Visão geral (ontem + mês corrente, sempre até D-1) de quantos colaboradores com checklist obrigatório
  * cumpriram tudo vs. ficaram com pendência — base do dashboard de conformidade de checklist. O bloco
  * `today` guarda o ÚLTIMO DIA FECHADO (ontem); `date` é esse dia. */
-export async function getChecklistComplianceDashboard(user: CurrentUser, params: { date?: Date } = {}) {
+export async function getChecklistComplianceDashboard(user: CurrentUser, params: { date?: Date; month?: string } = {}) {
   requirePermission(user, PERMISSIONS.CHECKLIST_COMPLIANCE_VIEW);
-  const date = params.date ?? new Date();
-  const dayStart = lastClosedDay();
+  // `month` ("AAAA-MM") pede um mês JÁ FECHADO: o bloco "último dia" passa a ser o último dia daquele mês e o bloco do mês cobre ele inteiro.
+  const nowKey = formatInTimeZone(new Date(), APP_TIMEZONE, "yyyy-MM");
+  const pastMonth = params.month && /^\d{4}-(0[1-9]|1[0-2])$/.test(params.month) && params.month < nowKey ? params.month : null;
+  const date = pastMonth ? new Date(Number(pastMonth.slice(0, 4)), Number(pastMonth.slice(5, 7)) - 1, 15) : (params.date ?? new Date());
+  const dayStart = pastMonth ? new Date(Number(pastMonth.slice(0, 4)), Number(pastMonth.slice(5, 7)), 0) : lastClosedDay();
   const monthStart = startOfMonth(date);
   const monthEndInclusive = addDays(startOfMonth(addMonths(date, 1)), -1);
 
@@ -598,7 +601,7 @@ export async function getChecklistComplianceDashboard(user: CurrentUser, params:
     computeDayProgress(addDays(lastClosedDay(), 1)),
   ]);
 
-  return { date: dayStart, today, month, todayProgress, canJustify: canJustifyChecklist(user) };
+  return { date: dayStart, today, month, todayProgress, canJustify: canJustifyChecklist(user), monthKey: pastMonth ?? nowKey, isPastMonth: !!pastMonth };
 }
 
 export type DayExecutionAnswer = {

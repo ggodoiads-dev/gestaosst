@@ -65,9 +65,9 @@ function riskTone(score: number): "success" | "warning" | "danger" {
 export default async function IndicadoresPage({
   searchParams,
 }: {
-  searchParams: Promise<{ collaboratorId?: string; period?: string; ref?: string; cp?: string; cr?: string }>;
+  searchParams: Promise<{ collaboratorId?: string; period?: string; ref?: string; cp?: string; cr?: string; mes?: string }>;
 }) {
-  const { collaboratorId, period: periodParam, ref: refParam, cp, cr } = await searchParams;
+  const { collaboratorId, period: periodParam, ref: refParam, cp, cr, mes } = await searchParams;
   const now = new Date();
   const period: Period = periodParam === "dia" || periodParam === "semana" ? periodParam : "mes";
   const refDate = refParam ? parseDateOnly(refParam) : now;
@@ -121,7 +121,7 @@ export default async function IndicadoresPage({
     collaborators = await listActiveCollaboratorsForSupervision(user);
   }
   if (canSeeChecklistCompliance) {
-    checklistDashboard = await getChecklistComplianceDashboard(user);
+    checklistDashboard = await getChecklistComplianceDashboard(user, { month: mes });
     coverageGaps = await getChecklistCoverageGaps(user).catch(() => null);
     const todayKeyBrt = formatInTimeZone(new Date(), APP_TIMEZONE, "yyyy-MM-dd");
     explorer = await getChecklistComplianceExplorer(user, {
@@ -133,6 +133,25 @@ export default async function IndicadoresPage({
     }
   }
   const complianceYesterdayPercent = checklistDashboard ? compliancePercent(checklistDashboard.today) : null;
+
+  // Escolha do mês do cartão "Aderência de checklist por colaborador" (como no Guardian): só meses já fechados ou o atual.
+  const complianceNowKey = formatInTimeZone(now, APP_TIMEZONE, "yyyy-MM");
+  const complianceMonthKey = checklistDashboard?.monthKey ?? complianceNowKey;
+  const shiftMonthKey = (key: string, delta: number) => {
+    const d = new Date(Date.UTC(Number(key.slice(0, 4)), Number(key.slice(5, 7)) - 1 + delta, 1));
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+  };
+  const complianceHref = (key: string | null) => {
+    const sp = new URLSearchParams();
+    if (collaboratorId) sp.set("collaboratorId", collaboratorId);
+    if (periodParam) sp.set("period", periodParam);
+    if (refParam) sp.set("ref", refParam);
+    if (cp) sp.set("cp", cp);
+    if (cr) sp.set("cr", cr);
+    if (key && key !== complianceNowKey) sp.set("mes", key);
+    const q = sp.toString();
+    return `/indicadores${q ? `?${q}` : ""}#checklist-por-colaborador`;
+  };
 
   const desempenhoBars = desempenho.map((d) => ({
     name: d.areaName,
@@ -184,12 +203,37 @@ export default async function IndicadoresPage({
         {checklistDashboard ? (
           <Card id="checklist-por-colaborador">
             <CardHeader>
-              <CardTitle>Aderência de checklist por colaborador</CardTitle>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <CardTitle>Aderência de checklist por colaborador</CardTitle>
+                <div className="flex items-center gap-2">
+                  <Button size="icon" variant="secondary" asChild>
+                    <Link href={complianceHref(shiftMonthKey(complianceMonthKey, -1))} aria-label="Mês anterior">
+                      <ChevronLeft className="size-4" />
+                    </Link>
+                  </Button>
+                  <span className="min-w-36 text-center text-sm font-medium text-foreground">
+                    {MONTH_LABELS[Number(complianceMonthKey.slice(5, 7)) - 1]} de {complianceMonthKey.slice(0, 4)}
+                  </span>
+                  <Button size="icon" variant="secondary" asChild disabled={complianceMonthKey >= complianceNowKey}>
+                    <Link href={complianceHref(shiftMonthKey(complianceMonthKey, 1))} aria-label="Próximo mês" className={complianceMonthKey >= complianceNowKey ? "pointer-events-none opacity-40" : undefined}>
+                      <ChevronRight className="size-4" />
+                    </Link>
+                  </Button>
+                  {checklistDashboard.isPastMonth && (
+                    <Link href={complianceHref(null)} className="text-xs font-medium text-accent hover:underline">
+                      Voltar para o mês atual
+                    </Link>
+                  )}
+                </div>
+              </div>
             </CardHeader>
             <CardContent className="grid grid-cols-1 gap-6 sm:grid-cols-2">
               {[
-                { title: `Ontem — ${formatDate(checklistDashboard.date)}`, stats: checklistDashboard.today },
-                { title: `Mês — ${MONTH_LABELS[now.getMonth()]} de ${now.getFullYear()} (até ontem)`, stats: checklistDashboard.month },
+                { title: `${checklistDashboard.isPastMonth ? "Último dia" : "Ontem"} — ${formatDate(checklistDashboard.date)}`, stats: checklistDashboard.today },
+                {
+                  title: `Mês — ${MONTH_LABELS[Number(complianceMonthKey.slice(5, 7)) - 1]} de ${complianceMonthKey.slice(0, 4)}${checklistDashboard.isPastMonth ? "" : " (até ontem)"}`,
+                  stats: checklistDashboard.month,
+                },
               ].map(({ title, stats }) => {
                 const pct = compliancePercent(stats);
                 const noAccessCount = stats.collaboratorsIncomplete.filter((c) => c.noAccess).length;
