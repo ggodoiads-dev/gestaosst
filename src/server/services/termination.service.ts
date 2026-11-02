@@ -7,6 +7,7 @@ import { PERMISSIONS } from "@/domain/shared/permissions";
 import { TERMINATION_FIELD_ALIASES, TERMINATION_IMPORT_FIELDS, type TerminationImportField, type TerminationImportMapping } from "@/domain/termination/import-fields";
 import {
   classifyTermination,
+  countsAsTurnover,
   headcountAt,
   tenureBucket,
   tenureDays,
@@ -133,7 +134,7 @@ export type TurnoverView = {
   ready: boolean;
   year: number;
   years: number[];
-  totals: { exits: number; voluntary: number; company: number; agreement: number; other: number; unclassified: number; early90: number; withTenure: number; yearRate: number | null; avgTenureDays: number | null };
+  totals: { exits: number; outside: number; voluntary: number; company: number; agreement: number; other: number; unclassified: number; early90: number; withTenure: number; yearRate: number | null; avgTenureDays: number | null };
   months: TurnoverMonth[];
   byKind: { label: string; count: number }[];
   byTenure: { label: string; count: number }[];
@@ -160,7 +161,7 @@ export async function getTurnoverView(user: CurrentUser, year: number): Promise<
     ready: false,
     year,
     years: [year],
-    totals: { exits: 0, voluntary: 0, company: 0, agreement: 0, other: 0, unclassified: 0, early90: 0, withTenure: 0, yearRate: null, avgTenureDays: null },
+    totals: { exits: 0, outside: 0, voluntary: 0, company: 0, agreement: 0, other: 0, unclassified: 0, early90: 0, withTenure: 0, yearRate: null, avgTenureDays: null },
     months: [],
     byKind: [],
     byTenure: [],
@@ -178,7 +179,13 @@ export async function getTurnoverView(user: CurrentUser, year: number): Promise<
     return empty;
   }
   const years = [...new Set([year, ...all.map((t) => t.terminationDate.getFullYear())])].sort((a, b) => b - a);
-  const rows = all.filter((t) => t.terminationDate.getFullYear() === year);
+  // O tipo é relido do motivo guardado: quem foi importado antes de existir a classe "fora do turnover" também é reclassificado, sem mexer no banco.
+  const kindOfRow = (t: (typeof all)[number]): TerminationKind => {
+    const reread = classifyTermination(null, t.reason);
+    return reread === "FORA_TURNOVER" ? reread : (t.kind as TerminationKind);
+  };
+  const ofYear = all.filter((t) => t.terminationDate.getFullYear() === year);
+  const rows = ofYear.filter((t) => countsAsTurnover(kindOfRow(t)));
   const people = await db.collaborator.findMany({ select: { admissionDate: true, inactivatedAt: true } });
 
   const now = new Date();
@@ -195,8 +202,9 @@ export async function getTurnoverView(user: CurrentUser, year: number): Promise<
   const avgHeadcount = months.length ? months.reduce((s, x) => s + (x.headcountStart + x.headcountEnd) / 2, 0) / months.length : 0;
   const withDays = rows.map((t) => tenureDays(t.admissionDate, t.terminationDate));
   const known = withDays.filter((d): d is number => d !== null);
-  const kindOf = (t: (typeof rows)[number]) => t.kind as TerminationKind;
-  const list = rows.map((t, i) => ({
+  const kindOf = kindOfRow;
+  const listDays = ofYear.map((t) => tenureDays(t.admissionDate, t.terminationDate));
+  const list = ofYear.map((t, i) => ({
     id: t.id,
     name: t.name,
     cargo: t.cargo,
@@ -206,7 +214,7 @@ export async function getTurnoverView(user: CurrentUser, year: number): Promise<
     terminationDate: t.terminationDate,
     kind: kindOf(t),
     reason: t.reason,
-    tenureDays: withDays[i],
+    tenureDays: listDays[i],
     linked: !!t.collaboratorId,
   }));
 
@@ -216,11 +224,12 @@ export async function getTurnoverView(user: CurrentUser, year: number): Promise<
     years,
     totals: {
       exits: rows.length,
-      voluntary: rows.filter((t) => t.kind === "VOLUNTARIO").length,
-      company: rows.filter((t) => t.kind === "INVOLUNTARIO").length,
-      agreement: rows.filter((t) => t.kind === "ACORDO").length,
-      other: rows.filter((t) => t.kind === "OUTRO").length,
-      unclassified: rows.filter((t) => t.kind === "NAO_CLASSIFICADO").length,
+      outside: ofYear.length - rows.length,
+      voluntary: rows.filter((t) => kindOfRow(t) === "VOLUNTARIO").length,
+      company: rows.filter((t) => kindOfRow(t) === "INVOLUNTARIO").length,
+      agreement: rows.filter((t) => kindOfRow(t) === "ACORDO").length,
+      other: rows.filter((t) => kindOfRow(t) === "OUTRO").length,
+      unclassified: rows.filter((t) => kindOfRow(t) === "NAO_CLASSIFICADO").length,
       early90: known.filter((d) => d <= 90).length,
       withTenure: known.length,
       // Taxa do ano = desligamentos acumulados ÷ efetivo médio dos meses já corridos (não é a soma das taxas mensais).

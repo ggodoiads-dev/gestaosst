@@ -91,7 +91,7 @@ export default async function DesligamentosPage({ searchParams }: { searchParams
         ) : (
           <>
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-              <StatCard label={`Desligamentos em ${year}`} value={t.exits} />
+              <StatCard label={`Desligamentos em ${year}`} value={t.exits} hint={t.outside > 0 ? `+ ${t.outside} fora do turnover (QLP / transferência)` : undefined} />
               <StatCard label="Turnover do ano" value={t.yearRate === null ? "—" : `${t.yearRate}%`} hint="desligamentos ÷ efetivo médio" />
               <StatCard label="Pedido de demissão" value={t.voluntary} hint={t.exits ? `${Math.round((t.voluntary / t.exits) * 100)}% do total` : undefined} />
               <StatCard label="Iniciativa da empresa" value={t.company} hint={t.exits ? `${Math.round((t.company / t.exits) * 100)}% do total` : undefined} />
@@ -173,7 +173,7 @@ export default async function DesligamentosPage({ searchParams }: { searchParams
                         <TableCell>{formatDate(r.terminationDate)}</TableCell>
                         <TableCell className="text-foreground-subtle">{r.tenureDays === null ? "—" : `${r.tenureDays} dias`}</TableCell>
                         <TableCell>
-                          <Badge tone={r.kind === "VOLUNTARIO" ? "info" : r.kind === "INVOLUNTARIO" ? "warning" : "neutral"}>{TERMINATION_KIND_LABEL[r.kind].split(" (")[0]}</Badge>
+                          <Badge tone={r.kind === "VOLUNTARIO" ? "info" : r.kind === "INVOLUNTARIO" ? "warning" : "neutral"} title={r.kind === "FORA_TURNOVER" ? "Não entra na conta do turnover." : undefined}>{TERMINATION_KIND_LABEL[r.kind].split(" (")[0]}</Badge>
                         </TableCell>
                         <TableCell className="max-w-56 truncate text-foreground-subtle" title={r.reason ?? undefined}>
                           {r.reason ?? "—"}

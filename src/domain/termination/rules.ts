@@ -1,12 +1,13 @@
 /** Regras puras dos desligamentos: classificação do motivo, chave contra duplicidade, tempo de casa e taxa de turnover. */
 
-export type TerminationKind = "VOLUNTARIO" | "INVOLUNTARIO" | "ACORDO" | "OUTRO" | "NAO_CLASSIFICADO";
+export type TerminationKind = "VOLUNTARIO" | "INVOLUNTARIO" | "ACORDO" | "OUTRO" | "FORA_TURNOVER" | "NAO_CLASSIFICADO";
 
 export const TERMINATION_KIND_LABEL: Record<TerminationKind, string> = {
   VOLUNTARIO: "Pedido de demissão",
   INVOLUNTARIO: "Iniciativa da empresa",
   ACORDO: "Acordo",
   OUTRO: "Outro (aposentadoria, transferência, falecimento)",
+  FORA_TURNOVER: "Fora do turnover (redução de QLP, transferência para cliente não monitorado)",
   NAO_CLASSIFICADO: "Sem classificação",
 };
 
@@ -17,10 +18,18 @@ const squash = (s: string) =>
     .toLowerCase()
     .replace(/[^a-z0-9]/g, "");
 
+/** Conta no turnover? Redução de QLP e transferência para cliente não monitorado ficam de fora. */
+export function countsAsTurnover(kind: TerminationKind): boolean {
+  return kind !== "FORA_TURNOVER";
+}
+
 /** Lê o tipo e o motivo do desligamento como escritos na planilha e decide a classe. Sem pista clara, fica "sem classificação" (nunca chuta). */
 export function classifyTermination(kindText: string | null, reasonText: string | null): TerminationKind {
   const t = squash(`${kindText ?? ""} ${reasonText ?? ""}`);
   if (t === "") return "NAO_CLASSIFICADO";
+  // Saídas que não são turnover: redução de QLP (quadro) e transferência para cliente não monitorado. Vêm antes de tudo, porque a planilha costuma
+  // trazê-las como "iniciativa da empresa".
+  if (t.includes("qlp") || t.includes("reducaodequadro") || t.includes("clientenaomonitorado") || (t.includes("transfer") && t.includes("naomonitorado"))) return "FORA_TURNOVER";
   // "involuntario" contém "voluntario": testar primeiro.
   if (t.includes("involuntari")) return "INVOLUNTARIO";
   if (t.includes("voluntari") || t.includes("pedido") || t.includes("pediu") || t.includes("iniciativadocolaborador") || t.includes("iniciativadoempregado")) return "VOLUNTARIO";

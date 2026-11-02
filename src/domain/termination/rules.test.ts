@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyTermination, headcountAt, tenureBucket, tenureDays, terminationKey, turnoverRate } from "./rules";
+import { classifyTermination, countsAsTurnover, headcountAt, tenureBucket, tenureDays, terminationKey, turnoverRate } from "./rules";
 
 describe("classifyTermination", () => {
   it("pedido de demissão é voluntário", () => {
@@ -17,6 +17,17 @@ describe("classifyTermination", () => {
   it("acordo e outros", () => {
     expect(classifyTermination(null, "Acordo (art. 484-A)")).toBe("ACORDO");
     expect(classifyTermination(null, "Aposentadoria")).toBe("OUTRO");
+  });
+  it("redução de QLP e transferência para cliente não monitorado ficam fora do turnover", () => {
+    expect(classifyTermination("Iniciativa da empresa", "Redução de QLP")).toBe("FORA_TURNOVER");
+    expect(classifyTermination(null, "Redução de quadro")).toBe("FORA_TURNOVER");
+    expect(classifyTermination(null, "Transferido para cliente não monitorado")).toBe("FORA_TURNOVER");
+    expect(classifyTermination(null, "Transferência para cliente não monitorado")).toBe("FORA_TURNOVER");
+    expect(countsAsTurnover("FORA_TURNOVER")).toBe(false);
+    expect(countsAsTurnover("VOLUNTARIO")).toBe(true);
+  });
+  it("transferência simples continua sendo outro", () => {
+    expect(classifyTermination(null, "Transferência")).toBe("OUTRO");
   });
   it("sem pista clara não classifica", () => {
     expect(classifyTermination(null, null)).toBe("NAO_CLASSIFICADO");
