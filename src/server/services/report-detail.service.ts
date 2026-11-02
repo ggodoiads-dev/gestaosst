@@ -11,6 +11,7 @@ import { deltaText, dtoFindings, kpi, nonconformityFindings, sortFindings, trend
 import type { Finding, MonthlyReport, ReportKind, ReportVersion } from "@/domain/reports/types";
 import { daysBetween, lastMonths, monthLabelOf, num, pct, range, shiftMonth, shortLabel } from "@/server/services/report.service";
 import { buildAccidentsReport, buildGuardianReport, buildTmaReport } from "@/server/services/report-detail-b.service";
+import { buildAttendanceReport, buildDisciplineReport, buildFinanceReport, buildProductionReport, buildProductivityReport, buildQualificationsReport } from "@/server/services/report-detail-c.service";
 import { avgOf, countBy, keyOfDate, sec, tbl, type DetailCtx, type Out } from "@/server/services/report-kit";
 import { formatInTimeZone } from "date-fns-tz";
 import { APP_TIMEZONE } from "@/lib/dates";
@@ -342,6 +343,12 @@ export const REPORT_KINDS: { key: ReportKind; label: string }[] = [
   { key: "acidentes", label: "Acidentes" },
   { key: "guardian", label: "Guardian" },
   { key: "tma", label: "TMA" },
+  { key: "producao", label: "Produção por turno" },
+  { key: "produtividade", label: "Produtividade" },
+  { key: "qualificacoes", label: "Qualificações" },
+  { key: "presenca", label: "Presença e faltas" },
+  { key: "disciplina", label: "Medidas disciplinares" },
+  { key: "financeiro", label: "Financeiro (DRE)" },
 ];
 
 const cache = new Map<string, { at: number; report: MonthlyReport }>();
@@ -352,7 +359,7 @@ export async function buildDetailedReport(user: CurrentUser, kind: Exclude<Repor
   if (hit && Date.now() - hit.at < 120000) return hit.report;
   const nowKey = formatInTimeZone(new Date(), APP_TIMEZONE, "yyyy-MM");
   const ctx: DetailCtx = { user, month, prev: shiftMonth(month, -1), internal: version === "interno", nowKey };
-  const builders = { dto: buildDto, equipamentos: buildEquipments, checklists: buildChecklists, ncs: buildNcs, acidentes: buildAccidentsReport, guardian: buildGuardianReport, tma: buildTmaReport } as const;
+  const builders = { dto: buildDto, equipamentos: buildEquipments, checklists: buildChecklists, ncs: buildNcs, acidentes: buildAccidentsReport, guardian: buildGuardianReport, tma: buildTmaReport, producao: buildProductionReport, produtividade: buildProductivityReport, qualificacoes: buildQualificationsReport, presenca: buildAttendanceReport, disciplina: buildDisciplineReport, financeiro: buildFinanceReport } as const;
   const out = await builders[kind](ctx);
   const internal = version === "interno";
   const report: MonthlyReport = {

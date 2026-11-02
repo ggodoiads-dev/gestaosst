@@ -53,7 +53,7 @@ export type ReportSection = {
   notes: string[];
 };
 
-export type ReportKind = "consolidado" | "dto" | "equipamentos" | "checklists" | "ncs" | "acidentes" | "guardian" | "tma";
+export type ReportKind = "consolidado" | "dto" | "equipamentos" | "checklists" | "ncs" | "acidentes" | "guardian" | "tma" | "producao" | "produtividade" | "qualificacoes" | "presenca" | "disciplina" | "financeiro";
 
 export type MonthlyReport = {
   kind?: ReportKind;
