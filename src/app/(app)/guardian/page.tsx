@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { GuardianReportTableRow } from "./guardian-report-table-row";
 import { GuardianChampions } from "./guardian-champions";
+import { ReopenMonthButton } from "./reopen-month-button";
 
 function monthLabel(month: string): string {
   const [y, m] = month.split("-").map(Number);
@@ -105,11 +106,15 @@ export default async function GuardianPage({ searchParams }: { searchParams: Pro
         <Card>
           <CardHeader>
             <CardTitle>
-              <span className="flex items-center gap-2"><ShieldCheck className="size-4" /> Adesão ao Guardian — {monthLabel(month)}</span>
+              <span className="flex flex-wrap items-center gap-2">
+                <ShieldCheck className="size-4" /> Adesão ao Guardian — {monthLabel(month)}
+                {adherence.frozen && <Badge tone="success">Mês fechado: valores travados</Badge>}
+                {adherence.frozen && canImport && <ReopenMonthButton month={month} label={monthLabel(month)} />}
+              </span>
             </CardTitle>
             <CardDescription>
               Dos colaboradores que estavam ativos no mês, quantos relataram pelo menos uma vez (qualquer tipo). A conta recomeça do zero a cada mês
-              e o mês atual só se atualiza a cada importação; os meses fechados ficam guardados.
+              e o mês atual só se atualiza a cada importação. Quando o mês fecha, o resultado final fica travado e não muda mais.
               {adherence.lastReportDay && (
                 <span className="mt-1 block font-medium text-foreground-muted">
                   Relatos importados até {adherence.lastReportDay.slice(8, 10)}/{adherence.lastReportDay.slice(5, 7)}/{adherence.lastReportDay.slice(0, 4)}.

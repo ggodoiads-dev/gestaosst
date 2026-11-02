@@ -1883,3 +1883,11 @@ model UserNavAccess {
   @@id([userId, href])
   @@index([userId])
 }
+
+/// Adesão ao Guardian de um mês FECHADO, congelada: o que ficou no último dia do mês (denominador, quem relatou, ranking). Sem isso o mês fechado era recalculado a
+/// cada consulta e mudava com cadastro novo, desligamento ou data editada. Apagar a linha reabre o mês para ser recalculado e congelado de novo.
+model GuardianMonthSnapshot {
+  month     String   @id // AAAA-MM
+  data      Json
+  createdAt DateTime @default(now())
+}

@@ -34,6 +34,9 @@ export type GuardianAdherence = {
   reportedCount: number;
   notReportedCount: number;
   adherencePercent: number;
+  reportsCount: number;
+  /** Mês fechado com os valores congelados (o que ficou no último dia). */
+  frozen: boolean;
   /** Data (AAAA-MM-DD) do último relato já importado, de qualquer mês: mostra até quando os dados chegam. */
   lastReportDay: string | null;
   byType: { type: GuardianReportType; count: number }[];
@@ -82,10 +85,9 @@ type CollaboratorForAdherence = {
   inactivatedAt: Date | null;
 };
 
-/** Quem conta no denominador de um mês: já estava na empresa (admissão, ou cadastro se não houver)
- * até o fim do mês e não tinha sido desligado antes do começo dele. É isso que mantém a "memória"
- * dos meses fechados — um desligamento de hoje não muda a adesão de setembro. Desligado sem data
- * de desligamento (cadastro antigo) só conta se ainda estiver ativo. */
+/** Quem conta no denominador de um mês: quem estava na casa no ÚLTIMO DIA do mês. Entrou (admissão, ou cadastro se não houver) até o fim do mês e
+ * não saiu antes dele acabar. É a mesma regra do mês em andamento (quem já saiu não tem mais o que cobrar), então o mês que fecha termina exatamente
+ * no valor em que estava; desligamento DEPOIS do fim do mês não mexe nele. Desligado sem data de desligamento (cadastro antigo) só conta se estiver ativo. */
 function wasActiveDuring(
   c: Pick<CollaboratorForAdherence, "active" | "admissionDate" | "createdAt" | "inactivatedAt">,
   start: Date,
@@ -97,7 +99,8 @@ function wasActiveDuring(
   if (c.active) return true;
   // Mês em andamento: só conta quem está ativo agora (quem já saiu não tem mais o que cobrar).
   if (isCurrentMonth) return false;
-  return !!c.inactivatedAt && c.inactivatedAt >= start;
+  // Mês fechado: quem saiu só depois do último dia do mês ainda estava lá no fechamento; quem saiu durante o mês não conta.
+  return !!c.inactivatedAt && c.inactivatedAt >= end;
 }
 
 type ReportForAdherence = { type: GuardianReportType; reporterCollaboratorId: string | null; at: Date };
@@ -116,9 +119,57 @@ function summarizeMonth(month: string, collaborators: CollaboratorForAdherence[]
   return { inMonth, countByCollaborator, byType, reportsCount: monthReports.length };
 }
 
-/** Adesão ao Guardian por mês: dos colaboradores que estavam ativos naquele mês, quantos relataram
- * pelo menos uma vez (qualquer tipo). É calculada na hora a partir dos relatos já gravados — então
- * fica sempre atualizada com o que foi importado e cada mês fechado continua consultável. */
+function buildAdherenceDetail(month: string, collaborators: CollaboratorForAdherence[], reports: ReportForAdherence[], lastReportDay: string | null): GuardianAdherence {
+  const s = summarizeMonth(month, collaborators, reports);
+  const nameById = new Map(collaborators.map((c) => [c.id, c.name]));
+  const turnoById = new Map(collaborators.map((c) => [c.id, c.turnoName]));
+  const reportedCount = s.countByCollaborator.size;
+  return {
+    month,
+    activeCollaboratorsCount: s.inMonth.length,
+    reportedCount,
+    notReportedCount: s.inMonth.length - reportedCount,
+    adherencePercent: s.inMonth.length > 0 ? Math.round((reportedCount / s.inMonth.length) * 100) : 0,
+    reportsCount: s.reportsCount,
+    frozen: false,
+    lastReportDay,
+    byType: Array.from(s.byType.entries()).map(([type, count]) => ({ type, count })),
+    ranking: Array.from(s.countByCollaborator.entries())
+      .map(([collaboratorId, count]) => ({
+        collaboratorId,
+        name: nameById.get(collaboratorId) ?? "?",
+        count,
+        turnoName: turnoById.get(collaboratorId) ?? null,
+      }))
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "pt-BR")),
+    notReported: s.inMonth
+      .filter((c) => !s.countByCollaborator.has(c.id))
+      .map((c) => ({ collaboratorId: c.id, name: c.name, turnoName: c.turnoName }))
+      .sort((a, b) => a.name.localeCompare(b.name)),
+  };
+}
+
+/** Primeiro dia do mês seguinte (AAAA-MM-DD) — para saber se já há relato importado depois do fim do mês. */
+function nextMonthStartDay(month: string): string {
+  const { end } = monthRange(month);
+  return end.toISOString().slice(0, 10);
+}
+
+/** Meses fechados já congelados. Leitura tolerante: se a tabela ainda não existir no banco, vale o cálculo na hora. */
+async function loadSnapshots(): Promise<Map<string, GuardianAdherence>> {
+  const map = new Map<string, GuardianAdherence>();
+  try {
+    const rows = await db.guardianMonthSnapshot.findMany();
+    for (const r of rows) map.set(r.month, { ...(r.data as unknown as GuardianAdherence), frozen: true });
+  } catch (error) {
+    console.error("[guardian] fechamentos de mês indisponíveis:", error);
+  }
+  return map;
+}
+
+/** Adesão ao Guardian por mês: dos colaboradores que estavam na casa naquele mês, quantos relataram pelo menos uma vez (qualquer tipo). O mês em andamento
+ * é calculado na hora e recomeça do zero a cada mês. Quando o mês FECHA (já há relato importado de depois dele) o resultado é congelado e não muda mais,
+ * mesmo com cadastro novo, desligamento ou data editada; para recalcular um mês é preciso reabri-lo (`reopenGuardianMonth`). */
 export async function getGuardianAdherence(
   user: CurrentUser,
   month: string = currentMonthKey(),
@@ -141,52 +192,43 @@ export async function getGuardianAdherence(
     const at = r.occurredAt ?? r.reportedAt;
     return at ? [{ type: r.type, reporterCollaboratorId: r.reporterCollaboratorId, at }] : [];
   });
+  const lastReportDay = reports.length > 0 ? new Date(Math.max(...reports.map((r) => r.at.getTime()))).toISOString().slice(0, 10) : null;
 
-  const months = new Set<string>([currentMonthKey(), month]);
+  const nowMonth = currentMonthKey();
+  const months = new Set<string>([nowMonth, month]);
   for (const r of reports) months.add(monthKeyOf(r.at));
+
+  // Congela os meses que fecharam: já passaram e há relato importado de depois do fim deles (importação completa até a virada).
+  const snapshots = await loadSnapshots();
+  for (const m of months) {
+    if (m >= nowMonth || snapshots.has(m) || !lastReportDay || lastReportDay < nextMonthStartDay(m)) continue;
+    const detail = buildAdherenceDetail(m, collaborators, reports, null);
+    try {
+      await db.guardianMonthSnapshot.create({ data: { month: m, data: JSON.parse(JSON.stringify({ ...detail, frozen: true })) } });
+      snapshots.set(m, { ...detail, frozen: true });
+    } catch (error) {
+      console.error("[guardian] não consegui congelar o mês", m, error);
+    }
+  }
+
+  const detailOf = (m: string): GuardianAdherence => snapshots.get(m) ?? buildAdherenceDetail(m, collaborators, reports, null);
 
   const history = Array.from(months)
     .sort((a, b) => b.localeCompare(a))
     .map((m) => {
-      const s = summarizeMonth(m, collaborators, reports);
-      const reportedCount = s.countByCollaborator.size;
-      return {
-        month: m,
-        activeCollaboratorsCount: s.inMonth.length,
-        reportedCount,
-        adherencePercent: s.inMonth.length > 0 ? Math.round((reportedCount / s.inMonth.length) * 100) : 0,
-        reportsCount: s.reportsCount,
-      };
+      const d = detailOf(m);
+      return { month: m, activeCollaboratorsCount: d.activeCollaboratorsCount, reportedCount: d.reportedCount, adherencePercent: d.adherencePercent, reportsCount: d.reportsCount };
     });
 
-  const s = summarizeMonth(month, collaborators, reports);
-  const nameById = new Map(collaborators.map((c) => [c.id, c.name]));
-  const turnoById = new Map(collaborators.map((c) => [c.id, c.turnoName]));
-  const reportedCount = s.countByCollaborator.size;
-
-  const selected: GuardianAdherence = {
-    month,
-    activeCollaboratorsCount: s.inMonth.length,
-    reportedCount,
-    notReportedCount: s.inMonth.length - reportedCount,
-    adherencePercent: s.inMonth.length > 0 ? Math.round((reportedCount / s.inMonth.length) * 100) : 0,
-    lastReportDay: reports.length > 0 ? new Date(Math.max(...reports.map((r) => r.at.getTime()))).toISOString().slice(0, 10) : null,
-    byType: Array.from(s.byType.entries()).map(([type, count]) => ({ type, count })),
-    ranking: Array.from(s.countByCollaborator.entries())
-      .map(([collaboratorId, count]) => ({
-        collaboratorId,
-        name: nameById.get(collaboratorId) ?? "?",
-        count,
-        turnoName: turnoById.get(collaboratorId) ?? null,
-      }))
-      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "pt-BR")),
-    notReported: s.inMonth
-      .filter((c) => !s.countByCollaborator.has(c.id))
-      .map((c) => ({ collaboratorId: c.id, name: c.name, turnoName: c.turnoName }))
-      .sort((a, b) => a.name.localeCompare(b.name)),
-  };
-
+  const selected = { ...detailOf(month), lastReportDay };
   return { selected, history };
+}
+
+/** Reabre um mês congelado (apaga o fechamento): na próxima consulta ele é recalculado e congelado de novo. Usar depois de corrigir/importar relatos que faltavam. */
+export async function reopenGuardianMonth(user: CurrentUser, month: string) {
+  if (!hasPermission(user, PERMISSIONS.GUARDIAN_MANAGE)) throw new ForbiddenError();
+  if (!isValidMonthKey(month)) throw new Error("Mês inválido.");
+  await db.guardianMonthSnapshot.deleteMany({ where: { month } });
 }
 
 /** Relatos de um mês (pela data da ocorrência), mais recentes primeiro. Mostra só os de quem conta naquele mês — a mesma
