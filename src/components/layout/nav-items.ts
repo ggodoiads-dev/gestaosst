@@ -254,6 +254,7 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
     indicadores.push({ href: "/tma", label: "TMA", icon: "indicators" });
   }
   if (p.has(PERMISSIONS.INDICATORS_VIEW_CONSOLIDATED)) {
+    indicadores.push({ href: "/avisos", label: "Avisos", icon: "audit" });
     indicadores.push({ href: "/relatorios", label: "Relatórios", icon: "audit" });
   }
   if (p.has(PERMISSIONS.INDICATORS_VIEW_CONSOLIDATED) || p.has(PERMISSIONS.CASCADE_MANAGE)) {

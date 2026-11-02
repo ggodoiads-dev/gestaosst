@@ -23,6 +23,8 @@ function isPublicPath(pathname: string) {
     PUBLIC_PATHS.includes(pathname) ||
     pathname.startsWith("/q/") ||
     pathname.startsWith("/api/anexo-qr/") ||
+    // Rotinas agendadas da Vercel: a própria rota exige o segredo (CRON_SECRET), sem sessão de usuário.
+    pathname.startsWith("/api/cron/") ||
     pathname.startsWith("/_next") ||
     pathname === "/favicon.ico"
   );
