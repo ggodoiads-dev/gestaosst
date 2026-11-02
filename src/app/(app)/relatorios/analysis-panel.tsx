@@ -5,7 +5,7 @@ import { Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { generateReportAnalysisAction } from "@/server/actions/report.actions";
-import type { ReportVersion } from "@/domain/reports/types";
+import type { ReportKind, ReportVersion } from "@/domain/reports/types";
 
 const HEADINGS = ["Leitura geral", "O que preocupa", "O que vai bem", "Hipóteses de causa", "Ações prioritárias"];
 
@@ -23,13 +23,13 @@ function blocks(text: string): { title: string | null; lines: string[] }[] {
   return out;
 }
 
-export function AnalysisPanel({ month, version }: { month: string; version: ReportVersion }) {
+export function AnalysisPanel({ month, version, kind }: { month: string; version: ReportVersion; kind: ReportKind }) {
   const [pending, start] = useTransition();
   const [text, setText] = useState<string | null>(null);
 
   function generate() {
     start(async () => {
-      const res = await generateReportAnalysisAction(month, version);
+      const res = await generateReportAnalysisAction(month, version, kind);
       if (res.ok) setText(res.text);
       else toast.error(res.error);
     });

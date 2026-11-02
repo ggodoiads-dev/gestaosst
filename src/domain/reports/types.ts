@@ -53,7 +53,12 @@ export type ReportSection = {
   notes: string[];
 };
 
+export type ReportKind = "consolidado" | "dto" | "equipamentos" | "checklists" | "ncs" | "acidentes" | "guardian" | "tma";
+
 export type MonthlyReport = {
+  kind?: ReportKind;
+  /** Título do relatório (o consolidado usa o padrão). */
+  title?: string;
   month: string;
   monthLabel: string;
   version: ReportVersion;

@@ -7,6 +7,7 @@ const MODEL = "gpt-4o";
 /** Resume o relatório em dados puros: é só isso que a IA recebe (nada além do que está na tela). */
 function factsOf(report: MonthlyReport) {
   return {
+    relatorio: report.title ?? "Relatório mensal de segurança e operação",
     mes: report.monthLabel,
     versao: report.version === "cliente" ? "cliente (Ambev)" : "interna (gestão)",
     indicadores_executivos: report.executive.map((k) => ({ indicador: k.label, valor: k.value, comparacao: k.delta ?? null, nota: k.note ?? null })),

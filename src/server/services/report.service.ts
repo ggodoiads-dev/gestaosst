@@ -32,16 +32,16 @@ const MONTHS = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Jul
 const SHORT = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 
 export const monthLabelOf = (key: string) => `${MONTHS[Number(key.slice(5, 7)) - 1]} de ${key.slice(0, 4)}`;
-const shortLabel = (key: string) => `${SHORT[Number(key.slice(5, 7)) - 1]}/${key.slice(2, 4)}`;
+export const shortLabel = (key: string) => `${SHORT[Number(key.slice(5, 7)) - 1]}/${key.slice(2, 4)}`;
 export function shiftMonth(key: string, delta: number): string {
   const d = new Date(Date.UTC(Number(key.slice(0, 4)), Number(key.slice(5, 7)) - 1 + delta, 1));
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 }
-const range = (key: string) => ({ start: new Date(`${key}-01T00:00:00Z`), end: new Date(`${shiftMonth(key, 1)}-01T00:00:00Z`) });
-const lastMonths = (key: string, n: number) => Array.from({ length: n }, (_, i) => shiftMonth(key, i - (n - 1)));
-const pct = (n: number) => `${n.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`;
-const num = (n: number | null | undefined) => (n === null || n === undefined ? "—" : n.toLocaleString("pt-BR", { maximumFractionDigits: 1 }));
-const daysBetween = (a: Date, b: Date) => Math.max(0, Math.floor((b.getTime() - a.getTime()) / 86400000));
+export const range = (key: string) => ({ start: new Date(`${key}-01T00:00:00Z`), end: new Date(`${shiftMonth(key, 1)}-01T00:00:00Z`) });
+export const lastMonths = (key: string, n: number) => Array.from({ length: n }, (_, i) => shiftMonth(key, i - (n - 1)));
+export const pct = (n: number) => `${n.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`;
+export const num = (n: number | null | undefined) => (n === null || n === undefined ? "—" : n.toLocaleString("pt-BR", { maximumFractionDigits: 1 }));
+export const daysBetween = (a: Date, b: Date) => Math.max(0, Math.floor((b.getTime() - a.getTime()) / 86400000));
 
 type Built = { section: ReportSection; findings: Finding[]; exec: Kpi[] };
 type Ctx = { user: CurrentUser; month: string; prev: string; internal: boolean; nowKey: string };

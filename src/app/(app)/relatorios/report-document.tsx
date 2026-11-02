@@ -86,7 +86,7 @@ export function ReportDocument({ report }: { report: MonthlyReport }) {
     <article className="flex flex-col gap-6 rounded-lg border border-border bg-background p-5 print:border-0 print:p-0 sm:p-8">
       <header className="break-inside-avoid border-b-2 border-foreground pb-4">
         <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-foreground-subtle">SIGO · Sistema Interno de Gestão Organizacional</p>
-        <h1 className="mt-1 text-2xl font-bold text-foreground sm:text-3xl">Relatório mensal de segurança e operação</h1>
+        <h1 className="mt-1 text-2xl font-bold text-foreground sm:text-3xl">{report.title ?? "Relatório mensal de segurança e operação"}</h1>
         <p className="text-lg font-medium text-foreground-muted">{report.monthLabel}</p>
         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-foreground-subtle">
           <span className="rounded bg-foreground px-2 py-0.5 font-semibold uppercase tracking-wide text-background">{report.version === "cliente" ? "Versão cliente" : "Versão interna — gestão"}</span>

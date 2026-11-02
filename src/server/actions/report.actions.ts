@@ -2,17 +2,19 @@
 
 import { requireUser, ForbiddenError } from "@/server/auth/current-user";
 import { buildMonthlyReport } from "@/server/services/report.service";
+import { buildDetailedReport, REPORT_KINDS } from "@/server/services/report-detail.service";
 import { generateReportAnalysis } from "@/server/services/report-ai.service";
-import type { ReportVersion } from "@/domain/reports/types";
+import type { ReportKind, ReportVersion } from "@/domain/reports/types";
 
 export type AnalysisResult = { ok: true; text: string } | { ok: false; error: string };
 
 /** Gera o texto de análise (IA) a partir dos números do relatório — recalculados aqui, no servidor, nunca recebidos do navegador. */
-export async function generateReportAnalysisAction(month: string, version: ReportVersion): Promise<AnalysisResult> {
+export async function generateReportAnalysisAction(month: string, version: ReportVersion, kind: ReportKind = "consolidado"): Promise<AnalysisResult> {
   try {
     const user = await requireUser();
     if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month) || (version !== "interno" && version !== "cliente")) return { ok: false, error: "Pedido inválido." };
-    const report = await buildMonthlyReport(user, month, version);
+    if (!REPORT_KINDS.some((k) => k.key === kind)) return { ok: false, error: "Pedido inválido." };
+    const report = kind === "consolidado" ? await buildMonthlyReport(user, month, version) : await buildDetailedReport(user, kind, month, version);
     const text = await generateReportAnalysis(report);
     if (!text) return { ok: false, error: process.env.OPENAI_API_KEY ? "Não consegui gerar a análise agora. Tente de novo em instantes." : "A chave da IA (OPENAI_API_KEY) não está configurada." };
     return { ok: true, text };
