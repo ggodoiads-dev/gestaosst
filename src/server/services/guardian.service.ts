@@ -34,6 +34,8 @@ export type GuardianAdherence = {
   reportedCount: number;
   notReportedCount: number;
   adherencePercent: number;
+  /** Data (AAAA-MM-DD) do último relato já importado, de qualquer mês: mostra até quando os dados chegam. */
+  lastReportDay: string | null;
   byType: { type: GuardianReportType; count: number }[];
   /** Todos que relataram no mês, do que mais relatou pro que menos (com o turno, pro ranking por turno). */
   ranking: { collaboratorId: string; name: string; count: number; turnoName: string | null }[];
@@ -168,6 +170,7 @@ export async function getGuardianAdherence(
     reportedCount,
     notReportedCount: s.inMonth.length - reportedCount,
     adherencePercent: s.inMonth.length > 0 ? Math.round((reportedCount / s.inMonth.length) * 100) : 0,
+    lastReportDay: reports.length > 0 ? new Date(Math.max(...reports.map((r) => r.at.getTime()))).toISOString().slice(0, 10) : null,
     byType: Array.from(s.byType.entries()).map(([type, count]) => ({ type, count })),
     ranking: Array.from(s.countByCollaborator.entries())
       .map(([collaboratorId, count]) => ({

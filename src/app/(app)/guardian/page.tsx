@@ -108,8 +108,14 @@ export default async function GuardianPage({ searchParams }: { searchParams: Pro
               <span className="flex items-center gap-2"><ShieldCheck className="size-4" /> Adesão ao Guardian — {monthLabel(month)}</span>
             </CardTitle>
             <CardDescription>
-              Dos colaboradores que estavam ativos no mês, quantos relataram pelo menos uma vez (qualquer tipo). O mês
-              atual se atualiza a cada importação; os meses fechados ficam guardados.
+              Dos colaboradores que estavam ativos no mês, quantos relataram pelo menos uma vez (qualquer tipo). A conta recomeça do zero a cada mês
+              e o mês atual só se atualiza a cada importação; os meses fechados ficam guardados.
+              {adherence.lastReportDay && (
+                <span className="mt-1 block font-medium text-foreground-muted">
+                  Relatos importados até {adherence.lastReportDay.slice(8, 10)}/{adherence.lastReportDay.slice(5, 7)}/{adherence.lastReportDay.slice(0, 4)}.
+                  {month === nowMonth && adherence.lastReportDay.slice(0, 7) < month && " Ainda não há relato importado deste mês."}
+                </span>
+              )}
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
