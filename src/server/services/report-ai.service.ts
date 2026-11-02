@@ -64,3 +64,42 @@ export async function generateReportAnalysis(report: MonthlyReport): Promise<str
     return null;
   }
 }
+
+const SYSTEM_ABNT = `Você redige trechos de um relatório técnico (ABNT NBR 10719) sobre segurança e operação logística da LOG20, a partir de dados do sistema SIGO.
+
+REGRAS INEGOCIÁVEIS
+- Use SOMENTE os números e fatos recebidos. Nunca invente valor, nome, data ou ocorrência.
+- Linguagem formal, impessoal, em terceira pessoa ("observou-se", "verificou-se", "recomenda-se"). Texto corrido em parágrafos completos; sem listas, sem markdown, sem asteriscos.
+- Causas não comprovadas pelos dados devem ser apresentadas como hipótese ("pode-se supor", "hipotetiza-se", "é possível que"), nunca como fato.
+- Seja crítico e específico: aponte o que está pior do que deveria, compare com o mês anterior quando houver comparação e priorize pelo risco (vida e segurança, depois conformidade, depois produtividade).
+
+Responda APENAS com um objeto JSON com exatamente estas chaves:
+{"discussao": [3 a 4 parágrafos], "conclusoes": [2 parágrafos], "recomendacoes": [4 a 6 frases completas, cada uma indicando a ação, o responsável sugerido por função e o prazo]}`;
+
+export type AbntAiText = { discussao: string[]; conclusoes: string[]; recomendacoes: string[] };
+
+/** Discussão, conclusões e recomendações do relatório técnico, em prosa formal. Devolve `null` sem chave de IA ou se a resposta não vier no formato pedido. */
+export async function generateAbntText(report: MonthlyReport): Promise<AbntAiText | null> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return null;
+  try {
+    const client = new OpenAI({ apiKey });
+    const response = await client.chat.completions.create({
+      model: MODEL,
+      max_tokens: 1800,
+      temperature: 0.3,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: SYSTEM_ABNT + (report.version === "cliente" ? SYSTEM_CLIENTE : "") },
+        { role: "user", content: `Dados do relatório (JSON):\n${JSON.stringify(factsOf(report))}` },
+      ],
+    });
+    const parsed = JSON.parse(response.choices[0]?.message.content ?? "{}") as Partial<AbntAiText>;
+    const clean = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && x.trim().length > 0).map((x) => x.trim()) : []);
+    const out = { discussao: clean(parsed.discussao), conclusoes: clean(parsed.conclusoes), recomendacoes: clean(parsed.recomendacoes) };
+    return out.discussao.length + out.conclusoes.length + out.recomendacoes.length > 0 ? out : null;
+  } catch (error) {
+    console.error("[relatorio] falha ao gerar o texto ABNT:", error);
+    return null;
+  }
+}

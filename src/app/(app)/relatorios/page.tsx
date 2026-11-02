@@ -11,19 +11,21 @@ import { APP_TIMEZONE } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import type { MonthlyReport, ReportKind, ReportVersion } from "@/domain/reports/types";
 import { ReportDocument } from "./report-document";
+import { AbntReport } from "./abnt-report";
 import { AnalysisPanel } from "./analysis-panel";
 import { PrintButton } from "./print-button";
 
-export default async function RelatoriosPage({ searchParams }: { searchParams: Promise<{ mes?: string; versao?: string; tipo?: string }> }) {
+export default async function RelatoriosPage({ searchParams }: { searchParams: Promise<{ mes?: string; versao?: string; tipo?: string; formato?: string }> }) {
   const user = await requireUser();
   if (!hasPermission(user, PERMISSIONS.INDICATORS_VIEW_CONSOLIDATED)) redirect("/inicio");
-  const { mes, versao, tipo } = await searchParams;
+  const { mes, versao, tipo, formato } = await searchParams;
 
   const nowKey = formatInTimeZone(new Date(), APP_TIMEZONE, "yyyy-MM");
   const month = mes && /^\d{4}-(0[1-9]|1[0-2])$/.test(mes) && mes <= nowKey ? mes : nowKey;
   const version: ReportVersion = versao === "cliente" ? "cliente" : "interno";
   const kind: ReportKind = REPORT_KINDS.find((k) => k.key === tipo)?.key ?? "consolidado";
-  const href = (m: string, v: ReportVersion, k: ReportKind = kind) => `/relatorios?tipo=${k}&mes=${m}&versao=${v}`;
+  const abnt = formato === "abnt";
+  const href = (m: string, v: ReportVersion, k: ReportKind = kind, f: boolean = abnt) => `/relatorios?tipo=${k}&mes=${m}&versao=${v}${f ? "&formato=abnt" : ""}`;
 
   let report: MonthlyReport | null = null;
   let failure: string | null = null;
@@ -73,12 +75,21 @@ export default async function RelatoriosPage({ searchParams }: { searchParams: P
               </Link>
             )}
           </div>
+          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex overflow-hidden rounded-md border border-border-strong text-xs font-medium">
+            {([false, true] as const).map((f) => (
+              <Link key={String(f)} href={href(month, version, kind, f)} className={cn("px-3 py-1.5", abnt === f ? "bg-accent text-accent-foreground" : "bg-surface text-foreground-subtle hover:bg-surface-muted")}>
+                {f ? "Texto corrido (ABNT)" : "Painel"}
+              </Link>
+            ))}
+          </div>
           <div className="flex overflow-hidden rounded-md border border-border-strong text-xs font-medium">
             {(["interno", "cliente"] as const).map((v) => (
               <Link key={v} href={href(month, v)} className={cn("px-3 py-1.5", version === v ? "bg-accent text-accent-foreground" : "bg-surface text-foreground-subtle hover:bg-surface-muted")}>
                 {v === "interno" ? "Versão interna (gestão)" : "Versão cliente (Ambev)"}
               </Link>
             ))}
+          </div>
           </div>
         </div>
 
@@ -89,10 +100,14 @@ export default async function RelatoriosPage({ searchParams }: { searchParams: P
         )}
 
         {report ? (
-          <>
-            <ReportDocument report={report} />
-            <AnalysisPanel key={`${kind}-${month}-${version}`} month={month} version={version} kind={kind} />
-          </>
+          abnt ? (
+            <AbntReport key={`abnt-${kind}-${month}-${version}`} report={report} month={month} version={version} kind={kind} />
+          ) : (
+            <>
+              <ReportDocument report={report} />
+              <AnalysisPanel key={`${kind}-${month}-${version}`} month={month} version={version} kind={kind} />
+            </>
+          )
         ) : (
           <div className="rounded-lg border border-dashed border-border-strong bg-surface px-4 py-10 text-center text-sm text-foreground-subtle">{failure}</div>
         )}

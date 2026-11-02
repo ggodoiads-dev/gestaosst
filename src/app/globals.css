@@ -185,3 +185,107 @@ table {
     print-color-adjust: exact;
   }
 }
+
+/* Relatório técnico no padrão ABNT (NBR 10719): Times 12, entrelinha 1,5, texto justificado; margens 3 cm (sup./esq.) e 2 cm (inf./dir.). */
+.abnt-doc {
+  font-family: "Times New Roman", Times, serif;
+  font-size: 12pt;
+  line-height: 1.5;
+  color: #000;
+  background: #fff;
+}
+.abnt-doc p {
+  text-align: justify;
+  text-indent: 1.25cm;
+  margin: 0;
+}
+.abnt-doc .abnt-h1 {
+  font-size: 12pt;
+  font-weight: 700;
+  text-transform: uppercase;
+  margin: 1.5em 0 1em;
+  break-after: avoid;
+}
+.abnt-doc .abnt-h2 {
+  font-size: 12pt;
+  font-weight: 700;
+  margin: 1.25em 0 0.75em;
+  break-after: avoid;
+}
+.abnt-doc ul.abnt-list {
+  margin: 0 0 0 1.25cm;
+  padding: 0;
+  list-style: none;
+}
+.abnt-doc ul.abnt-list li {
+  text-align: justify;
+}
+.abnt-doc ul.abnt-list li::before {
+  content: "– ";
+}
+.abnt-doc .abnt-caption {
+  font-size: 10pt;
+  line-height: 1.2;
+  margin: 1em 0 0.3em;
+  text-indent: 0;
+  text-align: left;
+  font-weight: 700;
+  break-after: avoid;
+}
+.abnt-doc .abnt-source {
+  font-size: 10pt;
+  line-height: 1.2;
+  margin: 0.3em 0 1em;
+  text-indent: 0;
+  text-align: left;
+}
+.abnt-doc table.abnt-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 10pt;
+  line-height: 1.2;
+  border-top: 1.5px solid #000;
+  border-bottom: 1.5px solid #000;
+}
+.abnt-doc table.abnt-table th {
+  border-bottom: 1px solid #000;
+  padding: 3px 6px;
+  text-align: left;
+  font-weight: 700;
+}
+.abnt-doc table.abnt-table td {
+  padding: 3px 6px;
+  vertical-align: top;
+}
+.abnt-doc .abnt-page {
+  break-after: page;
+}
+
+@media screen {
+  .abnt-doc {
+    max-width: 21cm;
+    margin: 0 auto;
+    padding: 3cm 2cm 2cm 3cm;
+    box-shadow: 0 1px 8px rgba(0, 0, 0, 0.15);
+  }
+  .abnt-doc .abnt-page {
+    border-bottom: 1px dashed #bbb;
+    padding-bottom: 1.5em;
+    margin-bottom: 1.5em;
+  }
+}
+
+@media print {
+  @page abnt {
+    size: A4;
+    margin: 3cm 2cm 2cm 3cm;
+    @top-right {
+      content: counter(page);
+      font-family: "Times New Roman", Times, serif;
+      font-size: 10pt;
+    }
+  }
+  .abnt-doc {
+    page: abnt;
+  }
+}
