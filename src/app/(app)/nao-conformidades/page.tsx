@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { requireUser, requirePermission } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
 import { listNonconformitiesForUser } from "@/server/services/nonconformity.service";
@@ -25,11 +26,22 @@ export default async function NaoConformidadesPage({
       ? `Filtro: ${[status, severity].filter(Boolean).join(" · ").replaceAll("_", " ")}`
       : undefined;
 
+  const OPEN = new Set(["ABERTA", "EM_ANALISE", "ACAO_DEFINIDA", "EM_EXECUCAO", "AGUARDANDO_VERIFICACAO"]);
+  const byEquipment = new Map<string, { equipmentId: string; label: string; items: typeof items; openCount: number }>();
+  for (const nc of items) {
+    const g = byEquipment.get(nc.equipmentId) ?? { equipmentId: nc.equipmentId, label: `${nc.equipment.code} — ${nc.equipment.name}`, items: [], openCount: 0 };
+    g.items.push(nc);
+    if (OPEN.has(nc.status)) g.openCount++;
+    byEquipment.set(nc.equipmentId, g);
+  }
+  // Equipamento com mais NCs abertas primeiro; dentro dele, as mais recentes no topo (a lista já vem por data).
+  const groups = [...byEquipment.values()].sort((a, b) => b.openCount - a.openCount || b.items.length - a.items.length);
+
   return (
     <>
       <PageHeader
         title="Não Conformidades"
-        description={filterLabel ?? "Desvios identificados nos checklists, com rastreabilidade até a origem."}
+        description={filterLabel ?? "Desvios identificados nos checklists, agrupados por equipamento. Se a mesma pergunta reprova de novo com a NC aberta, não nasce outra NC: a reincidência fica registrada na ficha do equipamento."}
       />
       <PageBody>
         <Card>
@@ -38,7 +50,7 @@ export default async function NaoConformidadesPage({
               <TableHeader>
                 <TableRow>
                   <TableHead>Código</TableHead>
-                  <TableHead>Equipamento</TableHead>
+                  <TableHead>Equip.</TableHead>
                   <TableHead>Área</TableHead>
                   <TableHead>Severidade</TableHead>
                   <TableHead>Status</TableHead>
@@ -48,16 +60,25 @@ export default async function NaoConformidadesPage({
               </TableHeader>
               <TableBody>
                 {items.length === 0 && <TableEmpty colSpan={7} />}
-                {items.map((nc) => (
-                  <ClickableRow key={nc.id} href={`/nao-conformidades/${nc.id}`}>
-                    <TableCell className="font-mono text-xs">{nc.code}</TableCell>
-                    <TableCell>{nc.equipment.code} — {nc.equipment.name}</TableCell>
-                    <TableCell>{nc.area.name}</TableCell>
-                    <TableCell><CriticalityBadge value={nc.severity} /></TableCell>
-                    <TableCell><NonconformityStatusBadge status={nc.status} /></TableCell>
-                    <TableCell className="text-foreground-subtle">{nc.responsible?.name ?? "—"}</TableCell>
-                    <TableCell className="text-foreground-subtle">{formatDateTime(nc.identifiedAt)}</TableCell>
-                  </ClickableRow>
+                {groups.map((g) => (
+                  <Fragment key={g.equipmentId}>
+                    <TableRow className="bg-surface-muted hover:bg-surface-muted">
+                      <TableCell colSpan={7} className="py-2 text-xs font-semibold text-foreground">
+                        {g.label} <span className="font-normal text-foreground-subtle">· {g.items.length} NC(s), {g.openCount} aberta(s)</span>
+                      </TableCell>
+                    </TableRow>
+                    {g.items.map((nc) => (
+                      <ClickableRow key={nc.id} href={`/nao-conformidades/${nc.id}`}>
+                        <TableCell className="font-mono text-xs">{nc.code}</TableCell>
+                        <TableCell className="text-foreground-subtle">{nc.equipment.code}</TableCell>
+                        <TableCell>{nc.area.name}</TableCell>
+                        <TableCell><CriticalityBadge value={nc.severity} /></TableCell>
+                        <TableCell><NonconformityStatusBadge status={nc.status} /></TableCell>
+                        <TableCell className="text-foreground-subtle">{nc.responsible?.name ?? "—"}</TableCell>
+                        <TableCell className="text-foreground-subtle">{formatDateTime(nc.identifiedAt)}</TableCell>
+                      </ClickableRow>
+                    ))}
+                  </Fragment>
                 ))}
               </TableBody>
             </Table>

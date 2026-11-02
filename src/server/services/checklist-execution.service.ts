@@ -520,6 +520,34 @@ export async function finalizeExecution(
 
       if (deviation.rule.createsNonconformity) {
         const answer = execution.answers.find((a) => a.questionId === deviation.questionId);
+        // Mesma pergunta reprovada de novo no mesmo equipamento com a NC anterior ainda aberta: é reincidência, não problema novo.
+        // Não abre outra NC; registra a reincidência na que já existe (a ficha do equipamento mostra).
+        const questionTitle = execution.checklistVersion.questions.find((q) => q.id === deviation.questionId)?.title;
+        const openSame = questionTitle
+          ? await tx.nonconformity.findFirst({
+              where: {
+                equipmentId: execution.equipmentId,
+                status: { notIn: ["CONCLUIDA", "ENCERRADA", "CANCELADA"] },
+                originAnswer: { question: { title: questionTitle } },
+              },
+              orderBy: { identifiedAt: "asc" },
+              select: { id: true, code: true },
+            })
+          : null;
+        if (openSame) {
+          await recordEquipmentEvent(
+            {
+              equipmentId: execution.equipmentId,
+              type: "DESVIO_IDENTIFICADO",
+              description: `Mesmo desvio reincidente no checklist ${execution.code}: já está na ${openSame.code} (aberta), nenhuma nova NC foi criada.`,
+              userId: user.id,
+              executionId,
+              nonconformityId: openSame.id,
+            },
+            tx,
+          );
+          continue;
+        }
         const ncCode = await nextFriendlyCode("nonconformity", "NC", 6, tx);
         const nc = await tx.nonconformity.create({
           data: {
