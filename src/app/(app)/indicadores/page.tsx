@@ -34,6 +34,7 @@ import { ChecklistComplianceCollaboratorPicker } from "./checklist-compliance-co
 import { TodayProgressPanel } from "./today-progress-panel";
 import { PeriodToolbar } from "./period-toolbar";
 import { PeriodPeoplePanel } from "./period-people-panel";
+import { ReopenComplianceButton } from "./reopen-compliance-button";
 
 const MONTH_LABELS = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
@@ -204,7 +205,11 @@ export default async function IndicadoresPage({
           <Card id="checklist-por-colaborador">
             <CardHeader>
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <CardTitle>Aderência de checklist por colaborador</CardTitle>
+                <CardTitle className="flex flex-wrap items-center gap-2">
+                  Aderência de checklist por colaborador
+                  {checklistDashboard.frozen && <Badge tone="success">Mês fechado: valores travados</Badge>}
+                  {checklistDashboard.frozen && checklistDashboard.canJustify && <ReopenComplianceButton month={complianceMonthKey} label={`${MONTH_LABELS[Number(complianceMonthKey.slice(5, 7)) - 1]} de ${complianceMonthKey.slice(0, 4)}`} />}
+                </CardTitle>
                 <div className="flex items-center gap-2">
                   <Button size="icon" variant="secondary" asChild>
                     <Link href={complianceHref(shiftMonthKey(complianceMonthKey, -1))} aria-label="Mês anterior">

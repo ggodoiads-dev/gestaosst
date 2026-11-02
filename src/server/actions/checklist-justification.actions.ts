@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireUser, ForbiddenError } from "@/server/auth/current-user";
-import { justifyChecklistItem, removeChecklistItemJustification, removeChecklistItemJustifications } from "@/server/services/checklist-compliance.service";
+import { reopenChecklistComplianceMonth, justifyChecklistItem, removeChecklistItemJustification, removeChecklistItemJustifications } from "@/server/services/checklist-compliance.service";
 import type { ChecklistJustificationReason } from "@/domain/time-clock/checklist-justification-reasons";
 
 export type ChecklistItemJustificationResult = { ok: true } | { ok: false; error: string };
@@ -67,5 +67,20 @@ export async function removeChecklistItemJustificationsAction(input: {
     if (error instanceof ForbiddenError) return { ok: false, error: error.message };
     console.error("[checklist-justification] falha ao desfazer justificativas:", error);
     return { ok: false, error: "Não foi possível desfazer as justificativas." };
+  }
+}
+
+/** Reabre um mês travado da aderência: o fechamento é apagado e o mês é recalculado (e travado de novo) na próxima consulta. */
+export async function reopenChecklistComplianceMonthAction(month: string): Promise<ChecklistItemJustificationResult> {
+  try {
+    const user = await requireUser();
+    await reopenChecklistComplianceMonth(user, month);
+    revalidatePath("/indicadores");
+    revalidatePath("/inicio");
+    return { ok: true };
+  } catch (error) {
+    if (error instanceof ForbiddenError) return { ok: false, error: error.message };
+    console.error("[checklist-compliance] falha ao reabrir o mês:", error);
+    return { ok: false, error: "Não foi possível reabrir o mês." };
   }
 }

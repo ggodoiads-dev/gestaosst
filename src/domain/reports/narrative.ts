@@ -63,8 +63,11 @@ function seriesParagraph(s: ReportSeries, n: number): string {
   return `A Figura ${n} apresenta ${s.title.charAt(0).toLowerCase()}${s.title.slice(1)}. O maior valor da série ocorreu em ${max.label} (${max.value}${unit}) e o menor em ${min.label} (${min.value}${unit}); no último período, o valor foi de ${last.value}${unit}.`;
 }
 
-function findingsParagraphs(findings: Finding[]): string[] {
-  if (findings.length === 0) return ["Não foram detectados pontos críticos pelas regras de classificação adotadas neste relatório."];
+function findingsParagraphs(findings: Finding[], checked: string[]): string[] {
+  if (findings.length === 0) {
+    const what = checked.length ? ` sobre os dados de ${checked.map((c) => c.toLowerCase()).join("; ")}` : "";
+    return [`As regras fixas de classificação do SIGO, aplicadas${what}, não apontaram pontos críticos neste período. Isso indica que nenhum dos limites definidos foi ultrapassado; não substitui a análise das tabelas e figuras apresentadas nos resultados.`];
+  }
   const count = (s: Finding["severity"]) => findings.filter((f) => f.severity === s).length;
   const parts = [
     count("CRITICO") ? `${count("CRITICO")} de nível crítico` : null,
@@ -160,7 +163,7 @@ export function buildAbntContent(report: MonthlyReport, ai: AbntText | null = nu
   });
 
   // 5 PONTOS CRÍTICOS E DISCUSSÃO
-  const discussionBlocks: AbntBlock[] = findingsParagraphs(report.findings).map((text) => ({ type: "p", text }));
+  const discussionBlocks: AbntBlock[] = findingsParagraphs(report.findings, report.sections.map((x) => x.title)).map((text) => ({ type: "p", text }));
   if (ai && ai.discussao.length > 0) {
     discussionBlocks.push({ type: "p", text: "A discussão a seguir foi redigida com apoio de inteligência artificial, a partir exclusivamente dos números deste relatório, e deve ser revisada pelo responsável antes de sua divulgação. As causas apresentadas são hipóteses, não fatos comprovados." });
     for (const text of ai.discussao) discussionBlocks.push({ type: "p", text });

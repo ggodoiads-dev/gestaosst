@@ -582,9 +582,41 @@ async function computeDayProgress(
   return { dayKey: todayKey, concluded, remaining, off };
 }
 
+/** Dias depois da virada do mês antes de travar o resultado: dá tempo de o RH justificar itens do fim do mês. */
+const FREEZE_GRACE_DAYS = 2;
+
+type ComplianceSnapshotData = { today: PeriodComplianceStats; month: PeriodComplianceStats };
+
+/** Leitura tolerante: se a tabela ainda não existir no banco, vale o cálculo na hora. */
+async function loadComplianceSnapshot(month: string): Promise<ComplianceSnapshotData | null> {
+  try {
+    const row = await db.checklistComplianceSnapshot.findUnique({ where: { month } });
+    return row ? (row.data as unknown as ComplianceSnapshotData) : null;
+  } catch (error) {
+    console.error("[checklist-compliance] fechamentos de mês indisponíveis:", error);
+    return null;
+  }
+}
+
+/** O mês já pode ser travado? Sim, depois de `FREEZE_GRACE_DAYS` dias da virada (calendário de Brasília). */
+function canFreezeMonth(month: string, now: Date = new Date()): boolean {
+  const [y, m] = month.split("-").map(Number);
+  const freezeFrom = `${m === 12 ? y + 1 : y}-${String(m === 12 ? 1 : m + 1).padStart(2, "0")}-${String(1 + FREEZE_GRACE_DAYS).padStart(2, "0")}`;
+  return formatInTimeZone(now, APP_TIMEZONE, "yyyy-MM-dd") >= freezeFrom;
+}
+
+/** Reabre um mês travado (apaga o fechamento): na próxima consulta ele é recalculado e travado de novo. */
+export async function reopenChecklistComplianceMonth(user: CurrentUser, month: string) {
+  if (!canJustifyChecklist(user)) throw new ForbiddenError();
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new Error("Mês inválido.");
+  await db.checklistComplianceSnapshot.deleteMany({ where: { month } });
+  await recordAudit({ userId: user.id, action: "DELETE", entityType: "ChecklistComplianceSnapshot", entityId: month, previousValue: { month } });
+}
+
 /** Visão geral (ontem + mês corrente, sempre até D-1) de quantos colaboradores com checklist obrigatório
  * cumpriram tudo vs. ficaram com pendência — base do dashboard de conformidade de checklist. O bloco
- * `today` guarda o ÚLTIMO DIA FECHADO (ontem); `date` é esse dia. */
+ * `today` guarda o ÚLTIMO DIA FECHADO (ontem); `date` é esse dia. Mês passado: depois da carência da virada o resultado
+ * é TRAVADO (`frozen`) e não muda mais com justificativa, cadastro ou escala editados depois; para recalcular, `reopenChecklistComplianceMonth`. */
 export async function getChecklistComplianceDashboard(user: CurrentUser, params: { date?: Date; month?: string } = {}) {
   requirePermission(user, PERMISSIONS.CHECKLIST_COMPLIANCE_VIEW);
   // `month` ("AAAA-MM") pede um mês JÁ FECHADO: o bloco "último dia" passa a ser o último dia daquele mês e o bloco do mês cobre ele inteiro.
@@ -595,13 +627,24 @@ export async function getChecklistComplianceDashboard(user: CurrentUser, params:
   const monthStart = startOfMonth(date);
   const monthEndInclusive = addDays(startOfMonth(addMonths(date, 1)), -1);
 
+  const snapshot = pastMonth ? await loadComplianceSnapshot(pastMonth) : null;
   const [today, month, todayProgress] = await Promise.all([
-    computeCompliancePeriodStats(dayStart, dayStart),
-    computeCompliancePeriodStats(monthStart, monthEndInclusive),
+    snapshot ? Promise.resolve(snapshot.today) : computeCompliancePeriodStats(dayStart, dayStart),
+    snapshot ? Promise.resolve(snapshot.month) : computeCompliancePeriodStats(monthStart, monthEndInclusive),
     computeDayProgress(addDays(lastClosedDay(), 1)),
   ]);
 
-  return { date: dayStart, today, month, todayProgress, canJustify: canJustifyChecklist(user), monthKey: pastMonth ?? nowKey, isPastMonth: !!pastMonth };
+  let frozen = !!snapshot;
+  if (pastMonth && !snapshot && canFreezeMonth(pastMonth)) {
+    try {
+      await db.checklistComplianceSnapshot.create({ data: { month: pastMonth, data: JSON.parse(JSON.stringify({ today, month })) } });
+      frozen = true;
+    } catch (error) {
+      console.error("[checklist-compliance] não consegui travar o mês", pastMonth, error);
+    }
+  }
+
+  return { date: dayStart, today, month, todayProgress, canJustify: canJustifyChecklist(user), monthKey: pastMonth ?? nowKey, isPastMonth: !!pastMonth, frozen };
 }
 
 export type DayExecutionAnswer = {

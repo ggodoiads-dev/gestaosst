@@ -1891,3 +1891,10 @@ model GuardianMonthSnapshot {
   data      Json
   createdAt DateTime @default(now())
 }
+
+/// Fechamento mensal da aderência de checklist por colaborador: depois que o mês fecha, os números (último dia e mês) ficam travados.
+model ChecklistComplianceSnapshot {
+  month     String   @id // AAAA-MM
+  data      Json
+  createdAt DateTime @default(now())
+}
