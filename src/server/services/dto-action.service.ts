@@ -141,3 +141,33 @@ export async function setDtoActionStatus(user: CurrentUser, id: string, status: 
     newValue: { status, cancelReason },
   });
 }
+
+/** Muda o status de várias ações de uma vez (o mesmo treinamento para vários colaboradores). Cada uma segue a regra de uma só. */
+export async function setDtoActionsStatus(user: CurrentUser, ids: string[], status: ActionItemStatus, reason?: string | null) {
+  requirePermission(user, PERMISSIONS.ACTIONPLAN_MANAGE);
+  const unique = [...new Set(ids)].slice(0, 200);
+  if (unique.length === 0) throw new Error("Nenhuma ação selecionada.");
+  for (const id of unique) await setDtoActionStatus(user, id, status, reason);
+  return unique.length;
+}
+
+/** Novo prazo (AAAA-MM-DD) das ações. Vale até o fim do dia no horário de Brasília; não aceita data que já passou. */
+export async function rescheduleDtoActions(user: CurrentUser, ids: string[], dayKey: string, reason?: string | null) {
+  requirePermission(user, PERMISSIONS.ACTIONPLAN_MANAGE);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dayKey)) throw new Error("Data inválida.");
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
+  if (dayKey < today) throw new Error("Escolha uma data a partir de hoje.");
+  const dueDate = new Date(`${dayKey}T23:59:00-03:00`);
+  if (Number.isNaN(dueDate.getTime())) throw new Error("Data inválida.");
+  const unique = [...new Set(ids)].slice(0, 200);
+  if (unique.length === 0) throw new Error("Nenhuma ação selecionada.");
+  const rows = await db.dtoAction.findMany({ where: { id: { in: unique } }, select: { id: true, dueDate: true, status: true } });
+  const open = rows.filter((r) => r.status !== "CONCLUIDA" && r.status !== "CANCELADA");
+  if (open.length === 0) throw new Error("Só dá para reprogramar ação em aberto.");
+  await db.dtoAction.updateMany({ where: { id: { in: open.map((r) => r.id) } }, data: { dueDate } });
+  const note = (reason ?? "").trim().slice(0, 300) || null;
+  for (const r of open) {
+    await recordAudit({ userId: user.id, action: "UPDATE", entityType: "DtoAction", entityId: r.id, previousValue: { dueDate: r.dueDate }, newValue: { dueDate, reprogramada: true, motivo: note } });
+  }
+  return open.length;
+}
