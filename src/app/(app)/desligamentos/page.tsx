@@ -5,6 +5,7 @@ import { formatInTimeZone } from "date-fns-tz";
 import { requireUser, hasPermission } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
 import { getTurnoverView } from "@/server/services/termination.service";
+import { listInterviewedTerminationIds } from "@/server/services/exit-interview.service";
 import { TERMINATION_KIND_LABEL } from "@/domain/termination/rules";
 import { PageHeader, PageBody } from "@/components/domain/page-header";
 import { StatCard } from "@/components/domain/stat-card";
@@ -16,6 +17,7 @@ import { APP_TIMEZONE, formatDate } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { SeriesBars } from "../relatorios/report-charts";
 import { DeleteTerminationButton } from "./delete-termination-button";
+import { ExitInterviewDialog } from "./exit-interview-dialog";
 
 const MONTHS = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
@@ -48,7 +50,9 @@ export default async function DesligamentosPage({ searchParams }: { searchParams
   const { ano } = await searchParams;
   const nowYear = Number(formatInTimeZone(new Date(), APP_TIMEZONE, "yyyy"));
   const year = ano && /^\d{4}$/.test(ano) && Number(ano) <= nowYear ? Number(ano) : nowYear;
-  const v = await getTurnoverView(user, year);
+  const [v, interviewed] = await Promise.all([getTurnoverView(user, year), listInterviewedTerminationIds()]);
+  const today = formatInTimeZone(new Date(), APP_TIMEZONE, "yyyy-MM-dd");
+  const pendingInterviews = v.list.filter((r) => r.kind === "VOLUNTARIO" && !interviewed.has(r.id)).length;
   const t = v.totals;
   const href = (y: number) => `/desligamentos?ano=${y}`;
 
@@ -149,6 +153,12 @@ export default async function DesligamentosPage({ searchParams }: { searchParams
               <Breakdown title="Por cargo" rows={v.byCargo} />
             </div>
 
+            {pendingInterviews > 0 && (
+              <p className="rounded-md bg-warning-soft px-3 py-2 text-sm text-warning">
+                {pendingInterviews} pedido(s) de demissão de {year} ainda sem entrevista de desligamento. A entrevista é o que diz o motivo real da saída e alimenta o PDCA.
+              </p>
+            )}
+
             <Card>
               <CardHeader>
                 <CardTitle>Desligamentos de {year}</CardTitle>
@@ -165,6 +175,7 @@ export default async function DesligamentosPage({ searchParams }: { searchParams
                       <TableHead>Tempo de casa</TableHead>
                       <TableHead>Tipo</TableHead>
                       <TableHead>Motivo</TableHead>
+                      <TableHead>Entrevista</TableHead>
                       <TableHead />
                     </TableRow>
                   </TableHeader>
@@ -182,6 +193,9 @@ export default async function DesligamentosPage({ searchParams }: { searchParams
                         </TableCell>
                         <TableCell className="max-w-56 truncate text-foreground-subtle" title={r.reason ?? undefined}>
                           {r.reason ?? "—"}
+                        </TableCell>
+                        <TableCell>
+                          <ExitInterviewDialog terminationId={r.id} name={r.name} done={interviewed.has(r.id)} today={today} />
                         </TableCell>
                         <TableCell>
                           <DeleteTerminationButton id={r.id} name={r.name} />

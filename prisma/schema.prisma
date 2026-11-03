@@ -1936,3 +1936,30 @@ model TurnoverPdca {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 }
+
+/// Entrevista de desligamento: um registro por desligamento (só RH vê). O motivo real, os fatores e as notas alimentam o PDCA do turnover.
+model ExitInterview {
+  id               String   @id @default(uuid())
+  terminationId    String   @unique
+  conductedAt      DateTime
+  interviewer      String?
+  primaryReason    String // chave de EXIT_REASONS
+  secondaryReasons Json     @default("[]")
+  ratings          Json     @default("{}") // { lideranca, salario, beneficios, ambiente, treinamento }: 1 a 5
+  wouldReturn      String? // SIM | TALVEZ | NAO
+  destination      String?
+  comments         String?
+  createdById      String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([conductedAt])
+}
+
+/// Efetivo oficial do mês (quando o RH informa), no lugar da estimativa feita pelo cadastro, para o turnover do PDCA.
+model TurnoverHeadcount {
+  month       String   @id // AAAA-MM
+  headcount   Int
+  updatedById String?
+  updatedAt   DateTime @updatedAt
+}

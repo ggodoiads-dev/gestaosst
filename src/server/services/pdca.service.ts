@@ -6,6 +6,8 @@ import type { CurrentUser } from "@/server/auth/current-user";
 import { requirePermission } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
 import { countsAsTurnover, effectiveKind, headcountAt, tenureDays, TERMINATION_KIND_LABEL, type TerminationKind } from "@/domain/termination/rules";
+import { interviewDiagnosis, sanitizeRatings, summarizeInterviews, type InterviewSummary } from "@/domain/termination/interview";
+import { loadHeadcountBase } from "@/server/services/exit-interview.service";
 import { averageHeadcount, diagnose, exitsBudget, goalStatus, rollingTurnover, type GoalStatus, type PdcaAction, type PdcaActionStatus, type PdcaCause, type WindowMonth } from "@/domain/termination/pdca";
 
 const RH = PERMISSIONS.HR_MANAGE;
@@ -33,6 +35,9 @@ export type PdcaView = {
   diagnosis: string[];
   firstTermination: Date | null;
   kinds: { label: string; count: number }[];
+  interviews: InterviewSummary | null;
+  /** Efetivo oficial informado (AAAA-MM → pessoas), no lugar da estimativa do cadastro. */
+  headcountBase: Record<string, number>;
 };
 
 const empty = (): PdcaData => ({ owner: "", monthlyGoal: null, ytdGoal: null, annualGoal: null, causes: [], actions: [], standardization: "" });
@@ -70,7 +75,7 @@ export async function getPdcaView(user: CurrentUser, year: number): Promise<Pdca
     ? { owner: rowOf.owner ?? "", monthlyGoal: rowOf.monthlyGoal, ytdGoal: rowOf.ytdGoal, annualGoal: rowOf.annualGoal, causes: toCauses(rowOf.causes), actions: toActions(rowOf.actions), standardization: rowOf.standardization ?? "" }
     : empty();
 
-  const people = await db.collaborator.findMany({ select: { admissionDate: true, inactivatedAt: true } });
+  const [people, headcountBase] = await Promise.all([db.collaborator.findMany({ select: { admissionDate: true, inactivatedAt: true } }), loadHeadcountBase()]);
   const counted = all.filter((t) => countsAsTurnover(effectiveKind(t.kind, t.reason)));
   const now = new Date();
   const lastMonthIdx = year === now.getFullYear() ? now.getMonth() : 11;
@@ -82,10 +87,12 @@ export async function getPdcaView(user: CurrentUser, year: number): Promise<Pdca
       if (y === year && m > lastMonthIdx) break;
       const start = new Date(y, m, 1);
       const end = new Date(y, m + 1, 1);
+      // Efetivo oficial do mês, quando informado, vale no lugar da estimativa feita pelo cadastro.
+      const official = headcountBase.get(`${y}-${String(m + 1).padStart(2, "0")}`);
       stats.set(`${y}-${m}`, {
         exits: counted.filter((t) => t.terminationDate.getFullYear() === y && t.terminationDate.getMonth() === m).length,
-        headcountStart: headcountAt(people, start),
-        headcountEnd: headcountAt(people, end > now ? now : end),
+        headcountStart: official ?? headcountAt(people, start),
+        headcountEnd: official ?? headcountAt(people, end > now ? now : end),
       });
     }
   }
@@ -129,6 +136,22 @@ export async function getPdcaView(user: CurrentUser, year: number): Promise<Pdca
     byMonth.set(k, (byMonth.get(k) ?? 0) + 1);
   }
   const peak = [...byMonth.entries()].sort((a, b) => b[1] - a[1])[0];
+  let interviews: InterviewSummary | null = null;
+  if (ready && inWindow.length > 0) {
+    try {
+      const rows = await db.exitInterview.findMany({ where: { terminationId: { in: inWindow.map((t) => t.id) } } });
+      interviews = summarizeInterviews(
+        rows.map((r) => ({
+          primaryReason: r.primaryReason,
+          secondaryReasons: Array.isArray(r.secondaryReasons) ? (r.secondaryReasons as unknown[]).filter((k): k is string => typeof k === "string") : [],
+          ratings: sanitizeRatings(r.ratings),
+          wouldReturn: r.wouldReturn,
+        })),
+      );
+    } catch (error) {
+      console.error("[pdca] entrevistas indisponíveis:", error);
+    }
+  }
   const diagnosis = ready && inWindow.length > 0
     ? diagnose({
         exits: inWindow.length,
@@ -140,7 +163,7 @@ export async function getPdcaView(user: CurrentUser, year: number): Promise<Pdca
         topTurno: top((t) => t.turnoName),
         topCargo: top((t) => t.cargo),
         peakMonth: peak ? { label: peak[0], count: peak[1] } : null,
-      })
+      }).concat(interviews ? interviewDiagnosis(interviews, inWindow.filter((t) => kindOf(t) === "VOLUNTARIO").length) : [])
     : [];
   const kinds = new Map<string, number>();
   for (const t of inWindow) kinds.set(TERMINATION_KIND_LABEL[kindOf(t)].split(" (")[0], (kinds.get(TERMINATION_KIND_LABEL[kindOf(t)].split(" (")[0]) ?? 0) + 1);
@@ -156,6 +179,8 @@ export async function getPdcaView(user: CurrentUser, year: number): Promise<Pdca
     diagnosis,
     firstTermination: counted[0]?.terminationDate ?? null,
     kinds: [...kinds.entries()].map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count),
+    interviews,
+    headcountBase: Object.fromEntries(headcountBase),
   };
 }
 
