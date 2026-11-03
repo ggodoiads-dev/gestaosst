@@ -107,13 +107,14 @@ export default async function QrResolverPage({
   const area = await db.area.findUnique({ where: { qrToken: token } });
   if (area) {
     const [collaborators, documents] = await Promise.all([
-      db.collaborator.findMany({ where: { areaId: area.id, active: true }, include: { function: { select: { name: true } }, turno: { select: { name: true } } }, orderBy: { name: "asc" } }),
+      // Da área (cadastrado nela) ou com acesso a ela (Áreas com acesso do usuário do colaborador), mesmo que esteja cadastrado em outra área.
+      db.collaborator.findMany({ where: { active: true, OR: [{ areaId: area.id }, { user: { userAreas: { some: { areaId: area.id } } } }] }, include: { function: { select: { name: true } }, turno: { select: { name: true } } }, orderBy: { name: "asc" } }),
       getAreaPublicOverview(area),
     ]);
     const summaries = await Promise.all(
       collaborators.map(async (c) => {
         const [summary, photo] = await Promise.all([getCollaboratorQualificationSummary(c.id), getCollaboratorPhoto(c.id)]);
-        return { collaborator: c, summary, photoUrl: await photoDataUrl(photo) };
+        return { collaborator: c, summary, photoUrl: await photoDataUrl(photo), viaAccess: c.areaId !== area.id };
       }),
     );
     return (
@@ -401,7 +402,7 @@ function PublicAreaView({
   baseUrl,
 }: {
   area: Area;
-  entries: { collaborator: Collaborator & { function?: { name: string } | null; turno?: { name: string } | null }; summary: QualificationSummary; photoUrl: string | null }[];
+  entries: { collaborator: Collaborator & { function?: { name: string } | null; turno?: { name: string } | null }; summary: QualificationSummary; photoUrl: string | null; viaAccess?: boolean }[];
   overview: AreaOverview;
   baseUrl: string;
 }) {
@@ -487,7 +488,7 @@ function PublicAreaView({
                 </div>
                 {[...turnoGroup.entries]
               .sort((a, b) => Number(!!b.summary.padrinho) - Number(!!a.summary.padrinho))
-              .map(({ collaborator, summary, photoUrl }) => (
+              .map(({ collaborator, summary, photoUrl, viaAccess }) => (
                 <div
                   key={collaborator.id}
                   className={
@@ -506,6 +507,7 @@ function PublicAreaView({
                       <div>
                         <p className="font-medium text-foreground">{collaborator.name}</p>
                         <p className="text-xs text-foreground-subtle">Matrícula: {collaborator.matricula ?? "—"}</p>
+                        {viaAccess && <Badge tone="info">Com acesso à área</Badge>}
                         {summary.padrinho && <PadrinhoChip padrinho={summary.padrinho} baseUrl={baseUrl} />}
                       </div>
                     </div>
