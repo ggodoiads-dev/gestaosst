@@ -362,7 +362,7 @@ export async function createCinemaScene(THREE: Three, canvas: HTMLCanvasElement)
       const heroV = 1 - sm(0.08, 0.2, p);
       const endV = sm(0.84, 0.93, p);
       const vis = Math.max(heroV, endV);
-      hat.visible = vis > 0.01;
+      hat.visible = false; // o capacete procedural não entrou no visual final; fica o ponto de troca por um modelo .glb
       hat.scale.setScalar(Math.max(vis, 0.001) * (0.4 + 0.1 * (1 - endV)));
       hat.position.set(0.95 * heroV * (1 - endV), -0.1 + 1.05 * endV, -3.1);
       hat.rotation.set(0.5 + Math.sin(time * 0.6) * 0.04, time * 0.5 + p * 4, 0.05);

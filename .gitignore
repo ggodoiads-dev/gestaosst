@@ -60,3 +60,6 @@ next-env.d.ts
 
 # prova de autoria (fica só com o titular, nunca vai pro repositório)
 /registro-autoria/
+
+# Cenas do Inicio (video da operacao): fora do repositorio publico, mas enviadas no deploy pela CLI
+/public/inicio/seq/

@@ -185,10 +185,55 @@ function Chapters({ p, refs, only }: { p: CinemaProps; refs?: React.MutableRefOb
 }
 
 type Plate = { src: string; from: number; to: number };
+type SeqManifest = { count: number; width: number; height: number; base: string; ext: string; digits: number };
+
+/** Onde olhar no quadro vertical do vídeo (0 = topo, 1 = base) conforme o progresso: em tela larga só cabe uma faixa horizontal do quadro, e a câmera "desce" por ele. */
+const FOCUS: [number, number][] = [
+  [0, 0.5],
+  [0.28, 0.5],
+  [0.42, 0.4],
+  [0.62, 0.56],
+  [0.8, 0.52],
+  [1, 0.7],
+];
+function focusAt(p: number) {
+  for (let i = 1; i < FOCUS.length; i++) {
+    if (p <= FOCUS[i][0]) {
+      const [p0, f0] = FOCUS[i - 1];
+      const [p1, f1] = FOCUS[i];
+      const t = (p - p0) / (p1 - p0);
+      return f0 + (f1 - f0) * (t * t * (3 - 2 * t));
+    }
+  }
+  return FOCUS[FOCUS.length - 1][1];
+}
+
+/** Cor do turno sobre a imagem: amanhecer quente, dia neutro, entardecer alaranjado, noite azul. */
+const GRADE: { p: number; rgb: [number, number, number]; a: number }[] = [
+  { p: 0, rgb: [255, 170, 100], a: 0.26 },
+  { p: 0.25, rgb: [120, 180, 255], a: 0.1 },
+  { p: 0.5, rgb: [255, 255, 255], a: 0 },
+  { p: 0.75, rgb: [255, 120, 50], a: 0.24 },
+  { p: 1, rgb: [10, 26, 92], a: 0.42 },
+];
+function gradeAt(p: number) {
+  for (let i = 1; i < GRADE.length; i++) {
+    if (p <= GRADE[i].p) {
+      const a = GRADE[i - 1];
+      const b = GRADE[i];
+      const t = (p - a.p) / (b.p - a.p);
+      const m = (x: number, y: number) => Math.round(x + (y - x) * t);
+      return `rgba(${m(a.rgb[0], b.rgb[0])}, ${m(a.rgb[1], b.rgb[1])}, ${m(a.rgb[2], b.rgb[2])}, ${(a.a + (b.a - a.a) * t).toFixed(3)})`;
+    }
+  }
+  return "rgba(10, 26, 92, 0.42)";
+}
 
 /** Início do visual novo, em tela cheia: o scroll percorre um dia de turno (relógio das 5h às 23h) por uma rede logística em 3D. Fotos opcionais (cenas.json) entram como cenário. Sem WebGL, com "reduzir movimento" ou em aparelho fraco, vira uma página estática com o mesmo conteúdo. */
 export function Cinema(props: CinemaProps) {
-  const [mode, setMode] = useState<"pending" | "3d" | "static">("pending");
+  const [mode, setMode] = useState<"pending" | "3d" | "seq" | "static">("pending");
+  const [seq, setSeq] = useState<SeqManifest | null>(null);
+  const gradeRef = useRef<HTMLDivElement>(null);
   const [plates, setPlates] = useState<Plate[]>([]);
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -208,8 +253,15 @@ export function Cinema(props: CinemaProps) {
     } catch {
       webgl = false;
     }
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setMode(reduce || weak || !webgl ? "static" : "3d");
+    // Se a operação tem a sequência de imagens (vídeo da própria operação), ela é o cenário; senão vale a cena 3D.
+    void fetch("/inicio/seq/manifest.json")
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null)
+      .then((m: SeqManifest | null) => {
+        const okSeq = !!m && Number.isFinite(m.count) && m.count > 1;
+        if (okSeq) setSeq(m);
+        setMode(reduce ? "static" : okSeq ? "seq" : weak || !webgl ? "static" : "3d");
+      });
 
     // Cenas opcionais do cliente: /inicio/cenas.json = [{ "src": "/inicio/doca.jpg", "from": 0.2, "to": 0.4 }]
     void fetch("/inicio/cenas.json")
@@ -304,6 +356,126 @@ export function Cinema(props: CinemaProps) {
     };
   }, [mode, plates]);
 
+  useEffect(() => {
+    if (mode !== "seq" || !seq) return;
+    const wrap = wrapRef.current;
+    const canvas = canvasRef.current;
+    if (!wrap || !canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    let alive = true;
+    let raf = 0;
+    let visible = true;
+    let current = 0;
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+    const imgs: (HTMLImageElement | null)[] = Array.from({ length: seq.count }, () => null);
+    const url = (i: number) => `${seq.base}${String(i + 1).padStart(seq.digits, "0")}.${seq.ext}`;
+
+    // carrega o primeiro quadro já e o resto em ordem, poucos de cada vez
+    const load = (i: number) =>
+      new Promise<void>((resolve) => {
+        const im = new Image();
+        im.decoding = "async";
+        im.onload = () => {
+          imgs[i] = im;
+          resolve();
+        };
+        im.onerror = () => resolve();
+        im.src = url(i);
+      });
+    void (async () => {
+      await load(0);
+      const order = Array.from({ length: seq.count - 1 }, (_, k) => k + 1);
+      const workers = Array.from({ length: 4 }, async () => {
+        while (alive && order.length) {
+          const i = order.shift()!;
+          await load(i);
+        }
+      });
+      await Promise.all(workers);
+    })();
+
+    const nearest = (i: number) => {
+      for (let d = 0; d < seq.count; d++) {
+        const a = imgs[i - d];
+        if (a) return a;
+        const b = imgs[i + d];
+        if (b) return b;
+      }
+      return null;
+    };
+    const fit = () => {
+      canvas.width = Math.floor(canvas.clientWidth * dpr);
+      canvas.height = Math.floor(canvas.clientHeight * dpr);
+    };
+    fit();
+    window.addEventListener("resize", fit);
+    const io = new IntersectionObserver(([e]) => {
+      visible = !!e?.isIntersecting;
+    });
+    io.observe(wrap);
+
+    const drawFrame = (im: HTMLImageElement, p: number, alpha: number) => {
+      const cw = canvas.width;
+      const ch = canvas.height;
+      const A = cw / ch;
+      const zoom = 1 + 0.1 * p;
+      let sw: number;
+      let sh: number;
+      if (A >= seq.width / seq.height) {
+        sw = seq.width / zoom;
+        sh = sw / A;
+      } else {
+        sh = seq.height / zoom;
+        sw = sh * A;
+      }
+      const sx = (seq.width - sw) / 2;
+      const sy = Math.min(Math.max(focusAt(p) * seq.height - sh / 2, 0), seq.height - sh);
+      ctx.globalAlpha = alpha;
+      ctx.drawImage(im, sx, sy, sw, sh, 0, 0, cw, ch);
+    };
+
+    const progressNow = () => {
+      const rect = wrap.getBoundingClientRect();
+      const total = Math.max(rect.height - window.innerHeight, 1);
+      return Math.min(Math.max(-rect.top / total, 0), 1);
+    };
+    const loop = () => {
+      if (!alive) return;
+      if (visible && !document.hidden) {
+        current += (progressNow() - current) * 0.12;
+        const f = current * (seq.count - 1);
+        const i0 = Math.floor(f);
+        const a = f - i0;
+        const base = nearest(i0);
+        if (base) {
+          drawFrame(base, current, 1);
+          const nxt = i0 + 1 < seq.count ? imgs[i0 + 1] : null;
+          if (nxt && a > 0.02) drawFrame(nxt, current, a);
+          ctx.globalAlpha = 1;
+        }
+        if (clockRef.current) clockRef.current.textContent = clockOf(current);
+        if (gradeRef.current) gradeRef.current.style.background = gradeAt(current);
+        CHAPTERS.forEach((c, i) => {
+          const el = chapterRefs.current[i];
+          if (!el) return;
+          const o = chapterOpacity(current, c, i === 0, i === CHAPTERS.length - 1);
+          el.style.opacity = String(o);
+          el.style.transform = `translateY(${(1 - o) * 26}px)`;
+          el.style.pointerEvents = o > 0.6 ? "auto" : "none";
+        });
+      }
+      raf = requestAnimationFrame(loop);
+    };
+    loop();
+    return () => {
+      alive = false;
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", fit);
+      io.disconnect();
+    };
+  }, [mode, seq]);
+
   if (mode === "static") {
     return (
       <div className="relative min-h-screen overflow-hidden bg-[radial-gradient(1200px_600px_at_80%_-10%,#0b3a8f,transparent),linear-gradient(180deg,#001840,#02112e)]">
@@ -342,7 +514,9 @@ export function Cinema(props: CinemaProps) {
           </div>
           <div className="mt-0.5 text-[11px] font-medium uppercase tracking-[0.18em] text-[#9db4dc]">Um dia de turno</div>
         </div>
-        {HUBS.map((h, i) => (
+        {mode === "seq" && <div ref={gradeRef} className="pointer-events-none absolute inset-0 mix-blend-soft-light" aria-hidden />}
+        {mode === "seq" && <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(1,8,26,0.35),transparent_30%,transparent_55%,rgba(1,8,26,0.65))]" aria-hidden />}
+        {(mode === "3d" ? HUBS : []).map((h, i) => (
           <div
             key={h.name}
             ref={(el) => {
