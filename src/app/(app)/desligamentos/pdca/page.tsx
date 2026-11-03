@@ -18,6 +18,10 @@ import { SeriesBars } from "../../relatorios/report-charts";
 import { PdcaEditor } from "./pdca-editor";
 import { HeadcountBase } from "./headcount-base";
 import { WOULD_RETURN } from "@/domain/termination/interview";
+import { canViewCascade, getCascadeTree, type CascadeTreeNode } from "@/server/services/cascade.service";
+import { TURNOVER_IC_SEED_KEY } from "@/domain/termination/turnover-cascade";
+import { CascadeTree } from "../../cascata/cascade-tree";
+import { SyncSeedButton } from "../../cascata/cascade-dialogs";
 import { MotivosTable, SatisfacaoTable } from "../entrevistas/resumo/survey-tables";
 
 const TONE: Record<GoalStatus, "success" | "warning" | "danger" | "neutral"> = { DENTRO: "success", ATENCAO: "warning", FORA: "danger", SEM_META: "neutral" };
@@ -31,15 +35,56 @@ export default async function PdcaTurnoverPage({ searchParams }: { searchParams:
   const nowYear = Number(formatInTimeZone(new Date(), APP_TIMEZONE, "yyyy"));
   const year = ano && /^\d{4}$/.test(ano) && Number(ano) <= nowYear ? Number(ano) : nowYear;
   const v = await getPdcaView(user, year);
+  // A cascata do turnover é o IC "TO geral" do Cascateamento com os IVs que o explicam: aqui aparece só essa parte, no último mês fechado do ano.
+  const cascadePeriod = v.closedMonthKey ?? `${year - 1}-12`;
+  const cascadeAllowed = canViewCascade(user);
+  const cascadeData = cascadeAllowed && v.ready ? await getCascadeTree(user, cascadePeriod, { subtreeOf: TURNOVER_IC_SEED_KEY }) : null;
+  const toNode: CascadeTreeNode | null = cascadeData?.roots.find((n) => n.seedKey === TURNOVER_IC_SEED_KEY) ?? null;
+  const ivOptions: { id: string; label: string }[] = [];
+  const collect = (node: CascadeTreeNode, path: string[]) => {
+    for (const c of node.children) {
+      const next = [...path, c.name];
+      ivOptions.push({ id: c.id, label: next.join(" › ") });
+      collect(c, next);
+    }
+  };
+  if (toNode) collect(toNode, []);
   const href = (y: number) => `/desligamentos/pdca?ano=${y}`;
   const goals = [
     { label: "Meta do mês", goal: v.data.monthlyGoal, status: v.status.monthly },
     { label: "Meta acumulada (YTD)", goal: v.data.ytdGoal, status: v.status.ytd },
     { label: "Meta do ano", goal: v.data.annualGoal, status: v.status.annual },
   ];
-  const rootLabel = v.current
-    ? `Turnover de ${pct(v.current.rate)} nos 12 meses até ${v.basis.closedLabel}${v.data.annualGoal !== null ? ` (meta do ano ${pct(v.data.annualGoal)})` : ""} — ${v.current.exits12} saída(s) para efetivo médio de ${v.current.avgHeadcount}`
-    : "Turnover ainda sem cálculo seguro (veja o aviso acima). Os ramos abaixo usam as saídas dos últimos 12 meses fechados.";
+  const cascadeCard = (
+    <div className="flex flex-col gap-3 rounded-md border border-border p-3">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <p className="text-sm font-semibold text-foreground">Cascata do turnover — do número à causa raiz</p>
+          <p className="text-xs text-foreground-subtle">
+            Mesmo modelo do Cascateamento de metas: o IC é o <strong className="text-foreground">TO geral</strong> e os IVs mostram como e por que ele está nesse número. Os IVs com <span className="whitespace-nowrap">⚡</span> são calculados pelo SIGO para o fechamento de {v.basis.closedLabel ?? "mês anterior"}.
+          </p>
+        </div>
+        {cascadeAllowed && (
+          <Button size="sm" variant="secondary" asChild>
+            <Link href={`/cascata?periodo=${cascadePeriod}`}>Abrir no Cascateamento</Link>
+          </Button>
+        )}
+      </div>
+      {!cascadeAllowed ? (
+        <p className="text-sm text-foreground-subtle">Você não tem acesso ao Cascateamento de metas, onde fica a cascata do turnover. Peça a quem gerencia.</p>
+      ) : !cascadeData || !cascadeData.ready ? (
+        <p className="text-sm text-foreground-subtle">O Cascateamento de metas ainda não foi ativado no banco de dados.</p>
+      ) : !toNode || toNode.children.length === 0 ? (
+        <div className="flex flex-col items-start gap-2 rounded-md bg-surface-muted p-3 text-sm text-foreground-muted">
+          <p>{toNode ? "O IC TO geral ainda não tem IVs." : "O IC TO geral ainda não existe no Cascateamento."} Clique para montar a estrutura do turnover: pedidos de demissão e motivos, saídas até 90 dias, entrevistas, satisfação e saídas por turno, área e cargo.</p>
+          {cascadeData.canManage ? <SyncSeedButton /> : <p className="text-xs text-foreground-subtle">Peça a quem gerencia o Cascateamento para completar a estrutura.</p>}
+        </div>
+      ) : (
+        <CascadeTree roots={[toNode]} periodKey={cascadePeriod} canManage={cascadeData.canManage} owners={cascadeData.owners} focus />
+      )}
+    </div>
+  );
+
   const lastClosedAnnual = v.rolling.length > 0 ? v.rolling.filter((r) => r.rate !== null) : [];
 
   const interviewsCard = (
@@ -245,7 +290,7 @@ export default async function PdcaTurnoverPage({ searchParams }: { searchParams:
               </CardContent>
             </Card>
 
-            <PdcaEditor year={year} initial={v.data} diagnosis={v.diagnosis} kinds={v.kinds} cascade={v.cascade} rootLabel={rootLabel} planExtra={interviewsCard} checkSlot={checkCard} />
+            <PdcaEditor year={year} initial={v.data} diagnosis={v.diagnosis} kinds={v.kinds} ivOptions={ivOptions} planExtra={interviewsCard} cascadeSlot={cascadeCard} checkSlot={checkCard} />
 
             <HeadcountBase year={year} base={v.headcountBase} lastMonthIdx={year === nowYear ? Number(formatInTimeZone(new Date(), APP_TIMEZONE, "M")) - 1 : 11} />
           </>

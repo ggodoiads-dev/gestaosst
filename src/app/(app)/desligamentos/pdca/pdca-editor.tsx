@@ -12,15 +12,13 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { savePdcaAction } from "@/server/actions/pdca.actions";
 import type { PdcaData } from "@/server/services/pdca.service";
 import { PDCA_ACTION_STATUS_LABEL, type PdcaAction, type PdcaActionStatus } from "@/domain/termination/pdca";
-import type { CascadeGroup } from "@/domain/termination/cascade";
-import { CauseCascade } from "./cause-cascade";
 
 const newId = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : String(Math.random()).slice(2));
 const field = "flex flex-col gap-1.5";
 const label = "text-[13px] font-medium text-foreground-muted";
 
 /** Metas, causas (Plan), ações (Do) e padronização (Act) do ano, salvos juntos. O Check (acompanhamento) vem pronto do servidor. */
-export function PdcaEditor({ year, initial, diagnosis, kinds, cascade, rootLabel, planExtra, checkSlot }: { year: number; initial: PdcaData; diagnosis: string[]; kinds: { label: string; count: number }[]; cascade: CascadeGroup[]; rootLabel: string; planExtra?: React.ReactNode; checkSlot?: React.ReactNode }) {
+export function PdcaEditor({ year, initial, diagnosis, kinds, ivOptions, planExtra, cascadeSlot, checkSlot }: { year: number; initial: PdcaData; diagnosis: string[]; kinds: { label: string; count: number }[]; ivOptions: { id: string; label: string }[]; planExtra?: React.ReactNode; cascadeSlot?: React.ReactNode; checkSlot?: React.ReactNode }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [data, setData] = useState<PdcaData>(initial);
@@ -82,8 +80,8 @@ export function PdcaEditor({ year, initial, diagnosis, kinds, cascade, rootLabel
 
       <Card>
         <CardHeader>
-          <CardTitle>Plan — diagnóstico e cascata de causas</CardTitle>
-          <CardDescription>O diagnóstico e os ramos vêm dos números das saídas dos últimos 12 meses. Você desce cada ramo com “por quê?” até a causa raiz e registra a evidência de cada passo.</CardDescription>
+          <CardTitle>Plan — diagnóstico e cascata (IC → IV)</CardTitle>
+          <CardDescription>O diagnóstico vem dos números das saídas dos últimos 12 meses. A cascata abre o turnover (IC) nos itens de verificação (IVs) que o explicam, e cada IV pode abrir de novo com o “por quê?”, até a causa raiz.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <div className="flex flex-col gap-2 rounded-md bg-surface-muted p-3">
@@ -94,7 +92,26 @@ export function PdcaEditor({ year, initial, diagnosis, kinds, cascade, rootLabel
             {kinds.length > 0 && <p className="text-xs text-foreground-subtle">Tipos na janela: {kinds.map((k) => `${k.label} ${k.count}`).join(" · ")}.</p>}
           </div>
           {planExtra}
-          <CauseCascade rootLabel={rootLabel} groups={cascade} causes={data.causes} actions={data.actions} onCauses={(causes) => set({ causes })} onActions={(actions) => set({ actions })} />
+          {cascadeSlot}
+          {data.causes.length > 0 && (
+            <details className="rounded-md border border-border p-3 text-sm">
+              <summary className="cursor-pointer select-none font-medium text-foreground-muted">Causas anotadas antes da cascata ({data.causes.length})</summary>
+              <div className="mt-2 flex flex-col gap-2">
+                {data.causes.map((c) => (
+                  <div key={c.id} className="flex items-start justify-between gap-2">
+                    <p className="text-foreground-muted">
+                      • {c.text}
+                      {c.evidence ? <span className="text-foreground-subtle"> — {c.evidence}</span> : null}
+                    </p>
+                    <Button size="icon" variant="ghost" onClick={() => set({ causes: data.causes.filter((x) => x.id !== c.id) })} aria-label="Remover causa">
+                      <Trash2 className="size-4" />
+                    </Button>
+                  </div>
+                ))}
+                <p className="text-xs text-foreground-subtle">Se ainda valem, abra um IV na cascata acima com o mesmo texto. Depois remova daqui.</p>
+              </div>
+            </details>
+          )}
         </CardContent>
       </Card>
 
@@ -115,10 +132,10 @@ export function PdcaEditor({ year, initial, diagnosis, kinds, cascade, rootLabel
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">Sem causa ligada na cascata</SelectItem>
-                  {data.causes.filter((c) => c.text.trim() !== "").map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {(c.root ? "Causa raiz: " : "Causa: ") + (c.text.length > 80 ? c.text.slice(0, 80) + "…" : c.text)}
+                  <SelectItem value="none">Sem item da cascata ligado</SelectItem>
+                  {ivOptions.map((o) => (
+                    <SelectItem key={o.id} value={o.id}>
+                      {o.label.length > 90 ? o.label.slice(0, 90) + "…" : o.label}
                     </SelectItem>
                   ))}
                 </SelectContent>

@@ -54,12 +54,13 @@ function matches(ic: CascadeTreeNode, filter: Filter) {
 
 type Row = { node: CascadeTreeNode; depth: number; guides: boolean[]; isLast: boolean };
 
-export function CascadeTree({ roots, periodKey, canManage, owners }: { roots: CascadeTreeNode[]; periodKey: string; canManage: boolean; owners: Owners }) {
+/** `focus`: mostra só um IC e o COMO dele (usado dentro do PDCA do turnover): sem Sonho, pilares nem filtros, e com o IC já aberto. */
+export function CascadeTree({ roots, periodKey, canManage, owners, focus = false }: { roots: CascadeTreeNode[]; periodKey: string; canManage: boolean; owners: Owners; focus?: boolean }) {
   const sonho = roots.find((r) => r.kind === "SONHO") ?? roots[0];
   const [filter, setFilter] = useState<Filter>("todos");
   const [view, setView] = useState<"arvore" | "lista">("arvore");
   const [pilarId, setPilarId] = useState("");
-  const [open, setOpen] = useState<Set<string>>(new Set());
+  const [open, setOpen] = useState<Set<string>>(() => (focus ? new Set([sonho.id]) : new Set()));
   const summary = sonho.summary ?? { total: 0, ok: 0, fail: 0, noData: 0, withoutIv: 0 };
   const parentOptions = useMemo(() => buildParentOptions(roots), [roots]);
 
@@ -83,12 +84,16 @@ export function CascadeTree({ roots, periodKey, canManage, owners }: { roots: Ca
       const children = node.children.filter((c) => (c.kind === "IC" ? matches(c, filter) : true));
       children.forEach((child, i) => visit(child, depth + 1, [...guides, !isLast], i === children.length - 1));
     };
+    if (focus) {
+      visit(sonho, 0, [], true);
+      return out;
+    }
     const pilares = sonho.kind === "SONHO" ? sonho.children : roots;
     out.push({ node: sonho, depth: 0, guides: [], isLast: false });
     const shown = pilares.filter((p) => filter === "todos" || p.children.some((c) => c.kind === "IC" && matches(c, filter)));
     shown.forEach((p, i) => visit(p, 1, [false], i === shown.length - 1));
     return out;
-  }, [sonho, roots, open, filter]);
+  }, [sonho, roots, open, filter, focus]);
 
   const toggle = (id: string) =>
     setOpen((current) => {
@@ -101,7 +106,14 @@ export function CascadeTree({ roots, periodKey, canManage, owners }: { roots: Ca
   return (
     <ParentOptionsContext.Provider value={parentOptions}>
     <div className="flex flex-col gap-4">
+      {focus && (
+        <p className="text-xs text-foreground-subtle">
+          O IC (O QUÊ) é o turnover; os IVs (COMO) mostram o que explica o número e se cada parte está dentro da meta. Clique num item para abrir o que vem depois. Use o <strong className="text-foreground">+</strong> para abrir o próximo “por quê?” (um IV dentro do IV), até chegar na causa raiz e na pessoa responsável.{" "}
+          <span className="whitespace-nowrap"><Zap className="inline size-3 text-accent" /> valor calculado pelo SIGO</span>.
+        </p>
+      )}
       {/* Como ler */}
+      {!focus && (
       <section className="rounded-md border border-border bg-surface px-4 py-3 text-sm">
         <h2 className="text-sm font-semibold text-foreground">Como ler esta tela</h2>
         <div className="mt-2 grid grid-cols-1 gap-x-8 gap-y-2 text-[13px] text-foreground-muted lg:grid-cols-2">
@@ -125,14 +137,17 @@ export function CascadeTree({ roots, periodKey, canManage, owners }: { roots: Ca
           </p>
         </div>
       </section>
+      )}
 
       {/* Resumo e filtro */}
       <div className="flex flex-wrap items-center justify-between gap-3">
+        {!focus && (
         <p className="text-sm text-foreground-muted">
           <strong className="text-foreground">{summary.total} ICs</strong>:{" "}
           <span className="text-success">{summary.ok} bateram a meta</span> · <span className="text-danger">{summary.fail} não bateram</span> · {summary.noData} sem
           resultado · <span className="text-warning">{summary.withoutIv} ainda sem IVs</span>
         </p>
+        )}
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex overflow-hidden rounded-md border border-border-strong text-xs font-medium" role="group" aria-label="Forma de ver">
             <button
@@ -152,7 +167,7 @@ export function CascadeTree({ roots, periodKey, canManage, owners }: { roots: Ca
               <List className="size-3.5" /> Lista
             </button>
           </div>
-          {view === "arvore" && (
+          {view === "arvore" && !focus && (
             <label className="flex items-center gap-2 text-xs text-foreground-subtle">
               Pilar
               <select value={pilarId} onChange={(e) => setPilarId(e.target.value)} className="h-8 rounded-md border border-border-strong bg-surface px-2 text-sm text-foreground">
@@ -163,6 +178,7 @@ export function CascadeTree({ roots, periodKey, canManage, owners }: { roots: Ca
               </select>
             </label>
           )}
+          {!focus && (
           <label className="flex items-center gap-2 text-xs text-foreground-subtle">
             Mostrar
             <select
@@ -176,7 +192,8 @@ export function CascadeTree({ roots, periodKey, canManage, owners }: { roots: Ca
               <option value="noiv">Sem IVs (sem desdobramento)</option>
             </select>
           </label>
-          {canManage && (
+          )}
+          {canManage && !focus && (
             <NodeDialog
               mode="create"
               owners={owners}
@@ -184,6 +201,20 @@ export function CascadeTree({ roots, periodKey, canManage, owners }: { roots: Ca
               trigger={
                 <button type="button" className="inline-flex h-8 items-center gap-1 rounded-md bg-accent px-3 text-xs font-semibold text-accent-foreground hover:bg-accent-hover">
                   <Plus className="size-3.5" /> Novo IC ou IV
+                </button>
+              }
+            />
+          )}
+          {canManage && focus && (
+            <NodeDialog
+              mode="create"
+              presetKind="IV"
+              presetParentId={sonho.id}
+              owners={owners}
+              parentOptions={parentOptions}
+              trigger={
+                <button type="button" className="inline-flex h-8 items-center gap-1 rounded-md bg-accent px-3 text-xs font-semibold text-accent-foreground hover:bg-accent-hover">
+                  <Plus className="size-3.5" /> Novo IV
                 </button>
               }
             />
@@ -199,7 +230,7 @@ export function CascadeTree({ roots, periodKey, canManage, owners }: { roots: Ca
       </div>
 
       {view === "arvore" ? (
-        <Diagram sonho={sonho} roots={roots} filter={filter} pilarId={pilarId} open={open} toggle={toggle} />
+        <Diagram sonho={sonho} roots={roots} filter={filter} pilarId={pilarId} open={open} toggle={toggle} focus={focus} />
       ) : (
       <div className="overflow-hidden rounded-md border border-border bg-surface">
         <div className={cn("hidden border-b border-border-strong bg-surface-muted px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-foreground-subtle", COLS, "xl:grid")}>
@@ -223,7 +254,7 @@ export function CascadeTree({ roots, periodKey, canManage, owners }: { roots: Ca
             owners={owners}
           />
         ))}
-        {rows.length <= 1 && <p className="px-4 py-8 text-center text-sm text-foreground-subtle">Nenhum IC com esse filtro.</p>}
+        {!focus && rows.length <= 1 && <p className="px-4 py-8 text-center text-sm text-foreground-subtle">Nenhum IC com esse filtro.</p>}
       </div>
       )}
     </div>
@@ -365,7 +396,7 @@ function TreeRow({ row, expanded, onToggle, periodKey, canManage, owners }: { ro
               <span className="text-[13px] text-foreground-muted">{node.owner ? formatPersonName(node.owner.name) : "—"}</span>
             </Cell>
             <div className="mt-1 flex items-center justify-end gap-0.5 xl:mt-0">
-              {canManage && <RowActions node={node} periodKey={periodKey} owners={owners} />}
+              {canManage && <RowActions node={node} periodKey={periodKey} owners={owners} hideStructure={depth === 0 && node.kind === "IC"} />}
             </div>
           </>
         )}
@@ -391,7 +422,8 @@ function Cell({ label, children }: { label: string; children: React.ReactNode })
   );
 }
 
-function RowActions({ node, periodKey, owners }: { node: CascadeTreeNode; periodKey: string; owners: Owners }) {
+/** `hideStructure`: no IC que abre a visão focada (o do PDCA) não se edita nem exclui o item, só se atualiza e se adiciona IV; o resto é na tela de Cascateamento. */
+function RowActions({ node, periodKey, owners, hideStructure = false }: { node: CascadeTreeNode; periodKey: string; owners: Owners; hideStructure?: boolean }) {
   const parentOptions = useContext(ParentOptionsContext);
   const icon = "grid size-7 place-items-center rounded text-foreground-subtle hover:bg-surface hover:text-foreground";
   return (
@@ -413,6 +445,7 @@ function RowActions({ node, periodKey, owners }: { node: CascadeTreeNode; period
         parentOptions={parentOptions}
         trigger={<button type="button" aria-label="Adicionar IV (como)" title="Adicionar IV (como)" className={icon}><Plus className="size-4" /></button>}
       />
+      {!hideStructure && (
       <NodeDialog
         mode="edit"
         parentOptions={parentOptions}
@@ -420,12 +453,15 @@ function RowActions({ node, periodKey, owners }: { node: CascadeTreeNode; period
         owners={owners}
         trigger={<button type="button" aria-label="Editar" title="Editar" className={icon}><Pencil className="size-4" /></button>}
       />
+      )}
+      {!hideStructure && (
       <DeleteNodeDialog
         nodeId={node.id}
         nodeName={node.name}
         childCount={countDescendants(node)}
         trigger={<button type="button" aria-label="Excluir" title="Excluir" className={cn(icon, "hover:text-danger")}><Trash2 className="size-4" /></button>}
       />
+      )}
     </>
   );
 }
@@ -448,7 +484,9 @@ function Diagram({
   pilarId,
   open,
   toggle,
+  focus,
 }: {
+  focus: boolean;
   sonho: CascadeTreeNode;
   roots: CascadeTreeNode[];
   filter: Filter;
@@ -456,6 +494,16 @@ function Diagram({
   open: Set<string>;
   toggle: (id: string) => void;
 }) {
+  if (focus) {
+    return (
+      <div className="overflow-x-auto rounded-md border border-border bg-surface p-4">
+        <p className="mb-3 text-xs text-foreground-subtle">Leia da esquerda para a direita: cada caixa abre nas caixas que saem dela. Clique em uma caixa para abrir ou fechar o que vem depois.</p>
+        <div className="min-w-max">
+          <Branch node={sonho} visible={(n) => n.children} open={open} toggle={toggle} />
+        </div>
+      </div>
+    );
+  }
   const pilares = (sonho.kind === "SONHO" ? sonho.children : roots).filter((p) => !pilarId || p.id === pilarId);
   const visible = (node: CascadeTreeNode): CascadeTreeNode[] => node.children.filter((c) => c.kind !== "IC" || matches(c, filter));
   const shown = pilares.filter((p) => filter === "todos" || p.children.some((c) => c.kind === "IC" && matches(c, filter)));

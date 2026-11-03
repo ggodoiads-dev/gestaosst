@@ -8,6 +8,8 @@ import { parseDreKey } from "@/domain/dre/metrics";
 import { resolveDreMetric } from "@/server/services/dre.service";
 import { parseTmaKey } from "@/domain/tma/stats";
 import { resolveTmaMetric } from "@/server/services/tma.service";
+import { isTurnoverKey } from "@/domain/termination/turnover-metrics";
+import { resolveTurnoverMetric } from "@/server/services/turnover-metrics.service";
 
 /**
  * Números que o SIGO já mede sozinho e que alimentam os nós do cascateamento (`sigoKey`). Cada chave devolve o valor do
@@ -50,6 +52,7 @@ async function dtoCollaborators() {
 async function resolveOne(key: string, periodKey: string, todayKey: string): Promise<number | null> {
   if (key.startsWith("dre.")) return resolveDreMetric(key, periodKey);
   if (key.startsWith("tma.")) return resolveTmaMetric(key, periodKey);
+  if (isTurnoverKey(key)) return resolveTurnoverMetric(key, periodKey);
   const [base, param] = key.split(":");
   const { from, to, y } = monthBounds(periodKey);
   const today = new Date(`${todayKey}T12:00:00Z`);
@@ -145,6 +148,8 @@ async function resolveOne(key: string, periodKey: string, todayKey: string): Pro
 
 /** Chave que dá o ACUMULADO DO ANO (YTD) de quem tem um resultado do mês contável. Só vale para contagens (somam). */
 export function ytdKeyOf(sigoKey: string): string | null {
+  // O turnover de 12 meses já é um acumulado: o "acumulado do ano" do IC é o mesmo número.
+  if (sigoKey === "turnover.rolling12") return "turnover.rolling12.ytd";
   const tma = parseTmaKey(sigoKey);
   if (tma) return tma.ytd ? null : sigoKey.replace(/^tma\.(avg|ambev|atendimento|within3h|tmc|stage)/, "tma.$1.ytd");
   const dre = parseDreKey(sigoKey);

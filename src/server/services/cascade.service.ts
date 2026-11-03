@@ -21,6 +21,7 @@ import {
   type NodeStatus,
 } from "@/domain/cascade/status";
 import { SEED_ICS, SEED_PERIOD, SEED_PILARES, SEED_SONHO } from "@/domain/cascade/seed-data";
+import { TURNOVER_IC_SEED_KEY, TURNOVER_IC_SIGO_KEY, turnoverDimensionIv, turnoverStaticIvs, type SeedIvNode } from "@/domain/termination/turnover-cascade";
 
 /** ICs financeiros que leem do DRE importado (mês e acumulado do ano), pelo `seedKey` da estrutura inicial. Valor: chave do DRE;
  * "-" na frente do código troca o sinal (custos são negativos no DRE e o indicador é um % positivo). */
@@ -33,6 +34,8 @@ const SEED_DRE_KEYS: Record<string, string> = {
   // TMA e TMC leem da planilha de controle de atendimento importada (TMA = o da planilha da Ambev, dos liberados com agendamento).
   "ic:tma": "tma.avg",
   "ic:tmc": "tma.tmc",
+  // O TO geral lê o turnover dos 12 meses fechados dos desligamentos importados (o mesmo número do PDCA do turnover).
+  [TURNOVER_IC_SEED_KEY]: TURNOVER_IC_SIGO_KEY,
 };
 
 /**
@@ -57,6 +60,7 @@ export type ValueSource = "MANUAL" | "IMPORT" | "AUTO" | "ANTERIOR";
 
 export type CascadeTreeNode = {
   id: string;
+  seedKey: string | null;
   parentId: string | null;
   kind: CascadeKind;
   name: string;
@@ -97,7 +101,8 @@ export function currentPeriodKey(): string {
   return formatInTimeZone(new Date(), APP_TIMEZONE, "yyyy-MM");
 }
 
-export async function getCascadeTree(user: CurrentUser, periodKeyInput?: string) {
+/** `subtreeOf` (seedKey de um nó) lê só esse nó e o que está abaixo dele: o PDCA do turnover mostra só a cascata do TO geral, sem calcular o resto. */
+export async function getCascadeTree(user: CurrentUser, periodKeyInput?: string, options: { subtreeOf?: string } = {}) {
   requireView(user);
   const periodKey = periodKeyInput && isValidPeriodKey(periodKeyInput) ? periodKeyInput : currentPeriodKey();
   const todayKey = formatInTimeZone(new Date(), APP_TIMEZONE, "yyyy-MM-dd");
@@ -110,6 +115,21 @@ export async function getCascadeTree(user: CurrentUser, periodKeyInput?: string)
     return { periodKey, roots: [] as CascadeTreeNode[], ready: false, canManage: canManageCascade(user), owners: [] as { id: string; name: string }[] };
   }
 
+  if (options.subtreeOf) {
+    const top = nodes.find((n) => n.seedKey === options.subtreeOf);
+    const keep = new Set<string>(top ? [top.id] : []);
+    let grew = top !== undefined;
+    while (grew) {
+      grew = false;
+      for (const n of nodes) {
+        if (n.parentId && keep.has(n.parentId) && !keep.has(n.id)) {
+          keep.add(n.id);
+          grew = true;
+        }
+      }
+    }
+    nodes = nodes.filter((n) => keep.has(n.id));
+  }
   nodes = nodes.map((n) => ({ ...n, sigoKey: n.sigoKey ?? SEED_DRE_KEYS[n.seedKey ?? ""] ?? null }));
   const autoKeys = nodes.filter((n) => n.sigoKey).flatMap((n) => [n.sigoKey!, ...(ytdKeyOf(n.sigoKey!) ? [ytdKeyOf(n.sigoKey!)!] : [])]);
   const auto = await resolveAutoValues(autoKeys, periodKey);
@@ -168,6 +188,7 @@ export async function getCascadeTree(user: CurrentUser, periodKeyInput?: string)
       : { status: "NO_DATA" as NodeStatus };
     byId.set(n.id, {
       id: n.id,
+      seedKey: n.seedKey,
       parentId: n.parentId,
       kind: n.kind as CascadeKind,
       name: n.name,
@@ -514,6 +535,46 @@ export async function seedCascade(user: CurrentUser) {
       sigoKey: iv.sigoKey ?? null,
       description: iv.description ?? null,
     });
+  }
+
+  // COMO do turnover: IVs do IC "TO geral" (pedidos de demissão e motivos, saídas precoces, entrevista, plataforma) e, dos desligamentos
+  // importados, os IVs por turno, área e cargo. Só cria o que falta; não mexe no que a gestão já ajustou.
+  const toIc = ids.get(TURNOVER_IC_SEED_KEY) ?? (await db.cascadeNode.findUnique({ where: { seedKey: TURNOVER_IC_SEED_KEY }, select: { id: true } }))?.id;
+  if (toIc) {
+    ids.set(TURNOVER_IC_SEED_KEY, toIc);
+    const parentIdOf = async (seedKey: string) => ids.get(seedKey) ?? (await db.cascadeNode.findUnique({ where: { seedKey }, select: { id: true } }))?.id;
+    const ensureIv = async (iv: SeedIvNode) => {
+      const parentId = await parentIdOf(iv.parentSeedKey);
+      if (!parentId) return;
+      await ensure(iv.seedKey, {
+        kind: "IV",
+        name: iv.name,
+        parentId,
+        unit: iv.unit ?? "NUMBER",
+        polarity: iv.polarity ?? "HIGHER",
+        pace: iv.pace ?? "NONE",
+        target: iv.target ?? null,
+        sigoKey: iv.sigoKey ?? null,
+        description: iv.description ?? null,
+      });
+    };
+    for (const iv of turnoverStaticIvs()) await ensureIv(iv);
+    try {
+      const terminations = await db.termination.findMany({ select: { turnoName: true, areaName: true, cargo: true } });
+      const top = (pick: (t: (typeof terminations)[number]) => string | null, limit: number) => {
+        const m = new Map<string, number>();
+        for (const t of terminations) {
+          const v = pick(t)?.trim();
+          if (v) m.set(v, (m.get(v) ?? 0) + 1);
+        }
+        return [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, limit).map(([v]) => v);
+      };
+      for (const v of top((t) => t.turnoName, 8)) await ensureIv(turnoverDimensionIv("turno", v));
+      for (const v of top((t) => t.areaName, 10)) await ensureIv(turnoverDimensionIv("area", v));
+      for (const v of top((t) => t.cargo, 6)) await ensureIv(turnoverDimensionIv("cargo", v));
+    } catch (error) {
+      console.error("[cascade] desligamentos indisponíveis para os IVs por turno/área/cargo:", error);
+    }
   }
 
   // Desdobramento até o último nível: por turno (relatos) e por empilhadeira (checklist).
