@@ -228,19 +228,13 @@ export function AppShell({
           mobileOpen ? "flex translate-x-0" : "hidden -translate-x-full",
         )}
       >
-        <div className={cn("flex items-center justify-between h-16 px-4", novo ? "" : "border-b border-white/10")}>
+        {/* A logo é a mesma imagem nos dois visuais; no novo ela fica sobre a faixa azul-marinho da marca, em cima do menu claro. */}
+        <div className={cn("flex items-center justify-between h-16 px-4", novo ? "bg-brand" : "border-b border-white/10")}>
           <Link href="/inicio" className="flex items-center px-2.5 py-1.5">
-            {novo ? (
-              <span className="flex items-center gap-2.5 text-[19px] font-bold tracking-tight text-foreground">
-                <span className="grid size-[30px] place-items-center rounded-[9px] bg-brand text-[16px] font-bold text-brand-accent">S</span>
-                SIGO
-              </span>
-            ) : (
-              <Image src="/sigo-logo.png" alt="SIGO" width={112} height={36} priority />
-            )}
+            <Image src="/sigo-logo.png" alt="SIGO" width={112} height={36} priority />
           </Link>
           <button
-            className={cn("lg:hidden", novo ? "text-foreground-subtle hover:text-foreground" : "text-white/70 hover:text-white")}
+            className="lg:hidden text-white/70 hover:text-white"
             onClick={() => setMobileOpen(false)}
             aria-label="Fechar menu"
           >
