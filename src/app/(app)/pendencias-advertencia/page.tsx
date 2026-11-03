@@ -26,10 +26,7 @@ export default async function PendenciasAdvertenciaPage() {
       />
       <PageBody>
         <div className="flex flex-col gap-8">
-          <DisciplineSection
-            items={overview.items.filter((i) => i.reason === "CHECKLIST")}
-            history={overview.history.map((h) => ({ ...h, decidedAtLabel: formatDate(h.decidedAt) }))}
-          />
+          <DisciplineSection items={overview.items.filter((i) => i.reason === "CHECKLIST")} />
           <section className="flex flex-col gap-3">
             <h2 className="text-sm font-semibold text-foreground">Faltas e atestados</h2>
             <PendingFollowUpList

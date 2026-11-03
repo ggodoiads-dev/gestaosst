@@ -4,15 +4,14 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { FileDown, Gavel, History, Lock } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { FileDown, Gavel, Lock } from "lucide-react";
 import { formatPersonName, initials } from "@/lib/format-name";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { FormField } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter, DialogClose } from "@/components/ui/dialog";
-import { applyMeasureAction, dismissManyAction, dismissOccurrenceAction, freezeHistoryAction, recomputeCollaboratorsAction, undoDecisionAction } from "@/server/actions/discipline.actions";
+import { applyMeasureAction, dismissManyAction, dismissOccurrenceAction, freezeHistoryAction, recomputeCollaboratorsAction } from "@/server/actions/discipline.actions";
 import { stepHasDocument } from "@/domain/discipline/document";
 import {
   DISCIPLINE_STEPS,
@@ -31,19 +30,6 @@ export type DisciplineEntry = {
   appliedCount: number;
   done?: number;
   required?: number;
-};
-
-export type DisciplineHistoryRow = {
-  id: string;
-  reason: DisciplineReasonKey;
-  collaboratorName: string;
-  dayKey: string;
-  step: string;
-  status: "APLICADA" | "DISPENSADA";
-  hasDocument: boolean;
-  note: string | null;
-  decidedByName: string;
-  decidedAtLabel: string;
 };
 
 function dmy(dayKey: string) {
@@ -137,8 +123,7 @@ export function MeasureDialog({ entry, mode, trigger }: { entry: DisciplineEntry
 }
 
 /** Checklist abaixo de 80% no dia → medida sugerida pela escada do checklist. */
-export function DisciplineSection({ items, history }: { items: DisciplineEntry[]; history: DisciplineHistoryRow[] }) {
-  const [showHistory, setShowHistory] = useState(false);
+export function DisciplineSection({ items }: { items: DisciplineEntry[] }) {
   const checklist = items.filter((i) => i.reason === "CHECKLIST");
   const groups = new Map<string, { name: string; id: string; items: DisciplineEntry[] }>();
   for (const i of checklist) {
@@ -162,9 +147,6 @@ export function DisciplineSection({ items, history }: { items: DisciplineEntry[]
         <div className="flex items-center gap-1">
           {checklist.length > 0 && <RecomputeDialog name="" collaboratorIds={[...groups.keys()]} label="Refazer todos com o cadastro atual" />}
           <FreezeHistoryButton />
-          <Button size="sm" variant="ghost" onClick={() => setShowHistory((v) => !v)}>
-            <History className="size-4" /> {showHistory ? "Ocultar histórico" : "Histórico de medidas"}
-          </Button>
         </div>
       </div>
 
@@ -206,37 +188,6 @@ export function DisciplineSection({ items, history }: { items: DisciplineEntry[]
               </div>
             </div>
           ))}
-        </div>
-      )}
-
-      {showHistory && (
-        <div className="overflow-hidden rounded-lg border border-border bg-surface">
-          {history.length === 0 ? (
-            <p className="px-4 py-6 text-center text-sm text-foreground-subtle">Nenhuma medida registrada ainda.</p>
-          ) : (
-            <ul className="divide-y divide-border">
-              {history.map((h) => (
-                <li key={h.id} className="flex flex-wrap items-baseline justify-between gap-2 px-4 py-2 text-xs">
-                  <span className="text-foreground">
-                    <strong>{formatPersonName(h.collaboratorName)}</strong> · {disciplineReasonLabel(h.reason)} ({dmy(h.dayKey)}) ·{" "}
-                    <span className={cn(h.status === "APLICADA" ? "text-danger" : "text-foreground-subtle")}>
-                      {h.status === "APLICADA" ? disciplineStepLabel(h.step) : "Dispensada"}
-                    </span>
-                    {h.note && <span className="text-foreground-subtle"> — “{h.note}”</span>}
-                    {h.hasDocument && (
-                      <a href={`/api/medidas-disciplinares/${h.id}/docx`} className="ml-2 text-accent hover:underline">
-                        Documento (Word)
-                      </a>
-                    )}
-                  </span>
-                  <span className="flex items-center gap-3 text-foreground-subtle">
-                    {h.decidedByName} · {h.decidedAtLabel}
-                    <UndoButton id={h.id} label={`${formatPersonName(h.collaboratorName)} — ${h.status === "APLICADA" ? disciplineStepLabel(h.step) : "dispensada"} (${dmy(h.dayKey)})`} />
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
         </div>
       )}
     </section>
@@ -365,50 +316,5 @@ function FreezeHistoryButton() {
     <Button size="sm" variant="ghost" onClick={freeze} loading={pending} title="Trava os dias já fechados">
       <Lock className="size-4" /> Travar histórico
     </Button>
-  );
-}
-
-/** Desfaz uma decisão do histórico: a ocorrência volta pra fila de pendências. */
-function UndoButton({ id, label }: { id: string; label: string }) {
-  const router = useRouter();
-  const [open, setOpen] = useState(false);
-  const [pending, startTransition] = useTransition();
-
-  function confirm() {
-    startTransition(async () => {
-      const res = await undoDecisionAction(id);
-      if (!res.ok) {
-        toast.error(res.error);
-        return;
-      }
-      toast.success("Desfeito — a ocorrência voltou para as pendências.");
-      setOpen(false);
-      router.refresh();
-    });
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <button type="button" onClick={() => setOpen(true)} className="text-accent hover:underline">
-        Desfazer
-      </button>
-      <DialogContent className="max-w-sm">
-        <DialogHeader>
-          <DialogTitle>Desfazer este registro?</DialogTitle>
-        </DialogHeader>
-        <DialogBody className="flex flex-col gap-2 text-sm">
-          <p className="font-medium text-foreground">{label}</p>
-          <p className="text-foreground-subtle">
-            A ocorrência volta para as pendências e a escada de medidas é recalculada. Use quando o registro foi feito antes da hora (por exemplo, só para baixar o documento).
-          </p>
-        </DialogBody>
-        <DialogFooter>
-          <DialogClose asChild>
-            <Button type="button" variant="secondary">Cancelar</Button>
-          </DialogClose>
-          <Button onClick={confirm} loading={pending}>Desfazer</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }
