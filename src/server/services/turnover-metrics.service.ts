@@ -64,7 +64,15 @@ async function buildContext(windowEnd: string): Promise<TurnoverContext | null> 
   const survey = await getExitSurvey();
   const byCategory = new Map<string, { satisfacao: number | null; criticos: number | null }>();
   for (const row of survey.satisfacao?.data.rows ?? []) byCategory.set(surveyKey(row.categoria), { satisfacao: row.satisfacao, criticos: row.criticos });
-  return { rate, exits, satisfaction: { byCategory, total: survey.satisfacao?.data.total ?? null } };
+  const platformMotives = new Map<string, { peak: number | null; byBucket: Map<string, number | null> }>();
+  const motivos = survey.motivos?.data;
+  for (const row of motivos?.rows ?? []) {
+    const byBucket = new Map<string, number | null>();
+    motivos!.buckets.forEach((b, i) => byBucket.set(surveyKey(b), row.values[i] ?? null));
+    const known = row.values.filter((v): v is number => v !== null);
+    platformMotives.set(surveyKey(row.motivo), { peak: known.length ? Math.max(...known) : null, byBucket });
+  }
+  return { rate, exits, satisfaction: { byCategory, total: survey.satisfacao?.data.total ?? null }, platformMotives };
 }
 
 /** Valor de uma chave `turnover.*` para o mês pedido (a janela de 12 meses fechados termina nele; no mês corrente, no último fechado). */

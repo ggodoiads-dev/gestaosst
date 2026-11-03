@@ -21,7 +21,8 @@ import {
   type NodeStatus,
 } from "@/domain/cascade/status";
 import { SEED_ICS, SEED_PERIOD, SEED_PILARES, SEED_SONHO } from "@/domain/cascade/seed-data";
-import { TURNOVER_IC_SEED_KEY, TURNOVER_IC_SIGO_KEY, turnoverDimensionIv, turnoverStaticIvs, type SeedIvNode } from "@/domain/termination/turnover-cascade";
+import { TURNOVER_IC_SEED_KEY, TURNOVER_IC_SIGO_KEY, platformMotiveIvs, platformSatisfactionExtraIvs, turnoverDimensionIv, turnoverStaticIvs, type SeedIvNode } from "@/domain/termination/turnover-cascade";
+import { getExitSurvey } from "@/server/services/exit-survey.service";
 
 /** ICs financeiros que leem do DRE importado (mês e acumulado do ano), pelo `seedKey` da estrutura inicial. Valor: chave do DRE;
  * "-" na frente do código troca o sinal (custos são negativos no DRE e o indicador é um % positivo). */
@@ -558,7 +559,19 @@ export async function seedCascade(user: CurrentUser) {
         description: iv.description ?? null,
       });
     };
-    for (const iv of turnoverStaticIvs()) await ensureIv(iv);
+    const staticIvs = turnoverStaticIvs();
+    for (const iv of staticIvs) await ensureIv(iv);
+    // A estrutura mudou: a entrevista por pessoa ficou dentro dos pedidos de demissão, e os motivos por pessoa dentro dela. Quem já tinha a versão antiga é movido uma vez.
+    for (const iv of staticIvs.filter((i) => i.seedKey === "iv:to:entrevista" || i.seedKey.startsWith("iv:to:motivo:"))) {
+      const wantedParent = await parentIdOf(iv.parentSeedKey);
+      const current = await db.cascadeNode.findUnique({ where: { seedKey: iv.seedKey }, select: { id: true, parentId: true } });
+      if (wantedParent && current && current.parentId !== wantedParent) {
+        await db.cascadeNode.update({ where: { id: current.id }, data: { parentId: wantedParent, name: iv.name, description: iv.description ?? null } });
+      }
+    }
+    // Valores das tabelas da plataforma de entrevistas (motivo × tempo de casa e satisfação): os IVs seguem o que foi importado.
+    const survey = await getExitSurvey();
+    for (const iv of [...platformMotiveIvs(survey.motivos?.data ?? null), ...platformSatisfactionExtraIvs(survey.satisfacao?.data ?? null)]) await ensureIv(iv);
     try {
       const terminations = await db.termination.findMany({ select: { turnoName: true, areaName: true, cargo: true } });
       const top = (pick: (t: (typeof terminations)[number]) => string | null, limit: number) => {

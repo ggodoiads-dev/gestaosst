@@ -21,6 +21,8 @@ export type TurnoverContext = {
   exits: WindowExit[];
   /** Satisfação da plataforma de entrevistas, por categoria (chave = surveyKey da categoria) e o total. */
   satisfaction: { byCategory: Map<string, { satisfacao: number | null; criticos: number | null }>; total: { satisfacao: number | null; criticos: number | null } | null };
+  /** Motivos da plataforma de entrevistas (tabela por tempo de casa): por motivo, o maior % entre as faixas e o % de cada faixa (chaves surveyKey). */
+  platformMotives: Map<string, { peak: number | null; byBucket: Map<string, number | null> }>;
 };
 
 export const surveyKey = (s: string) =>
@@ -33,7 +35,8 @@ export const surveyKey = (s: string) =>
 const pct = (part: number, total: number) => (total === 0 ? null : Math.round((part / total) * 10000) / 100);
 
 /** Chave do SIGO → valor. Chaves: turnover.rolling12, .exits12, .voluntary.pct, .early90.pct, .interviews.coverage, .wouldreturn.pct, .motive:KEY,
- * .rating:KEY, .turno:NOME, .area:NOME, .cargo:NOME, .platform.sat:CATEGORIA (ou "total"), .platform.crit:CATEGORIA. NOME vem com encodeURIComponent. */
+ * .rating:KEY, .turno:NOME, .area:NOME, .cargo:NOME, .platform.sat:CATEGORIA (ou "total"), .platform.crit:CATEGORIA (ou "total"),
+ * .platform.motive:MOTIVO (maior % entre as faixas de tempo de casa) e .platform.motive:MOTIVO~FAIXA. NOME vem com encodeURIComponent. */
 export function turnoverMetric(key: string, ctx: TurnoverContext): number | null {
   const [base, rawParam] = key.split(":");
   const param = rawParam === undefined ? undefined : decodeURIComponent(rawParam);
@@ -76,6 +79,12 @@ export function turnoverMetric(key: string, ctx: TurnoverContext): number | null
       return param === "total" ? (ctx.satisfaction.total?.satisfacao ?? null) : (ctx.satisfaction.byCategory.get(param ?? "")?.satisfacao ?? null);
     case "turnover.platform.crit":
       return param === "total" ? (ctx.satisfaction.total?.criticos ?? null) : (ctx.satisfaction.byCategory.get(param ?? "")?.criticos ?? null);
+    case "turnover.platform.motive": {
+      const [motive, bucket] = (param ?? "").split("~");
+      const entry = ctx.platformMotives.get(motive);
+      if (!entry) return null;
+      return bucket ? (entry.byBucket.get(bucket) ?? null) : entry.peak;
+    }
     default:
       return null;
   }

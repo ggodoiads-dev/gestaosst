@@ -8,6 +8,7 @@ const ctx = (exits: WindowExit[], rate: number | null = 15.3): TurnoverContext =
   rate,
   exits,
   satisfaction: { byCategory: new Map([["remuneracao", { satisfacao: 77.7, criticos: 8.3 }]]), total: { satisfacao: 80, criticos: 2.2 } },
+  platformMotives: new Map([["gestorimediato", { peak: 18.8, byBucket: new Map([["6a12meses", 18.8], ["0a3meses", null]]) }]]),
 });
 
 describe("turnoverMetric", () => {
@@ -51,6 +52,12 @@ describe("turnoverMetric", () => {
     expect(turnoverMetric("turnover.platform.crit:remuneracao", c)).toBe(8.3);
     expect(turnoverMetric("turnover.platform.sat:total", c)).toBe(80);
     expect(turnoverMetric("turnover.platform.sat:inexistente", c)).toBeNull();
+  });
+  it("motivos da plataforma: maior % e % de cada faixa", () => {
+    expect(turnoverMetric("turnover.platform.motive:gestorimediato", c)).toBe(18.8);
+    expect(turnoverMetric("turnover.platform.motive:gestorimediato~6a12meses", c)).toBe(18.8);
+    expect(turnoverMetric("turnover.platform.motive:gestorimediato~0a3meses", c)).toBeNull();
+    expect(turnoverMetric("turnover.platform.motive:inexistente", c)).toBeNull();
   });
   it("sem entrevistas não inventa percentual", () => {
     const none = ctx([ex({}), ex({})]);

@@ -5,6 +5,8 @@
  */
 import { EXIT_RATINGS, EXIT_REASONS } from "./interview";
 import type { CascadePace, CascadePolarity, CascadeUnit } from "@/domain/cascade/status";
+import { surveyKey } from "./turnover-metrics";
+import type { MotivosTempo, Satisfacao } from "./survey";
 
 export const TURNOVER_IC_SEED_KEY = "ic:to-geral";
 export const TURNOVER_IC_SIGO_KEY = "turnover.rolling12";
@@ -68,12 +70,24 @@ export function turnoverStaticIvs(): SeedIvNode[] {
     },
   ];
 
+  out.push({
+    seedKey: "iv:to:entrevista",
+    parentSeedKey: "iv:to:demissao",
+    kind: "IV",
+    name: "Entrevistas de desligamento registradas por pessoa (% dos pedidos de demissão)",
+    unit: "PERCENT",
+    polarity: "HIGHER",
+    target: 100,
+    sigoKey: "turnover.interviews.coverage",
+    description: "Sem entrevista, o PDCA trabalha com hipótese e não com o motivo dito por quem saiu. Registre a entrevista de cada pedido de demissão (ou importe a planilha de entrevistas): os motivos abaixo só ganham valor depois disso.",
+  });
+
   for (const r of EXIT_REASONS) {
     out.push({
       seedKey: `iv:to:motivo:${r.key}`,
-      parentSeedKey: "iv:to:demissao",
+      parentSeedKey: "iv:to:entrevista",
       kind: "IV",
-      name: `${r.label} como motivo principal (% dos entrevistados)`,
+      name: `${r.label} como motivo principal (entrevistas por pessoa, %)`,
       unit: "PERCENT",
       polarity: "LOWER",
       sigoKey: `turnover.motive:${r.key}`,
@@ -117,17 +131,6 @@ export function turnoverStaticIvs(): SeedIvNode[] {
       description: "Média das notas das entrevistas de desligamento da janela. Sem meta ainda.",
     },
     {
-      seedKey: "iv:to:entrevista",
-      parentSeedKey: IC,
-      kind: "IV",
-      name: "Pedidos de demissão com entrevista de desligamento (%)",
-      unit: "PERCENT",
-      polarity: "HIGHER",
-      target: 100,
-      sigoKey: "turnover.interviews.coverage",
-      description: "Sem entrevista, o PDCA trabalha com hipótese e não com o motivo dito por quem saiu. Registre a entrevista de cada pedido de demissão.",
-    },
-    {
       seedKey: "iv:to:voltaria",
       parentSeedKey: IC,
       kind: "IV",
@@ -161,6 +164,17 @@ export function turnoverStaticIvs(): SeedIvNode[] {
     });
   }
 
+  out.push({
+    seedKey: "iv:to:plat:criticos",
+    parentSeedKey: "iv:to:plataforma",
+    kind: "IV",
+    name: "Itens críticos nas respostas de quem saiu (%)",
+    unit: "PERCENT",
+    polarity: "LOWER",
+    sigoKey: "turnover.platform.crit:total",
+    description: "% das respostas marcadas como crítica na plataforma de entrevistas. Quanto menor, melhor.",
+  });
+
   out.push(
     { seedKey: "iv:to:turno", parentSeedKey: IC, kind: "IV", name: "Saídas por turno (% das saídas)", unit: "PERCENT", polarity: "LOWER", description: "Onde as saídas se concentram. Um turno com mais saídas que o resto pede olhar liderança, escala e carga." },
     { seedKey: "iv:to:area", parentSeedKey: IC, kind: "IV", name: "Saídas por área (% das saídas)", unit: "PERCENT", polarity: "LOWER", description: "Concentração das saídas por área." },
@@ -183,4 +197,71 @@ export function turnoverDimensionIv(dim: "turno" | "area" | "cargo", value: stri
     sigoKey: `turnover.${dim}:${encodeURIComponent(value)}`,
     description: `% das saídas da janela que eram de ${label.toLowerCase()} ${value}. O que é diferente aqui (liderança, escala, carga, ambiente)?`,
   };
+}
+
+/** Perguntas de investigação para um motivo da plataforma (o texto vem da plataforma; casa por palavra-chave com as chaves de EXIT_REASONS). */
+export function promptsForPlatformMotive(motivo: string): string[] {
+  const t = surveyKey(motivo);
+  const pick = (key: string) => WHY_PROMPTS[key] ?? [];
+  if (t.includes("gestor") || t.includes("lideran")) return pick("LIDERANCA");
+  if (t.includes("carreira") || t.includes("crescimento")) return pick("CRESCIMENTO");
+  if (t.includes("pessoais")) return pick("SAUDE_PESSOAL");
+  if (t.includes("ambiente")) return pick("CLIMA");
+  if (t.includes("papeis") || t.includes("responsabilidades")) return pick("ADAPTACAO");
+  if (t.includes("remunera") || t.includes("salar")) return pick("SALARIO");
+  if (t.includes("benefic")) return pick("BENEFICIOS");
+  if (t.includes("estrategia") || t.includes("cultura")) return ["Que decisão, mudança de regra ou comunicação da empresa pesou?", "A pessoa entendeu o rumo da operação ou sentiu que ele mudava sem explicação?"];
+  return [];
+}
+
+/** IVs dos motivos da tabela da plataforma (motivo × tempo de casa): um IV por motivo, com o maior % entre as faixas, e um IV por faixa que tem valor. */
+export function platformMotiveIvs(m: MotivosTempo | null): SeedIvNode[] {
+  const out: SeedIvNode[] = [];
+  for (const row of m?.rows ?? []) {
+    const known = row.values.map((v, i) => ({ v, bucket: m!.buckets[i] })).filter((x): x is { v: number; bucket: string } => x.v !== null);
+    if (known.length === 0) continue;
+    const key = surveyKey(row.motivo);
+    const parts = known.map((x) => `${x.bucket}: ${x.v.toLocaleString("pt-BR")}%`).join(" · ");
+    const prompts = promptsForPlatformMotive(row.motivo);
+    out.push({
+      seedKey: `iv:to:pm:${key}`,
+      parentSeedKey: "iv:to:demissao",
+      kind: "IV",
+      name: `${row.motivo} (plataforma: % na faixa de tempo de casa em que mais pesa)`,
+      unit: "PERCENT",
+      polarity: "LOWER",
+      sigoKey: `turnover.platform.motive:${key}`,
+      description: `Por tempo de casa — ${parts}.${prompts.length ? ` ${asks(prompts)}` : ""}`,
+    });
+    for (const x of known) {
+      out.push({
+        seedKey: `iv:to:pm:${key}:${surveyKey(x.bucket)}`,
+        parentSeedKey: `iv:to:pm:${key}`,
+        kind: "IV",
+        name: `${row.motivo} — ${x.bucket.toLowerCase()} de casa`,
+        unit: "PERCENT",
+        polarity: "LOWER",
+        sigoKey: `turnover.platform.motive:${key}~${surveyKey(x.bucket)}`,
+        description: `% das saídas dessa faixa de tempo de casa que citaram este motivo (plataforma de entrevistas). O que acontece nesse momento da vida do colaborador na empresa?`,
+      });
+    }
+  }
+  return out;
+}
+
+/** Categorias de satisfação da plataforma que não estão na lista fixa (a plataforma pode trazer outras). */
+export function platformSatisfactionExtraIvs(s: Satisfacao | null): SeedIvNode[] {
+  const known = new Set(PLATFORM_CATEGORIES.map((c) => c.key));
+  return (s?.rows ?? [])
+    .filter((r) => r.satisfacao !== null && !known.has(surveyKey(r.categoria)))
+    .map((r) => ({
+      seedKey: `iv:to:plat:${surveyKey(r.categoria)}`,
+      parentSeedKey: "iv:to:plataforma",
+      kind: "IV" as const,
+      name: `Satisfação com ${r.categoria.toLowerCase()}`,
+      unit: "PERCENT" as const,
+      polarity: "HIGHER" as const,
+      sigoKey: `turnover.platform.sat:${surveyKey(r.categoria)}`,
+      description: "O que, nesta categoria, a pessoa avaliou pior?",
+    }));
 }
