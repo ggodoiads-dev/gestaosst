@@ -97,16 +97,20 @@ function Chapters({ p, refs, only }: { p: CinemaProps; refs?: React.MutableRefOb
         </div>
       </div>
 
-      <div ref={set(3)} style={only === undefined ? { opacity: 0 } : undefined} className={place(3, "items-center justify-center gap-7 px-6 text-center")}>
-        <h2 className="max-w-[14ch] text-[clamp(44px,7vw,96px)] font-medium leading-[1] tracking-[-0.045em] text-white">
-          Pronto para <span className="sigo-serif">o dia?</span>
+      <div ref={set(3)} style={only === undefined ? { opacity: 0 } : undefined} className={place(3, "items-center justify-center gap-6 px-6 text-center")}>
+        <p className="text-[13px] font-medium uppercase tracking-[0.18em] text-[#9db4dc]">Seu turno começa agora</p>
+        <h2 className="max-w-[12ch] text-[clamp(52px,9vw,128px)] font-medium leading-[0.96] tracking-[-0.05em] text-white">
+          Todo mundo <span className="sigo-serif text-[1.06em]">volta para casa.</span>
         </h2>
-        <div className="flex flex-wrap items-center justify-center gap-3">
-          <Link href={p.panelHref} className="inline-flex items-center gap-2 rounded-full bg-white px-7 py-3.5 text-[15px] font-semibold text-[#001840] transition-transform hover:scale-[1.03]">
-            Abrir o painel <ArrowRight className="size-4" />
+        <p className="max-w-[46ch] text-[clamp(15px,1.5vw,19px)] leading-relaxed text-[#c9d6ee]">
+          É por isso que cada checklist, cada aviso e cada número existem. Vamos fazer o dia valer.
+        </p>
+        <div className="mt-2 flex flex-wrap items-center justify-center gap-3">
+          <Link href={p.panelHref} className="inline-flex items-center gap-2 rounded-full bg-white px-8 py-4 text-[16px] font-semibold text-[#001840] shadow-[0_10px_40px_rgba(103,232,249,0.35)] transition-transform hover:scale-[1.04]">
+            Começar o dia <ArrowRight className="size-4" />
           </Link>
-          <Link href="/avisos" className="inline-flex items-center gap-2 rounded-full border border-white/30 px-6 py-3.5 text-[15px] font-medium text-white backdrop-blur hover:bg-white/10">
-            Ver avisos
+          <Link href="/avisos" className="inline-flex items-center gap-2 rounded-full border border-white/30 px-7 py-4 text-[16px] font-medium text-white backdrop-blur hover:bg-white/10">
+            Ver o que pede atenção
           </Link>
         </div>
       </div>
