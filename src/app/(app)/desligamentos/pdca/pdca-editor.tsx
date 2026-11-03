@@ -18,7 +18,7 @@ const field = "flex flex-col gap-1.5";
 const label = "text-[13px] font-medium text-foreground-muted";
 
 /** Metas, causas (Plan), ações (Do) e padronização (Act) do ano, salvos juntos. O Check (acompanhamento) vem pronto do servidor. */
-export function PdcaEditor({ year, initial, diagnosis, kinds }: { year: number; initial: PdcaData; diagnosis: string[]; kinds: { label: string; count: number }[] }) {
+export function PdcaEditor({ year, initial, diagnosis, kinds, planExtra, checkSlot }: { year: number; initial: PdcaData; diagnosis: string[]; kinds: { label: string; count: number }[]; planExtra?: React.ReactNode; checkSlot?: React.ReactNode }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [data, setData] = useState<PdcaData>(initial);
@@ -92,6 +92,7 @@ export function PdcaEditor({ year, initial, diagnosis, kinds }: { year: number; 
             ))}
             {kinds.length > 0 && <p className="text-xs text-foreground-subtle">Tipos na janela: {kinds.map((k) => `${k.label} ${k.count}`).join(" · ")}.</p>}
           </div>
+          {planExtra}
           {data.causes.map((c) => (
             <div key={c.id} className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr_auto]">
               <Textarea rows={2} value={c.text} onChange={(e) => setCause(c.id, { text: e.target.value })} placeholder="Causa (hipótese)" maxLength={600} />
@@ -150,6 +151,8 @@ export function PdcaEditor({ year, initial, diagnosis, kinds }: { year: number; 
           </div>
         </CardContent>
       </Card>
+
+      {checkSlot}
 
       <Card>
         <CardHeader>

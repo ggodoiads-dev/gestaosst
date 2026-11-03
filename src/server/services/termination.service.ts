@@ -9,7 +9,6 @@ import {
   classifyTermination,
   countsAsTurnover,
   effectiveKind,
-  headcountAt,
   tenureBucket,
   tenureDays,
   terminationKey,
@@ -18,6 +17,8 @@ import {
   TERMINATION_KIND_LABEL,
   type TerminationKind,
 } from "@/domain/termination/rules";
+import { presenceAt } from "@/domain/termination/presence";
+import { loadPresence } from "@/server/services/turnover-base";
 import { parseSpreadsheet, suggestMapping as suggestMappingGeneric, getCell, normalize, parseDateCell } from "@/lib/spreadsheet-import";
 
 export type { TerminationImportField, TerminationImportMapping };
@@ -183,7 +184,7 @@ export async function getTurnoverView(user: CurrentUser, year: number): Promise<
   const kindOfRow = (t: (typeof all)[number]): TerminationKind => effectiveKind(t.kind, t.reason);
   const ofYear = all.filter((t) => t.terminationDate.getFullYear() === year);
   const rows = ofYear.filter((t) => countsAsTurnover(kindOfRow(t)));
-  const people = await db.collaborator.findMany({ select: { admissionDate: true, inactivatedAt: true } });
+  const { people } = await loadPresence();
 
   const now = new Date();
   const months: TurnoverMonth[] = [];
@@ -191,8 +192,8 @@ export async function getTurnoverView(user: CurrentUser, year: number): Promise<
     const start = new Date(year, m, 1);
     if (start > now) break;
     const end = new Date(year, m + 1, 1);
-    const hs = headcountAt(people, start);
-    const he = headcountAt(people, end > now ? now : end);
+    const hs = presenceAt(people, start);
+    const he = presenceAt(people, end > now ? now : end);
     const exits = rows.filter((t) => t.terminationDate.getMonth() === m).length;
     months.push({ month: `${year}-${String(m + 1).padStart(2, "0")}`, exits, headcountStart: hs, headcountEnd: he, rate: turnoverRate(exits, hs, he) });
   }

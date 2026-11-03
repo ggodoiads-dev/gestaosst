@@ -166,7 +166,7 @@ function normalCanvas(height: Float32Array, w: number, h: number, strength: numb
  * Cena da apresentação: a logo do SIGO em 3D. A imagem da logo é separada por cor em peças (anel, marca, check e as quatro letras); cada peça vira uma malha em relevo
  * com bisel (mapa de altura desfocado + mapa de normais) e material verniz, para ter profundidade e reflexo reais. Pode ser trocada por qualquer logo no mesmo formato.
  */
-export async function createLogoScene(THREE: Three, canvas: HTMLCanvasElement, opts: { logoUrl: string; hours: number[] | null }): Promise<LogoSceneHandle> {
+export async function createLogoScene(THREE: Three, canvas: HTMLCanvasElement, opts: { logoUrl: string; hours: number[] | null; quality?: "high" | "low" }): Promise<LogoSceneHandle> {
   const [{ EffectComposer }, { RenderPass }, { UnrealBloomPass }, { OutputPass }, { RoomEnvironment }, img] = await Promise.all([
     import("three/examples/jsm/postprocessing/EffectComposer.js"),
     import("three/examples/jsm/postprocessing/RenderPass.js"),
@@ -176,6 +176,8 @@ export async function createLogoScene(THREE: Three, canvas: HTMLCanvasElement, o
     loadImage(opts.logoUrl),
   ]);
 
+  const low = opts.quality === "low";
+  const tick = () => new Promise<void>((r) => setTimeout(r, 0));
   const state: LogoState = { ...INITIAL_STATE };
   const disposables: { dispose: () => void }[] = [];
   const track = <T extends { dispose: () => void }>(o: T): T => {
@@ -184,7 +186,7 @@ export async function createLogoScene(THREE: Three, canvas: HTMLCanvasElement, o
   };
 
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: "high-performance" });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, low ? 1 : 1.5));
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.1;
 
@@ -198,11 +200,14 @@ export async function createLogoScene(THREE: Three, canvas: HTMLCanvasElement, o
   scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
   scene.environmentIntensity = 0.32;
 
-  const composer = new EffectComposer(renderer);
-  composer.addPass(new RenderPass(scene, camera));
+  // Em aparelho fraco não há pós-processamento (brilho): renderiza direto, bem mais leve.
+  const composer = low ? null : new EffectComposer(renderer);
   const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.4, 0.55, 0.88);
-  composer.addPass(bloom);
-  composer.addPass(new OutputPass());
+  if (composer) {
+    composer.addPass(new RenderPass(scene, camera));
+    composer.addPass(bloom);
+    composer.addPass(new OutputPass());
+  }
 
   // ---- luzes
   const key = new THREE.DirectionalLight(0xdbe9ff, 1.25);
@@ -293,6 +298,7 @@ export async function createLogoScene(THREE: Three, canvas: HTMLCanvasElement, o
   const explodeZ: Record<Part["id"], number> = { ring: -2.8, mark: 1.8, check: 4.2, s: 2.2, i: 3.4, g: 1.2, o: 2.8 };
 
   for (const part of PARTS) {
+    await tick(); // cede o fio principal entre as peças, para a página não congelar enquanto monta
     // caixa delimitadora da peça
     let minX = W;
     let maxX = 0;
@@ -335,28 +341,25 @@ export async function createLogoScene(THREE: Three, canvas: HTMLCanvasElement, o
       t.magFilter = THREE.LinearFilter;
       t.generateMipmaps = false;
     }
-    const segX = Math.min(Math.ceil(bw / 2), 240);
-    const segY = Math.min(Math.ceil(bh / 2), 140);
+    const segX = Math.min(Math.ceil(bw / (low ? 4 : 3)), low ? 110 : 170);
+    const segY = Math.min(Math.ceil(bh / (low ? 4 : 3)), low ? 64 : 96);
     const geo = track(new THREE.PlaneGeometry(bw * SCALE, bh * SCALE, segX, segY));
-    const material = track(
-      new THREE.MeshPhysicalMaterial({
-        color: part.color,
-        roughness: 0.2,
-        metalness: 0.2,
-        clearcoat: 1,
-        clearcoatRoughness: 0.12,
-        emissive: part.emissive,
-        emissiveIntensity: part.emissiveIntensity,
-        normalMap,
-        normalScale: new THREE.Vector2(1.4, 1.4),
-        alphaMap,
-        alphaTest: 0.5,
-        displacementMap: dispMap,
-        displacementScale: DEPTH,
-        displacementBias: -0.02,
-        side: THREE.DoubleSide,
-      }),
-    );
+    const params = {
+      color: part.color,
+      roughness: 0.2,
+      metalness: 0.2,
+      emissive: part.emissive,
+      emissiveIntensity: part.emissiveIntensity,
+      normalMap,
+      normalScale: new THREE.Vector2(1.4, 1.4),
+      alphaMap,
+      alphaTest: 0.5,
+      displacementMap: dispMap,
+      displacementScale: DEPTH,
+      displacementBias: -0.02,
+      side: THREE.DoubleSide,
+    };
+    const material = track(low ? new THREE.MeshStandardMaterial(params) : new THREE.MeshPhysicalMaterial({ ...params, clearcoat: 1, clearcoatRoughness: 0.12 }));
     const mesh = new THREE.Mesh(geo, material);
     const cxl = ((minX + maxX) / 2 - W / 2) * SCALE;
     const cyl = -((minY + maxY) / 2 - H / 2) * SCALE;
@@ -395,7 +398,7 @@ export async function createLogoScene(THREE: Three, canvas: HTMLCanvasElement, o
   scene.add(halo);
 
   // ---- poeira e estrelas
-  const PN = 1400;
+  const PN = low ? 500 : 1100;
   const pGeo = track(new THREE.BufferGeometry());
   const base = new Float32Array(PN * 3);
   for (let i = 0; i < PN; i++) {
@@ -454,7 +457,7 @@ export async function createLogoScene(THREE: Three, canvas: HTMLCanvasElement, o
         );
         p.mesh.rotation.set(p.scatterRot.x * (1 - a), p.scatterRot.y * (1 - a), p.scatterRot.z * (1 - a) + (p.id === "ring" ? state.ring * Math.PI * 2 : 0));
         if (p.id === "check") {
-          const mat = p.mesh.material as ThreeNS.MeshPhysicalMaterial;
+          const mat = p.mesh.material as ThreeNS.MeshStandardMaterial;
           mat.emissiveIntensity = 1.4 + Math.sin(time * 2.2) * 0.5 + state.glow;
         }
       }
@@ -498,11 +501,12 @@ export async function createLogoScene(THREE: Three, canvas: HTMLCanvasElement, o
         camera.fov = state.fov;
         camera.updateProjectionMatrix();
       }
-      composer.render();
+      if (composer) composer.render();
+      else renderer.render(scene, camera);
     },
     resize(w, h) {
       renderer.setSize(w, h, false);
-      composer.setSize(w, h);
+      composer?.setSize(w, h);
       bloom.setSize(Math.floor(w / 2), Math.floor(h / 2));
       camera.aspect = w / Math.max(h, 1);
       camera.updateProjectionMatrix();
@@ -510,7 +514,7 @@ export async function createLogoScene(THREE: Three, canvas: HTMLCanvasElement, o
     dispose() {
       disposables.forEach((d) => d.dispose());
       bars.dispose();
-      composer.dispose();
+      composer?.dispose();
       pmrem.dispose();
       renderer.dispose();
     },

@@ -131,6 +131,7 @@ export function Presentation(props: CinemaProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const chapterRefs = useRef<(HTMLDivElement | null)[]>([]);
   const barRef = useRef<HTMLDivElement>(null);
+  const readyRef = useRef(false);
 
   useEffect(() => {
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -156,12 +157,18 @@ export function Presentation(props: CinemaProps) {
     let ctx: gsap.Context | null = null;
     let visible = true;
     const cleanups: (() => void)[] = [];
+    const watchdog = window.setTimeout(() => {
+      if (alive && !readyRef.current) setMode("static");
+    }, 12000);
+    cleanups.push(() => window.clearTimeout(watchdog));
 
     void (async () => {
       const [THREE, sceneMod] = await Promise.all([import("three"), import("./logo-scene")]);
       if (!alive) return;
+      const nav = navigator as Navigator & { deviceMemory?: number };
+      const low = (navigator.hardwareConcurrency ?? 8) <= 4 || (nav.deviceMemory ?? 8) <= 4 || /Mobi|Android/i.test(navigator.userAgent);
       try {
-        handle = await sceneMod.createLogoScene(THREE, canvas, { logoUrl: "/sigo-logo.png", hours: props.story ? props.story.byHour : null });
+        handle = await sceneMod.createLogoScene(THREE, canvas, { logoUrl: "/sigo-logo.png", hours: props.story ? props.story.byHour : null, quality: low ? "low" : "high" });
       } catch {
         if (alive) setMode("static");
         return;
@@ -219,16 +226,30 @@ export function Presentation(props: CinemaProps) {
         win(ch[4], 4.3, 5, true);
       }, stage);
 
+      readyRef.current = true;
       setReady(true);
       // o pin só mede o espaço de rolagem certo depois que o layout assenta: recalcula algumas vezes logo após montar
       [60, 400, 1200, 2500].forEach((ms) => {
         const id = window.setTimeout(() => ScrollTrigger.refresh(), ms);
         cleanups.push(() => window.clearTimeout(id));
       });
+      // Renderiza no ritmo do scroll; parado, só um quadro de vez em quando para o movimento ambiente (poupa GPU e bateria).
       const t0 = performance.now();
+      // só as propriedades numéricas da cena (o GSAP acrescenta campos internos ao objeto animado)
+      const stateKeys = Object.keys(sceneMod.INITIAL_STATE) as (keyof typeof sceneMod.INITIAL_STATE)[];
+      let lastKey = "";
+      let lastAt = 0;
       const loop = () => {
         if (!alive) return;
-        if (visible && !document.hidden) scene.frame((performance.now() - t0) / 1000);
+        const now = performance.now();
+        if (visible && !document.hidden) {
+          const key = stateKeys.map((k) => s[k].toFixed(3)).join("|");
+          if (key !== lastKey || now - lastAt > 120) {
+            lastKey = key;
+            lastAt = now;
+            scene.frame((now - t0) / 1000);
+          }
+        }
         raf = requestAnimationFrame(loop);
       };
       loop();
