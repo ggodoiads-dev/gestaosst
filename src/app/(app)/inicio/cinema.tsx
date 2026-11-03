@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { ArrowRight, ChevronsDown } from "lucide-react";
 import type { SceneHandle } from "./cinema-scene";
+import { HUBS } from "./cinema-scene";
 import { cn } from "@/lib/utils";
 
 export type CinemaProps = {
@@ -52,7 +53,7 @@ function Chapters({ p, refs, only }: { p: CinemaProps; refs?: React.MutableRefOb
           <span className="sigo-serif text-[1.06em]">{p.firstName}.</span>
         </h2>
         <p className="mt-6 flex items-center gap-2 text-[14px] text-[#b9c8e6]">
-          <ChevronsDown className="size-4 animate-bounce" /> Role para entrar no armazém
+          <ChevronsDown className="size-4 animate-bounce" /> Role para acompanhar a carga
         </p>
       </div>
 
@@ -119,6 +120,7 @@ export function Cinema(props: CinemaProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const chapterRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const hubRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   useEffect(() => {
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -157,7 +159,7 @@ export function Cinema(props: CinemaProps) {
       const [THREE, scene] = await Promise.all([import("three"), import("./cinema-scene")]);
       if (!alive) return;
       try {
-        handle = scene.createCinemaScene(THREE, canvas);
+        handle = await scene.createCinemaScene(THREE, canvas);
       } catch {
         if (alive) setMode("static");
         return;
@@ -176,6 +178,17 @@ export function Cinema(props: CinemaProps) {
           const target = progressNow();
           current += (target - current) * 0.085;
           handle?.frame(current, (performance.now() - t0) / 1000);
+          const spots = handle?.hubScreen() ?? [];
+          hubRefs.current.forEach((el, i) => {
+            if (!el) return;
+            const sp = spots[i];
+            if (!sp) {
+              el.style.opacity = "0";
+              return;
+            }
+            el.style.transform = `translate3d(${sp.x}px, ${sp.y}px, 0)`;
+            el.style.opacity = String(Math.min(Math.max((110 - sp.depth) / 60, 0), 1) * 0.95);
+          });
           CHAPTERS.forEach((c, i) => {
             const el = chapterRefs.current[i];
             if (!el) return;
@@ -220,8 +233,26 @@ export function Cinema(props: CinemaProps) {
     <div ref={wrapRef} className="relative" style={{ height: "560vh" }}>
       <div className="sticky top-14 h-[calc(100vh-3.5rem)] overflow-hidden bg-[#001840]">
         <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" aria-hidden />
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_40%,rgba(0,12,40,0.6))]" />
-        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgba(0,16,48,0.72),rgba(0,16,48,0.18)_55%,rgba(0,16,48,0.35))]" />
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_45%,rgba(1,8,26,0.7))]" />
+        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgba(1,8,26,0.62),rgba(1,8,26,0.08)_55%,rgba(1,8,26,0.3))]" />
+        {HUBS.map((h, i) => (
+          <div
+            key={h.name}
+            ref={(el) => {
+              hubRefs.current[i] = el;
+            }}
+            className="pointer-events-none absolute left-0 top-0 opacity-0"
+            aria-hidden
+          >
+            <div className="-translate-x-1/2 -translate-y-full">
+              <div className="flex items-center gap-2 rounded-full border border-cyan-200/40 bg-[#021436]/70 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-cyan-100 backdrop-blur">
+                <span className="size-1.5 rounded-full bg-cyan-300 shadow-[0_0_10px_#67e8f9]" />
+                {h.name}
+              </div>
+              <div className="mx-auto h-10 w-px bg-gradient-to-b from-cyan-300/70 to-transparent" />
+            </div>
+          </div>
+        ))}
         <Chapters p={props} refs={chapterRefs} />
       </div>
     </div>

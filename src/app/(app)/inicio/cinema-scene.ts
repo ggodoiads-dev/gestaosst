@@ -2,215 +2,400 @@ import type * as ThreeNS from "three";
 
 type Three = typeof ThreeNS;
 
-/** Comprimento do corredor do armazém (m). A câmera entra por uma ponta e termina de frente para a carreta na doca. */
-export const CORRIDOR = 96;
-
-/** Palette do mundo: azul-marinho da marca, papelão quente, ciano e amarelo de segurança só nos acentos. */
-const C = { navy: 0x001840, floor: 0x061f4a, steel: 0x1d4ed8, steelDark: 0x0b2c6b, carton: [0xcdb88f, 0xbfa97c, 0xb39e72, 0xd8cbb0, 0xc4ae85], blue: 0x0068d8, cyan: 0x00d8f0, lemon: 0xfbeba0, safety: 0xffc400 };
-
-function rand(seed: number) {
-  let s = seed;
-  return () => {
-    s = (s * 1664525 + 1013904223) % 4294967296;
-    return s / 4294967296;
-  };
-}
+/** Nomes dos pontos da rede logística que aparecem como etiquetas na tela, na ordem do caminho da câmera. */
+export const HUBS = [
+  { name: "Recebimento", x: -78, z: 66 },
+  { name: "Armazém", x: -28, z: 22 },
+  { name: "Expedição", x: 26, z: -16 },
+  { name: "Cliente", x: 74, z: -62 },
+] as const;
+const SIDE_HUBS = [
+  { x: -66, z: -34 },
+  { x: 56, z: 54 },
+] as const;
 
 export type SceneHandle = {
   /** Atualiza a cena para um progresso de scroll (0 a 1) e o tempo em segundos. */
   frame: (progress: number, time: number) => void;
   resize: (w: number, h: number) => void;
+  /** Posição, em pixels, das etiquetas dos pontos da rede (ou null se estão fora de quadro). */
+  hubScreen: () => ({ x: number; y: number; depth: number } | null)[];
   dispose: () => void;
 };
 
-/** Monta a cena 3D (procedural, sem arquivo de modelo): corredor de racks com paletes, empilhadeira em movimento e carreta na doca. */
-export function createCinemaScene(THREE: Three, canvas: HTMLCanvasElement): SceneHandle {
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, powerPreference: "high-performance" });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.6));
+/** Ruído de valor suave (determinístico) para o relevo. */
+function makeNoise(seed: number) {
+  const hash = (x: number, y: number) => {
+    let h = Math.imul(x, 374761393) ^ Math.imul(y, 668265263) ^ seed;
+    h = Math.imul(h ^ (h >>> 13), 1274126177);
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+  };
+  const smooth = (t: number) => t * t * (3 - 2 * t);
+  const noise = (x: number, y: number) => {
+    const xi = Math.floor(x);
+    const yi = Math.floor(y);
+    const xf = smooth(x - xi);
+    const yf = smooth(y - yi);
+    const a = hash(xi, yi);
+    const b = hash(xi + 1, yi);
+    const c = hash(xi, yi + 1);
+    const d = hash(xi + 1, yi + 1);
+    return a + (b - a) * xf + (c - a) * yf + (a - b - c + d) * xf * yf;
+  };
+  return (x: number, y: number) => {
+    let amp = 1;
+    let freq = 1;
+    let sum = 0;
+    let norm = 0;
+    for (let o = 0; o < 5; o++) {
+      sum += noise(x * freq, y * freq) * amp;
+      norm += amp;
+      amp *= 0.5;
+      freq *= 2.03;
+    }
+    return sum / norm;
+  };
+}
+
+/**
+ * Rede logística em 3D: um relevo noturno com curvas de nível luminosas, rodovias, caminhões de luz entre os pontos (recebimento, armazém, expedição, cliente) e
+ * uma câmera que percorre o caminho da carga conforme o scroll. Procedural (sem arquivo de modelo) e com brilho (bloom) para o acabamento de cinema.
+ */
+export async function createCinemaScene(THREE: Three, canvas: HTMLCanvasElement): Promise<SceneHandle> {
+  const [{ EffectComposer }, { RenderPass }, { UnrealBloomPass }, { OutputPass }] = await Promise.all([
+    import("three/examples/jsm/postprocessing/EffectComposer.js"),
+    import("three/examples/jsm/postprocessing/RenderPass.js"),
+    import("three/examples/jsm/postprocessing/UnrealBloomPass.js"),
+    import("three/examples/jsm/postprocessing/OutputPass.js"),
+  ]);
+
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: "high-performance" });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.05;
-  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMappingExposure = 1.15;
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(C.navy);
-  scene.fog = new THREE.FogExp2(C.navy, 0.017);
-  const camera = new THREE.PerspectiveCamera(58, 1, 0.1, 220);
+  const FOG = 0x020b22;
+  scene.background = new THREE.Color(FOG);
+  scene.fog = new THREE.FogExp2(FOG, 0.0105);
+  const camera = new THREE.PerspectiveCamera(52, 1, 0.1, 700);
 
-  scene.add(new THREE.HemisphereLight(0xcfe3ff, 0x0a1d44, 1.15));
-  const sun = new THREE.DirectionalLight(0xffffff, 1.0);
-  sun.position.set(-6, 14, 8);
-  scene.add(sun);
-  const camLight = new THREE.PointLight(0x9fd6ff, 160, 40, 1.6);
-  scene.add(camLight);
+  const composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene, camera));
+  const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.8, 0.65, 0.16);
+  composer.addPass(bloom);
+  composer.addPass(new OutputPass());
 
   const disposables: { dispose: () => void }[] = [];
-  const mat = (color: number, opts: Partial<ThreeNS.MeshStandardMaterialParameters> = {}) => {
-    const m = new THREE.MeshStandardMaterial({ color, roughness: 0.78, metalness: 0.08, ...opts });
-    disposables.push(m);
-    return m;
-  };
-  const box = (w: number, h: number, d: number) => {
-    const g = new THREE.BoxGeometry(w, h, d);
-    disposables.push(g);
-    return g;
+  const track = <T extends { dispose: () => void }>(o: T): T => {
+    disposables.push(o);
+    return o;
   };
 
-  // ---- piso, faixas e luz de teto
-  const floor = new THREE.Mesh(box(46, 0.2, CORRIDOR + 40), mat(C.floor, { roughness: 0.55, metalness: 0.25 }));
-  floor.position.set(0, -0.1, -CORRIDOR / 2 + 8);
-  scene.add(floor);
-
-  const lanes = new THREE.InstancedMesh(box(0.14, 0.02, 2.2), new THREE.MeshBasicMaterial({ color: C.safety }), 2 * Math.floor(CORRIDOR / 4));
-  const m4 = new THREE.Matrix4();
-  let li = 0;
-  for (const x of [-2.9, 2.9]) {
-    for (let z = 6; z > -CORRIDOR; z -= 4) {
-      m4.makeTranslation(x, 0.02, z);
-      lanes.setMatrixAt(li++, m4);
+  // ---------- relevo
+  const noise = makeNoise(11);
+  const SIZE = 760;
+  const hubs = [...HUBS, ...SIDE_HUBS];
+  const heightAt = (x: number, z: number) => {
+    let h = (noise(x * 0.016 + 3.3, z * 0.016 + 8.1) - 0.38) * 26;
+    h = Math.max(h, -1.5) + (noise(x * 0.06, z * 0.06) - 0.5) * 2.2;
+    // pontos da rede ficam em platôs, para as construções assentarem
+    for (const hub of hubs) {
+      const d = Math.hypot(x - hub.x, z - hub.z);
+      const k = Math.min(Math.max((d - 7) / 16, 0), 1);
+      h = h * (k * k * (3 - 2 * k)) + 1.2 * (1 - k * k * (3 - 2 * k));
     }
-  }
-  lanes.count = li;
-  scene.add(lanes);
+    return h;
+  };
 
-  const lights = new THREE.InstancedMesh(box(6, 0.12, 0.5), new THREE.MeshBasicMaterial({ color: 0xdff0ff }), Math.floor(CORRIDOR / 6) + 2);
-  let ci = 0;
-  for (let z = 4; z > -CORRIDOR - 4; z -= 6) {
-    m4.makeTranslation(0, 8.6, z);
-    lights.setMatrixAt(ci++, m4);
-  }
-  lights.count = ci;
-  scene.add(lights);
+  const seg = 380;
+  const terrainGeo = track(new THREE.PlaneGeometry(SIZE, SIZE, seg, seg));
+  terrainGeo.rotateX(-Math.PI / 2);
+  const pos = terrainGeo.attributes.position as ThreeNS.BufferAttribute;
+  for (let i = 0; i < pos.count; i++) pos.setY(i, heightAt(pos.getX(i), pos.getZ(i)));
+  terrainGeo.computeVertexNormals();
+  const terrainMat = track(
+    new THREE.ShaderMaterial({
+      uniforms: { uTime: { value: 0 }, uCam: { value: new THREE.Vector3() } },
+      vertexShader: /* glsl */ `
+        varying vec3 vWorld; varying float vH;
+        void main() {
+          vec4 w = modelMatrix * vec4(position, 1.0);
+          vWorld = w.xyz; vH = position.y;
+          gl_Position = projectionMatrix * viewMatrix * w;
+        }`,
+      fragmentShader: /* glsl */ `
+        precision highp float;
+        varying vec3 vWorld; varying float vH;
+        uniform float uTime; uniform vec3 uCam;
+        void main() {
+          float d = distance(vWorld, uCam);
+          float fade = exp(-d * 0.0105 * 1.15);
+          float a = vH * 0.62;
+          float w = max(fwidth(a), 1e-4);
+          float minor = 1.0 - smoothstep(0.0, 1.6, abs(fract(a - 0.5) - 0.5) / w);
+          float b = vH * 0.62 / 5.0;
+          float wb = max(fwidth(b), 1e-4);
+          float major = 1.0 - smoothstep(0.0, 2.0, abs(fract(b - 0.5) - 0.5) / wb);
+          vec3 base = mix(vec3(0.004, 0.02, 0.07), vec3(0.01, 0.07, 0.16), clamp(vH / 14.0 + 0.2, 0.0, 1.0));
+          vec3 col = base;
+          col += vec3(0.0, 0.62, 0.95) * minor * 0.30;
+          col += vec3(0.1, 0.95, 1.0) * major * 0.85;
+          float pulse = 0.5 + 0.5 * sin(uTime * 0.6 - length(vWorld.xz) * 0.05);
+          col += vec3(0.0, 0.25, 0.5) * pulse * 0.05;
+          gl_FragColor = vec4(col * fade + vec3(0.008, 0.04, 0.1) * (1.0 - fade), 1.0);
+        }`,
+    }),
+  );
+  scene.add(new THREE.Mesh(terrainGeo, terrainMat));
 
-  // ---- racks: colunas, vigas e paletes com caixas
-  const bayLen = 3.2;
-  const bays = Math.floor(CORRIDOR / bayLen);
-  const levels = [0.35, 2.85, 5.35];
-  const uprights = new THREE.InstancedMesh(box(0.2, 7.8, 0.2), mat(C.steel, { metalness: 0.2 }), (bays + 1) * 4);
-  const beams = new THREE.InstancedMesh(box(bayLen, 0.16, 0.16), mat(C.safety, { roughness: 0.5 }), bays * levels.length * 4);
-  const cartons = new THREE.InstancedMesh(box(1, 1, 1), mat(0xffffff, { roughness: 0.9, metalness: 0 }), bays * levels.length * 2 * 2);
-  const rnd = rand(7);
-  let ui = 0;
+  // ---------- texturas de brilho
+  const glowTex = (() => {
+    const c = document.createElement("canvas");
+    c.width = c.height = 64;
+    const g = c.getContext("2d")!;
+    const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    grad.addColorStop(0, "rgba(255,255,255,1)");
+    grad.addColorStop(0.25, "rgba(255,255,255,0.55)");
+    grad.addColorStop(1, "rgba(255,255,255,0)");
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 64, 64);
+    return track(new THREE.CanvasTexture(c));
+  })();
+
+  const points = (count: number, size: number, color: number, opacity: number) => {
+    const geo = track(new THREE.BufferGeometry());
+    geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(count * 3), 3));
+    const mat = track(new THREE.PointsMaterial({ size, map: glowTex, color, transparent: true, opacity, depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true }));
+    const p = new THREE.Points(geo, mat);
+    p.frustumCulled = false;
+    scene.add(p);
+    return p;
+  };
+
+  // ---------- rodovias
+  const roadMat = track(new THREE.MeshBasicMaterial({ color: 0x2ad4ff, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false }));
+  const makeRoad = (ctrl: [number, number][]) => {
+    const v = ctrl.map(([x, z]) => new THREE.Vector3(x, heightAt(x, z) + 0.35, z));
+    const curve = new THREE.CatmullRomCurve3(v, false, "centripetal");
+    // reposiciona a curva sobre o relevo
+    const dense = curve.getSpacedPoints(220).map((p) => new THREE.Vector3(p.x, heightAt(p.x, p.z) + 0.4, p.z));
+    const onGround = new THREE.CatmullRomCurve3(dense, false, "centripetal");
+    const tube = track(new THREE.TubeGeometry(onGround, 480, 0.11, 5, false));
+    scene.add(new THREE.Mesh(tube, roadMat));
+    return onGround;
+  };
+  const h = HUBS;
+  const roads = [
+    makeRoad([[h[0].x, h[0].z], [-62, 52], [-48, 40], [-38, 30], [h[1].x, h[1].z]]),
+    makeRoad([[h[1].x, h[1].z], [-12, 14], [2, 6], [14, -4], [h[2].x, h[2].z]]),
+    makeRoad([[h[2].x, h[2].z], [42, -30], [56, -40], [66, -52], [h[3].x, h[3].z]]),
+    makeRoad([[SIDE_HUBS[0].x, SIDE_HUBS[0].z], [-58, -22], [-44, -6], [-34, 8], [h[1].x, h[1].z]]),
+    makeRoad([[h[2].x, h[2].z], [34, 2], [44, 24], [52, 42], [SIDE_HUBS[1].x, SIDE_HUBS[1].z]]),
+  ];
+
+  // ---------- pontos da rede: feixe de luz, anéis e construções
+  const beamMat = track(new THREE.MeshBasicMaterial({ color: 0x35e1ff, transparent: true, opacity: 0.11, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+  const beamGeo = track(new THREE.CylinderGeometry(0.4, 2.6, 46, 18, 1, true));
+  const ringGeo = track(new THREE.RingGeometry(1, 1.12, 64));
+  const rings: ThreeNS.Mesh[] = [];
+  const ringMats: ThreeNS.MeshBasicMaterial[] = [];
+  const bldGeo = track(new THREE.BoxGeometry(1, 1, 1));
+  const bldMat = track(new THREE.MeshBasicMaterial({ color: 0x1b4a94 }));
+  const winMat = track(new THREE.MeshBasicMaterial({ color: 0xffe2a0 }));
+  const rnd = (() => {
+    let s = 99;
+    return () => ((s = (s * 1664525 + 1013904223) % 4294967296) / 4294967296);
+  })();
+  const blds = new THREE.InstancedMesh(bldGeo, bldMat, hubs.length * 26);
+  const wins = new THREE.InstancedMesh(bldGeo, winMat, hubs.length * 26);
+  const m4 = new THREE.Matrix4();
   let bi = 0;
-  let ki = 0;
-  const color = new THREE.Color();
-  for (const side of [-1, 1]) {
-    const x = side * 5.6;
-    for (let b = 0; b <= bays; b++) {
-      const z = 6 - b * bayLen;
-      for (const dx of [-0.95, 0.95]) {
-        m4.makeTranslation(x + dx, 3.9, z);
-        uprights.setMatrixAt(ui++, m4);
+  hubs.forEach((hub, hi) => {
+    const y = heightAt(hub.x, hub.z);
+    const beam = new THREE.Mesh(beamGeo, beamMat);
+    beam.position.set(hub.x, y + 23, hub.z);
+    scene.add(beam);
+    for (let r = 0; r < 3; r++) {
+      const mat = track(new THREE.MeshBasicMaterial({ color: 0x35e1ff, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+      const ring = new THREE.Mesh(ringGeo, mat);
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.set(hub.x, y + 0.5, hub.z);
+      ring.userData = { phase: r / 3 + hi * 0.13 };
+      scene.add(ring);
+      rings.push(ring);
+      ringMats.push(mat);
+    }
+    // galpões e silos (corpo escuro com uma faixa de janelas acesas)
+    for (let k = 0; k < 26; k++) {
+      const a = rnd() * Math.PI * 2;
+      const dist = 2.5 + rnd() * 8;
+      const bx = hub.x + Math.cos(a) * dist;
+      const bz = hub.z + Math.sin(a) * dist;
+      const w = 1.4 + rnd() * 3.4;
+      const d = 1.4 + rnd() * 3.4;
+      const hh = 0.8 + rnd() * (hi < 4 ? 3.2 : 2);
+      m4.compose(new THREE.Vector3(bx, y + hh / 2, bz), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, rnd() * Math.PI, 0)), new THREE.Vector3(w, hh, d));
+      blds.setMatrixAt(bi, m4);
+      m4.compose(new THREE.Vector3(bx, y + hh * 0.62, bz), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, rnd() * 0 + 0, 0)), new THREE.Vector3(w * 1.03, 0.2, d * 1.03));
+      wins.setMatrixAt(bi, m4);
+      bi++;
+    }
+  });
+  blds.count = bi;
+  wins.count = bi;
+  scene.add(blds, wins);
+
+  // ---------- luzes de cidades e poeira
+  const cities = points(900, 1.1, 0xffd98a, 0.9);
+  {
+    const arr = (cities.geometry.attributes.position as ThreeNS.BufferAttribute).array as Float32Array;
+    let n = 0;
+    while (n < 900) {
+      const cx = (rnd() - 0.5) * 250;
+      const cz = (rnd() - 0.5) * 250;
+      if (heightAt(cx, cz) > 3.5) continue;
+      const cluster = 4 + Math.floor(rnd() * 9);
+      for (let k = 0; k < cluster && n < 900; k++) {
+        const x = cx + (rnd() - 0.5) * 8;
+        const z = cz + (rnd() - 0.5) * 8;
+        arr[n * 3] = x;
+        arr[n * 3 + 1] = heightAt(x, z) + 0.3;
+        arr[n * 3 + 2] = z;
+        n++;
       }
     }
-    for (let b = 0; b < bays; b++) {
-      const z = 6 - b * bayLen - bayLen / 2;
-      levels.forEach((y) => {
-        for (const dx of [-0.95, 0.95]) {
-          m4.makeTranslation(x + dx, y, z);
-          beams.setMatrixAt(bi++, m4);
-        }
-        // cada vão guarda um ou dois paletes de caixas
-        if (rnd() < 0.88) {
-          for (let k = 0; k < 2; k++) {
-            if (k === 1 && rnd() < 0.35) continue;
-            const w = 1.3 + rnd() * 0.25;
-            const h = 1.2 + rnd() * 0.9;
-            const d = 1.5 + rnd() * 0.25;
-            const zz = z + (k === 0 ? -0.8 : 0.8);
-            m4.compose(new THREE.Vector3(x, y + 0.08 + h / 2, zz), new THREE.Quaternion(), new THREE.Vector3(w, h, d));
-            cartons.setMatrixAt(ki, m4);
-            const r = rnd();
-            color.setHex(r < 0.06 ? C.cyan : r < 0.16 ? C.blue : r < 0.22 ? C.lemon : C.carton[Math.floor(rnd() * C.carton.length)]);
-            cartons.setColorAt(ki, color);
-            ki++;
-          }
-        }
-      });
-    }
+    (cities.geometry.attributes.position as ThreeNS.BufferAttribute).needsUpdate = true;
   }
-  uprights.count = ui;
-  beams.count = bi;
-  cartons.count = ki;
-  if (cartons.instanceColor) cartons.instanceColor.needsUpdate = true;
-  scene.add(uprights, beams, cartons);
-
-  // ---- doca no fim do corredor: portal luminoso e carreta
-  const dockZ = -CORRIDOR + 2;
-  const portal = new THREE.Mesh(box(11, 7.5, 0.3), new THREE.MeshBasicMaterial({ color: 0xbfe3ff }));
-  portal.position.set(0, 3.75, dockZ - 14);
-  scene.add(portal);
-  const trailer = new THREE.Group();
-  const trailerBody = new THREE.Mesh(box(3.6, 4.1, 13), mat(0xeaf0f8, { roughness: 0.5 }));
-  trailerBody.position.set(0, 2.6, -6.2);
-  const stripe = new THREE.Mesh(box(3.64, 0.5, 13.04), mat(C.blue));
-  stripe.position.set(0, 1.6, -6.2);
-  const hollow = new THREE.Mesh(box(3.0, 3.5, 0.2), new THREE.MeshBasicMaterial({ color: 0x0a1b3d }));
-  hollow.position.set(0, 2.6, 0.38);
-  const glow = new THREE.Mesh(box(2.6, 3.0, 0.1), new THREE.MeshBasicMaterial({ color: C.lemon }));
-  glow.position.set(0, 2.6, 0.2);
-  trailer.add(trailerBody, stripe, glow, hollow);
-  trailer.position.set(0, 0, dockZ - 6);
-  scene.add(trailer);
-
-  // ---- empilhadeira que roda pelo corredor
-  const forklift = new THREE.Group();
-  const fl = (g: ThreeNS.BufferGeometry, m: ThreeNS.Material, x: number, y: number, z: number) => {
-    const mesh = new THREE.Mesh(g, m);
-    mesh.position.set(x, y, z);
-    forklift.add(mesh);
-    return mesh;
-  };
-  const yellow = mat(C.safety, { roughness: 0.45 });
-  const dark = mat(0x111827, { roughness: 0.7 });
-  fl(box(1.2, 0.9, 2.0), yellow, 0, 0.75, 0.2);
-  fl(box(1.25, 0.5, 0.9), dark, 0, 0.85, 0.95);
-  for (const sx of [-0.55, 0.55]) {
-    fl(box(0.07, 1.7, 0.07), dark, sx, 1.65, -0.45);
-    fl(box(0.07, 1.7, 0.07), dark, sx, 1.65, 0.65);
+  const dust = points(520, 0.5, 0x8fd8ff, 0.5);
+  const dustBase = new Float32Array(520 * 3);
+  for (let i = 0; i < 520; i++) {
+    dustBase[i * 3] = (rnd() - 0.5) * 70;
+    dustBase[i * 3 + 1] = rnd() * 26;
+    dustBase[i * 3 + 2] = (rnd() - 0.5) * 70;
   }
-  fl(box(1.2, 0.07, 1.2), dark, 0, 2.5, 0.1);
-  for (const sx of [-0.45, 0.45]) fl(box(0.1, 2.4, 0.1), dark, sx, 1.2, -1.05);
-  for (const sx of [-0.4, 0.4]) fl(box(0.14, 0.07, 1.4), dark, sx, 0.2, -1.8);
-  fl(box(1.1, 0.9, 0.9), mat(C.carton[0], { roughness: 0.9 }), 0, 0.75, -1.75);
-  const wheelGeo = new THREE.CylinderGeometry(0.36, 0.36, 0.3, 14);
-  disposables.push(wheelGeo);
-  for (const [wx, wz] of [[-0.62, -0.5], [0.62, -0.5], [-0.62, 0.85], [0.62, 0.85]] as const) {
-    const wheel = fl(wheelGeo, dark, wx, 0.36, wz);
-    wheel.rotation.z = Math.PI / 2;
-  }
-  forklift.scale.setScalar(1.25);
-  scene.add(forklift);
 
-  // ---- loop
-  const lookAt = new THREE.Vector3();
-  const startZ = 9;
-  const endZ = -CORRIDOR + 24;
+  // ---------- caminhões de luz (corpo + rastro)
+  const TRAIL = 9;
+  const trucksPer = 5;
+  const truckCount = roads.length * trucksPer;
+  const heads = points(truckCount, 2.4, 0xfff0c8, 1);
+  const trails = points(truckCount * TRAIL, 1.5, 0xffc766, 0.7);
+  const truckT = Array.from({ length: truckCount }, (_, i) => ({ road: Math.floor(i / trucksPer), t: (i % trucksPer) / trucksPer + rnd() * 0.1, speed: 0.012 + rnd() * 0.01, dir: rnd() < 0.5 ? 1 : -1 }));
+  const tmp = new THREE.Vector3();
+
+  // ---------- câmera: dois caminhos (posição e alvo) percorridos pelo scroll
+  const camPath = new THREE.CatmullRomCurve3(
+    [
+      [-150, 96, 150],
+      [-112, 46, 112],
+      [-80, 17, 82],
+      [-40, 10, 40],
+      [2, 13, 12],
+      [46, 16, 2],
+      [78, 19, -34],
+      [100, 36, -84],
+      [86, 62, -52],
+    ].map(([x, y, z]) => new THREE.Vector3(x, y, z)),
+    false,
+    "centripetal",
+  );
+  const lookPath = new THREE.CatmullRomCurve3(
+    [
+      [0, 0, 0],
+      [-78, 2, 66],
+      [-50, 3, 46],
+      [-28, 4, 22],
+      [14, 4, 0],
+      [26, 4, -16],
+      [62, 4, -48],
+      [74, 4, -62],
+      [74, 2, -62],
+    ].map(([x, y, z]) => new THREE.Vector3(x, y, z)),
+    false,
+    "centripetal",
+  );
+  const camPos = new THREE.Vector3();
+  const lookPos = new THREE.Vector3();
+  const hubWorld = hubs.slice(0, 4).map((hub) => new THREE.Vector3(hub.x, heightAt(hub.x, hub.z) + 9, hub.z));
+
   return {
     frame(progress, time) {
       const p = Math.min(Math.max(progress, 0), 1);
-      const ease = p * p * (3 - 2 * p) * 0.35 + p * 0.65;
-      const z = startZ + (endZ - startZ) * ease;
-      const sway = Math.sin(p * 7.5) * 0.7;
-      camera.position.set(sway, 2.4 + Math.sin(p * 5) * 0.25 + (1 - Math.min(p * 4, 1)) * 1.6, z);
-      lookAt.set(sway * 0.4, 2.1, z - 14);
-      camera.lookAt(lookAt);
-      camLight.position.set(camera.position.x, 5.5, camera.position.z - 2);
-      // empilhadeira vai e volta pela faixa direita, sempre à frente da câmera
-      const span = 42;
-      const t = (time * 0.09) % 2;
-      const run = t < 1 ? t : 2 - t;
-      forklift.position.set(2.6, 0, z - 8 - run * span);
-      forklift.rotation.y = t < 1 ? 0 : Math.PI;
-      renderer.render(scene, camera);
+      const u = p * p * (3 - 2 * p) * 0.4 + p * 0.6;
+      camPath.getPoint(u, camPos);
+      lookPath.getPoint(Math.min(u + 0.02, 1), lookPos);
+      // respiração suave de câmera na mão
+      camPos.x += Math.sin(time * 0.35) * 0.35;
+      camPos.y += Math.sin(time * 0.5 + 1) * 0.25;
+      camera.position.copy(camPos);
+      const roll = Math.sin(p * 9) * 0.05;
+      camera.up.set(Math.sin(roll), Math.cos(roll), 0);
+      camera.lookAt(lookPos);
+
+      terrainMat.uniforms.uTime.value = time;
+      terrainMat.uniforms.uCam.value.copy(camPos);
+
+      rings.forEach((r, i) => {
+        const t = (time * 0.35 + (r.userData.phase as number)) % 1;
+        const s = 1.5 + t * 15;
+        r.scale.set(s, s, 1);
+        ringMats[i].opacity = (1 - t) * 0.65;
+      });
+
+      // caminhões
+      const headArr = (heads.geometry.attributes.position as ThreeNS.BufferAttribute).array as Float32Array;
+      const trailArr = (trails.geometry.attributes.position as ThreeNS.BufferAttribute).array as Float32Array;
+      truckT.forEach((tr, i) => {
+        tr.t = (tr.t + tr.speed * 0.016 * 4 * tr.dir + 1) % 1;
+        const road = roads[tr.road];
+        for (let k = 0; k < TRAIL; k++) {
+          const tt = (tr.t - tr.dir * k * 0.006 + 1) % 1;
+          road.getPoint(tt, tmp);
+          trailArr[(i * TRAIL + k) * 3] = tmp.x;
+          trailArr[(i * TRAIL + k) * 3 + 1] = tmp.y + 0.35;
+          trailArr[(i * TRAIL + k) * 3 + 2] = tmp.z;
+        }
+        road.getPoint(tr.t, tmp);
+        headArr[i * 3] = tmp.x;
+        headArr[i * 3 + 1] = tmp.y + 0.35;
+        headArr[i * 3 + 2] = tmp.z;
+      });
+      (heads.geometry.attributes.position as ThreeNS.BufferAttribute).needsUpdate = true;
+      (trails.geometry.attributes.position as ThreeNS.BufferAttribute).needsUpdate = true;
+
+      // poeira em torno da câmera
+      const dustArr = (dust.geometry.attributes.position as ThreeNS.BufferAttribute).array as Float32Array;
+      for (let i = 0; i < 520; i++) {
+        dustArr[i * 3] = camPos.x + ((dustBase[i * 3] + time * 0.6 * (i % 3 === 0 ? 1 : -0.5) + 35) % 70) - 35;
+        dustArr[i * 3 + 1] = camPos.y - 8 + ((dustBase[i * 3 + 1] + time * 0.4) % 26);
+        dustArr[i * 3 + 2] = camPos.z + ((dustBase[i * 3 + 2] + time * 0.3 + 35) % 70) - 35;
+      }
+      (dust.geometry.attributes.position as ThreeNS.BufferAttribute).needsUpdate = true;
+
+      composer.render();
     },
-    resize(w, h) {
-      renderer.setSize(w, h, false);
-      camera.aspect = w / Math.max(h, 1);
+    resize(w, hgt) {
+      renderer.setSize(w, hgt, false);
+      composer.setSize(w, hgt);
+      bloom.setSize(Math.floor(w / 2), Math.floor(hgt / 2));
+      camera.aspect = w / Math.max(hgt, 1);
       camera.updateProjectionMatrix();
+    },
+    hubScreen() {
+      const w = renderer.domElement.clientWidth;
+      const hh = renderer.domElement.clientHeight;
+      return hubWorld.map((v) => {
+        const p = v.clone().project(camera);
+        if (p.z < -1 || p.z > 1 || Math.abs(p.x) > 1.1 || Math.abs(p.y) > 1.1) return null;
+        const d = v.distanceTo(camera.position);
+        return { x: (p.x * 0.5 + 0.5) * w, y: (-p.y * 0.5 + 0.5) * hh, depth: d };
+      });
     },
     dispose() {
       disposables.forEach((d) => d.dispose());
-      [lanes, lights, uprights, beams, cartons].forEach((m) => m.dispose());
+      [blds, wins].forEach((m) => m.dispose());
+      composer.dispose();
       renderer.dispose();
     },
   };

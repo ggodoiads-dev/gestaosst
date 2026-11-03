@@ -16,10 +16,13 @@ import { ALERT_SEVERITY_LABEL, type SystemAlert } from "@/domain/alerts/rules";
 import { SeriesBars } from "../relatorios/report-charts";
 import { HomeNovo } from "../inicio/home-novo";
 import { HomeTabs } from "../inicio/home-tabs";
-import { loadHomeNovoProps } from "../inicio/load-home-data";
+import { loadHomeNovoProps, loadQuickLinks } from "../inicio/load-home-data";
+import { buildHeadline, type MarkTone } from "@/domain/home/headline";
+import { formatLongDate } from "@/lib/dates";
 import { LineChart, Ring, Sparkline } from "./charts";
 
 const TONE_TEXT: Record<Tone, string> = { good: "text-success", bad: "text-danger", warn: "text-warning", neutral: "text-foreground-muted" };
+const MARK: Record<MarkTone, string> = { mint: "#c8f0d6", sky: "#c4e4ff", lemon: "#fbeba0", rose: "#ffd5d5" };
 const SEV_DOT = { CRITICO: "#d6342c", ALTO: "#e0a21b", ATENCAO: "#0068d8", INFO: "#7d8696" } as const;
 
 function KpiCard({ k }: { k: Kpi }) {
@@ -147,7 +150,8 @@ export default async function PainelPage({ searchParams }: { searchParams: Promi
   const year = Number(month.slice(0, 4));
   const href = (m: string) => `/painel?mes=${m}`;
 
-  const [report, pdca, attendance, alerts] = await Promise.all([
+  const [quickLinks, report, pdca, attendance, alerts] = await Promise.all([
+    loadQuickLinks(user),
     buildMonthlyReport(user, month, "interno").catch(() => null),
     hasPermission(user, PERMISSIONS.HR_MANAGE) ? getPdcaView(user, year).catch(() => null) : Promise.resolve(null),
     buildDetailedReport(user, "presenca", month, "interno").catch(() => null),
@@ -181,10 +185,22 @@ export default async function PainelPage({ searchParams }: { searchParams: Promi
       </div>
 
       <div>
-        <h1 className="text-[34px] font-medium leading-[1.08] tracking-[-0.035em] sm:text-[44px]">
-          Painel de <span className="sigo-serif text-[1.08em]">{monthLabelOf(month).split(" ")[0].toLowerCase()}</span>
+        <p className="text-[13px] font-medium text-foreground-subtle">
+          {month === nowKey ? `${formatLongDate(new Date())} · bom dia, ${user.name.split(" ")[0]}` : `Painel de ${monthLabelOf(month)}`}
+        </p>
+        <h1 className="mt-2 max-w-[900px] text-[34px] font-medium leading-[1.1] tracking-[-0.035em] text-foreground sm:text-[46px]">
+          {buildHeadline({
+            alertCount: alerts.length + (month === nowKey ? 0 : (report?.findings.length ?? 0)),
+            criticalCount: month === nowKey ? alerts.filter((a) => a.severity === "CRITICO").length : (report?.findings.filter((f) => f.severity === "CRITICO").length ?? 0),
+            checklistPct: checklistPct !== null && Number.isFinite(checklistPct) ? checklistPct : null,
+            turnover: turnoverNow && turnoverNow.rate !== null ? { rate: turnoverNow.rate, goal } : null,
+          }).map((part, i) => (
+            <span key={i} className={cn(part.serif && "sigo-serif text-[1.08em]", part.mark && "sigo-mark")} style={part.mark ? ({ ["--mark" as string]: MARK[part.mark] } as React.CSSProperties) : undefined}>
+              {part.text}
+            </span>
+          ))}
         </h1>
-        {month === nowKey && <p className="mt-1.5 text-[13.5px] text-foreground-muted">Mês em andamento: os números são parciais e mudam a cada lançamento e importação.</p>}
+        {month === nowKey && <p className="mt-2 text-[13.5px] text-foreground-muted">Mês em andamento: os números são parciais e mudam a cada lançamento e importação.</p>}
       </div>
 
       {executive.length > 0 && (
@@ -265,6 +281,24 @@ export default async function PainelPage({ searchParams }: { searchParams: Promi
       )}
 
       {!report && <p className="rounded-[20px] border border-dashed border-border-strong bg-surface px-4 py-10 text-center text-sm text-foreground-subtle">Não foi possível montar os números deste mês agora.</p>}
+
+      {quickLinks.length > 0 && (
+        <section>
+          <p className="text-[12px] font-semibold uppercase tracking-[0.08em] text-foreground-muted">Ir para</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {quickLinks.map((l, i) => (
+              <Link
+                key={`${l.href}-${l.label}`}
+                href={l.href}
+                className="rounded-[12px] px-3.5 py-2 text-[13.5px] font-medium text-foreground transition-transform hover:-translate-y-0.5"
+                style={{ background: ["#fbeba0", "#c4e4ff", "#c8f0d6", "#ddd3ff", "#ffd5d5"][i % 5] }}
+              >
+                {l.label}
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
 
       <p className="text-center text-[12.5px] text-foreground-subtle">
         Quer o texto completo e para imprimir? Abra os{" "}

@@ -11,6 +11,17 @@ import { filterNavGroups } from "@/domain/shared/nav-access";
 import { formatLongDate } from "@/lib/dates";
 import type { HomeNovoProps } from "./home-novo";
 
+/** Atalhos do menu (até 8) que a pessoa pode abrir, respeitando o acesso restrito por abas. */
+export async function loadQuickLinks(user: CurrentUser): Promise<{ href: string; label: string }[]> {
+  const whitelist = await getUserNavWhitelist(user);
+  const groups = whitelist ? filterNavGroups(getNavGroups(user), new Set(whitelist)) : getNavGroups(user);
+  return groups
+    .flatMap((g) => g.items)
+    .filter((i) => i.href !== "/inicio")
+    .slice(0, 8)
+    .map((i) => ({ href: i.href, label: i.label }));
+}
+
 /** Dados da tela inicial e do painel do visual novo. Cada bloco só entra se a pessoa tem a permissão (e a aba, no acesso restrito). */
 export async function loadHomeNovoProps(user: CurrentUser): Promise<HomeNovoProps> {
   const whitelist = await getUserNavWhitelist(user);
