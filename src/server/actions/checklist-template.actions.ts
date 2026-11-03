@@ -64,6 +64,18 @@ export async function syncAreaTemplateEquipmentAction(templateId: string): Promi
   });
 }
 
+export async function setAreaTemplateEquipmentsAction(_prev: ActionResult, formData: FormData) {
+  return toResult(async () => {
+    const user = await requireUser();
+    const templateId = String(formData.get("templateId"));
+    const equipmentIds = formData.getAll("equipmentIds").map(String);
+    await templateService.setAreaTemplateEquipments(user, templateId, equipmentIds);
+    revalidatePath(`/cadastros/modelos-checklist/${templateId}`);
+    revalidatePath("/checklist/realizar");
+    revalidatePath("/checklist");
+  });
+}
+
 export async function createNewDraftVersionAction(templateId: string) {
   const user = await requireUser();
   await templateService.createNewDraftVersion(user, templateId);

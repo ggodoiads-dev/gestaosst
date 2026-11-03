@@ -22,6 +22,7 @@ import {
   renameTemplateAction,
   changeTemplateAreaAction,
   syncAreaTemplateEquipmentAction,
+  setAreaTemplateEquipmentsAction,
   type ActionResult,
 } from "@/server/actions/checklist-template.actions";
 import { useCloseOnSuccess } from "@/lib/use-close-on-success";
@@ -114,6 +115,71 @@ export function AssignEquipmentDialog({
                 {eq.code} — {eq.name} ({eq.area.name})
               </label>
             ))}
+          </DialogBody>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button type="button" variant="secondary">Cancelar</Button>
+            </DialogClose>
+            <Button type="submit" loading={pending}>Salvar</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** Quais equipamentos da área entram neste checklist de área. Desmarcar tira o equipamento do checklist (e a sincronização não o recoloca). */
+export function AreaEquipmentsDialog({
+  templateId,
+  areaName,
+  equipments,
+  assignedIds,
+}: {
+  templateId: string;
+  areaName: string;
+  equipments: { id: string; code: string; name: string }[];
+  assignedIds: string[];
+}) {
+  const [open, setOpen] = useState(false);
+  const [state, formAction, pending] = useActionState(setAreaTemplateEquipmentsAction, initialState);
+  useCloseOnSuccess(pending, state, () => setOpen(false));
+  const [selected, setSelected] = useState<Set<string>>(new Set(assignedIds));
+
+  function toggle(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <Button size="sm" variant="secondary" onClick={() => setOpen(true)}>
+        <Link2 /> Equipamentos do checklist ({assignedIds.length})
+      </Button>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Equipamentos deste checklist — {areaName}</DialogTitle>
+        </DialogHeader>
+        <form action={formAction}>
+          <input type="hidden" name="templateId" value={templateId} />
+          {[...selected].map((id) => (
+            <input key={id} type="hidden" name="equipmentIds" value={id} />
+          ))}
+          <DialogBody className="flex max-h-80 flex-col gap-1.5 overflow-y-auto">
+            <p className="text-xs text-foreground-subtle">
+              Marque os equipamentos que devem ser respondidos neste checklist. Os desmarcados saem dele e não voltam sozinhos, nem ao sincronizar os equipamentos da área.
+            </p>
+            {equipments.length === 0 && <p className="text-sm text-foreground-subtle">Nenhum equipamento ativo nesta área.</p>}
+            {equipments.map((eq) => (
+              <label key={eq.id} className="flex items-center gap-2 text-sm text-foreground-muted">
+                <Checkbox checked={selected.has(eq.id)} onCheckedChange={() => toggle(eq.id)} />
+                {eq.code} — {eq.name}
+              </label>
+            ))}
+            {!state.ok && <p className="text-sm text-danger">{state.error}</p>}
           </DialogBody>
           <DialogFooter>
             <DialogClose asChild>

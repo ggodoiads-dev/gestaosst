@@ -7,7 +7,8 @@ import { listFaultCategories } from "@/server/services/masterdata.service";
 import { PageHeader, PageBody } from "@/components/domain/page-header";
 import { TemplateStatusBadge } from "@/components/domain/status-badges";
 import { VersionTabs } from "./version-tabs";
-import { NewDraftVersionButton, AssignEquipmentDialog, SyncAreaEquipmentButton, RenameTemplateDialog, ChangeTemplateAreaDialog } from "./template-header-actions";
+import { NewDraftVersionButton, AssignEquipmentDialog, AreaEquipmentsDialog, SyncAreaEquipmentButton, RenameTemplateDialog, ChangeTemplateAreaDialog } from "./template-header-actions";
+import { db } from "@/server/db";
 
 export default async function ModeloChecklistDetailPage({
   params,
@@ -24,6 +25,7 @@ export default async function ModeloChecklistDetailPage({
     listAreas(),
   ]);
   const equipments = await listEquipmentsByType(template.equipmentTypeId);
+  const areaEquipments = template.scope === "AREA" && template.areaId ? await db.equipment.findMany({ where: { areaId: template.areaId, active: true }, select: { id: true, code: true, name: true }, orderBy: { code: "asc" } }) : [];
 
   const hasDraft = template.versions.some((v) => v.status === "RASCUNHO");
   const assignedIds = template.assignments.map((a) => a.equipmentId);
@@ -50,6 +52,14 @@ export default async function ModeloChecklistDetailPage({
                     currentAreaName={template.area.name}
                     areas={areas.map((a) => ({ id: a.id, name: a.name }))}
                     linkedEquipmentCount={template.assignments.filter((a) => a.active && a.equipment.active).length}
+                  />
+                )}
+                {template.areaId && template.area && (
+                  <AreaEquipmentsDialog
+                    templateId={template.id}
+                    areaName={template.area.name}
+                    equipments={areaEquipments}
+                    assignedIds={template.assignments.filter((a) => a.active && areaEquipments.some((e) => e.id === a.equipmentId)).map((a) => a.equipmentId)}
                   />
                 )}
                 <SyncAreaEquipmentButton templateId={template.id} />

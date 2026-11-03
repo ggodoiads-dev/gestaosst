@@ -111,7 +111,8 @@ export async function createTemplate(
 
 /** Reaplica o vínculo de um template de escopo Área contra o conjunto atual de equipamentos
  * ativos da área — inclui os que entraram depois da criação e desativa o vínculo dos que
- * saíram (mudaram de área ou foram desativados). */
+ * saíram (mudaram de área ou foram desativados). Equipamento que o gestor TIROU do checklist
+ * (vínculo existente e desativado, mesmo estando na área) continua fora: só volta se for marcado de novo. */
 export async function syncAreaTemplateEquipment(user: CurrentUser, templateId: string) {
   requirePermission(user, PERMISSIONS.CHECKLIST_TEMPLATE_MANAGE);
   const template = await db.checklistTemplate.findUniqueOrThrow({ where: { id: templateId } });
@@ -130,7 +131,10 @@ export async function syncAreaTemplateEquipment(user: CurrentUser, templateId: s
       where: { templateId, equipmentId: { notIn: currentIds } },
       data: { active: false },
     });
+    const existing = await tx.equipmentChecklistAssignment.findMany({ where: { templateId, equipmentId: { in: currentIds } }, select: { equipmentId: true, active: true } });
+    const removedByManager = new Set(existing.filter((a) => !a.active).map((a) => a.equipmentId));
     for (const equipmentId of currentIds) {
+      if (removedByManager.has(equipmentId)) continue;
       await tx.equipmentChecklistAssignment.upsert({
         where: { equipmentId_templateId: { equipmentId, templateId } },
         update: { active: true },
@@ -140,6 +144,36 @@ export async function syncAreaTemplateEquipment(user: CurrentUser, templateId: s
   });
 
   return { syncedCount: currentIds.length };
+}
+
+/**
+ * Define quais equipamentos da área fazem parte de um checklist de ÁREA: os marcados ficam vinculados, os desmarcados saem (ex.: as empilhadeiras
+ * elétricas que não devem entrar no checklist da amarração). Quem saiu continua fora mesmo depois de "Sincronizar equipamentos da área".
+ */
+export async function setAreaTemplateEquipments(user: CurrentUser, templateId: string, equipmentIds: string[]) {
+  requirePermission(user, PERMISSIONS.CHECKLIST_TEMPLATE_MANAGE);
+  const template = await db.checklistTemplate.findUniqueOrThrow({ where: { id: templateId } });
+  if (template.scope !== "AREA" || !template.areaId) throw new ForbiddenError("Esse modelo não é de escopo Área.");
+  const inArea = await db.equipment.findMany({ where: { areaId: template.areaId, active: true }, select: { id: true } });
+  const areaIds = new Set(inArea.map((e) => e.id));
+  const selected = new Set(equipmentIds.filter((id) => areaIds.has(id)));
+  if (selected.size === 0) throw new ForbiddenError("Deixe ao menos um equipamento no checklist.");
+
+  await db.$transaction(async (tx) => {
+    for (const equipmentId of areaIds) {
+      if (selected.has(equipmentId)) {
+        await tx.equipmentChecklistAssignment.upsert({
+          where: { equipmentId_templateId: { equipmentId, templateId } },
+          update: { active: true },
+          create: { equipmentId, templateId },
+        });
+      } else {
+        await tx.equipmentChecklistAssignment.updateMany({ where: { equipmentId, templateId }, data: { active: false } });
+      }
+    }
+    await recordAudit({ userId: user.id, action: "UPDATE", entityType: "ChecklistTemplate", entityId: templateId, newValue: { equipmentsKept: selected.size, equipmentsRemoved: areaIds.size - selected.size } }, tx);
+  });
+  return { kept: selected.size, removed: areaIds.size - selected.size };
 }
 
 async function getDraftVersionOrThrow(versionId: string) {
