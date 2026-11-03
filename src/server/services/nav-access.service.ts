@@ -4,7 +4,7 @@ import { recordAudit } from "@/server/services/audit";
 import type { CurrentUser } from "@/server/auth/current-user";
 import { requirePermission } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
-import { ALWAYS_ALLOWED_HREFS } from "@/domain/shared/nav-access";
+import { ALWAYS_ALLOWED_HREFS, isOptInHref } from "@/domain/shared/nav-access";
 import { getNavGroups } from "@/components/layout/nav-items";
 
 /**
@@ -44,13 +44,22 @@ export async function listSelectableNavGroups(roleKey: string): Promise<Selectab
     roleKey,
   } as unknown as CurrentUser;
   const always = ALWAYS_ALLOWED_HREFS as readonly string[];
-  return getNavGroups(fakeUser)
+  const groups = getNavGroups(fakeUser)
     .map((g) => ({
       key: g.key,
       title: g.title ?? (g.key === "geral" ? "Geral" : g.key),
       items: g.items.filter((i) => !always.includes(i.href)).map((i) => ({ href: i.href, label: i.label })),
     }))
     .filter((g) => g.items.length > 0);
+  // Acesso extra do Auditor (dados de pessoas, só leitura): só aparece para ele se for marcado.
+  if (roleKey === RESTRICTED_ROLE_KEY) groups.push({ key: "extra", title: "Liberação extra (só leitura)", items: [{ href: "/escalas", label: "Escalas de Trabalho" }] });
+  return groups;
+}
+
+/** O Auditor pode ver as escalas de trabalho (somente leitura)? Só se o administrador marcou essa aba para ele. */
+export async function canViewSchedulesReadOnly(user: Pick<CurrentUser, "id" | "roleKey">): Promise<boolean> {
+  const whitelist = await getUserNavWhitelist(user);
+  return !!whitelist && whitelist.includes("/escalas");
 }
 
 /** Abas guardadas de cada usuário restrito (para abrir a edição já marcada). */
@@ -78,7 +87,10 @@ export async function setUserNavWhitelist(admin: CurrentUser, userId: string, hr
   if (user.role.key === RESTRICTED_ROLE_KEY) {
     const selectable = (await listSelectableNavGroups(RESTRICTED_ROLE_KEY)).flatMap((g) => g.items.map((i) => i.href));
     const chosen = [...new Set(hrefs)].filter((h) => selectable.includes(h));
-    if (chosen.length < selectable.length) toStore = [...chosen, "/inicio"];
+    // As abas extras (opt-in) não contam para "marcou todas = sem restrição": se alguma foi marcada, o usuário fica com lista de abas.
+    const regular = selectable.filter((h) => !isOptInHref(h));
+    const chosenRegular = chosen.filter((h) => !isOptInHref(h));
+    if (chosenRegular.length < regular.length || chosen.some(isOptInHref)) toStore = [...chosen, "/inicio"];
   }
 
   await db.$transaction(async (tx) => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filterNavGroups, isPathAllowed, owningHref } from "./nav-access";
+import { filterNavGroups, isOptInHref, isPathAllowed, owningHref, withOptInNav } from "./nav-access";
 
 const KNOWN = ["/inicio", "/financeiro", "/financeiro/dre", "/equipamentos", "/acidentes", "/acidentes/importar", "/tma"];
 
@@ -39,5 +39,30 @@ describe("acesso por abas", () => {
     expect(result.map((g) => g.key)).toEqual(["geral", "fin"]);
     expect(result[0].items.map((i) => i.href)).toEqual(["/inicio"]);
     expect(result[1].items.map((i) => i.href)).toEqual(["/financeiro"]);
+  });
+});
+
+describe("abas extras do Auditor (Escalas, só leitura)", () => {
+  const groups = [{ key: "rh", title: "RH", items: [{ href: "/presenca", label: "Presença", icon: "x" }] }, { key: "geral", title: "Geral", items: [{ href: "/inicio", label: "Início", icon: "x" }] }];
+
+  it("Escalas só entra no menu quando está marcada", () => {
+    expect(withOptInNav(groups, new Set(["/presenca"])).flatMap((g) => g.items.map((i) => i.href))).not.toContain("/escalas");
+    const withEscalas = withOptInNav(groups, new Set(["/presenca", "/escalas"]));
+    expect(withEscalas.find((g) => g.key === "rh")?.items.map((i) => i.href)).toEqual(["/presenca", "/escalas"]);
+  });
+  it("sem grupo RH, cria um; e não duplica se já existe", () => {
+    const sem = [{ key: "geral", title: "Geral", items: [{ href: "/inicio", label: "Início", icon: "x" }] }];
+    expect(withOptInNav(sem, new Set(["/escalas"])).some((g) => g.key === "rh")).toBe(true);
+    const ja = [{ key: "rh", title: "RH", items: [{ href: "/escalas", label: "Escalas", icon: "x" }] }];
+    expect(withOptInNav(ja, new Set(["/escalas"])).flatMap((g) => g.items).length).toBe(1);
+  });
+  it("só /escalas é opt-in", () => {
+    expect(isOptInHref("/escalas")).toBe(true);
+    expect(isOptInHref("/presenca")).toBe(false);
+  });
+  it("a aba extra abre pelo endereço só quando marcada", () => {
+    const known = ["/inicio", "/escalas"];
+    expect(isPathAllowed("/escalas", new Set(["/escalas"]), known)).toBe(true);
+    expect(isPathAllowed("/escalas", new Set(["/inicio"]), known)).toBe(false);
   });
 });

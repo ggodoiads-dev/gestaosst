@@ -4,14 +4,17 @@ import { useState } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import type { SelectableNavGroup } from "@/server/services/nav-access.service";
+import { isOptInHref } from "@/domain/shared/nav-access";
 
 /**
  * Escolha das abas que o Auditor pode ver. Fica dentro do <form> (os hidden inputs vão junto no envio): `navRestrict=1` avisa o servidor que a
  * escolha foi mostrada, e cada aba marcada vai em `navHrefs`. Marcando todas, o usuário fica sem restrição.
  */
 export function NavAccessPicker({ groups, initial }: { groups: SelectableNavGroup[]; initial: string[] }) {
-  const all = groups.flatMap((g) => g.items.map((i) => i.href));
-  const [selected, setSelected] = useState<Set<string>>(new Set(initial.filter((h) => all.includes(h))));
+  // Só as abas comuns contam no "marcar todas"; as de liberação extra (dados de pessoas) são marcadas uma a uma.
+  const all = groups.flatMap((g) => g.items.map((i) => i.href)).filter((h) => !isOptInHref(h));
+  const allWithExtras = groups.flatMap((g) => g.items.map((i) => i.href));
+  const [selected, setSelected] = useState<Set<string>>(new Set(initial.filter((h) => allWithExtras.includes(h))));
 
   function toggle(href: string) {
     setSelected((prev) => {
@@ -42,14 +45,14 @@ export function NavAccessPicker({ groups, initial }: { groups: SelectableNavGrou
       <div className="flex items-center justify-between gap-2">
         <Label>O que este auditor pode ver</Label>
         <span className="text-xs text-foreground-subtle">
-          {selected.size} de {all.length} abas
+          {[...selected].filter((h) => !isOptInHref(h)).length} de {all.length} abas
         </span>
       </div>
       <p className="text-xs text-foreground-subtle">
-        Marque só as abas que ele precisa. O que ficar desmarcado some do menu e não abre nem pelo endereço. A tela inicial e os termos de uso são sempre liberados. Marcando todas, ele fica sem restrição.
+        Marque só as abas que ele precisa. O que ficar desmarcado some do menu e não abre nem pelo endereço. A tela inicial e os termos de uso são sempre liberados. Marcando todas as abas comuns, ele fica sem restrição. Em &quot;Liberação extra&quot; ficam as telas com dados de pessoas, que só abrem (somente leitura) se você marcar.
       </p>
       <div className="flex gap-3">
-        <button type="button" onClick={() => setSelected(new Set(all))} className="text-xs text-accent hover:underline">
+        <button type="button" onClick={() => setSelected((prev) => new Set([...all, ...[...prev].filter(isOptInHref)]))} className="text-xs text-accent hover:underline">
           Marcar todas
         </button>
         <button type="button" onClick={() => setSelected(new Set())} className="text-xs text-foreground-subtle hover:underline">

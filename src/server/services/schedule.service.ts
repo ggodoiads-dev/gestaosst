@@ -8,6 +8,7 @@ import {
   type ScheduleDayComputedStatus,
 } from "@/domain/schedule/schedule-calendar";
 import { getMyCollaboratorProfile } from "@/server/services/productivity.service";
+import { canViewSchedulesReadOnly } from "@/server/services/nav-access.service";
 import type { CurrentUser } from "@/server/auth/current-user";
 import { requirePermission, hasPermission } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
@@ -80,6 +81,19 @@ export type TurnoInput = {
 };
 
 /** Turnos ativos, com o tipo de escala já carregado — usado tanto na grade quanto no formulário de colaborador. */
+/** Gerenciar escalas, ou (Auditor) ver só leitura quando o administrador liberou a aba Escalas de Trabalho para ele. */
+async function requireScheduleView(user: CurrentUser) {
+  if (hasPermission(user, PERMISSIONS.SCHEDULE_MANAGE)) return;
+  if (await canViewSchedulesReadOnly(user)) return;
+  requirePermission(user, PERMISSIONS.SCHEDULE_MANAGE);
+}
+
+/** Turnos para a tela de Escalas (gestor ou auditor liberado, só leitura). */
+export async function listTurnosForScheduleView(user: CurrentUser) {
+  await requireScheduleView(user);
+  return db.turno.findMany({ where: { active: true }, include: { scheduleType: true }, orderBy: { name: "asc" } });
+}
+
 export function listTurnos(user: CurrentUser) {
   requirePermission(user, PERMISSIONS.SCHEDULE_MANAGE);
   return db.turno.findMany({ where: { active: true }, include: { scheduleType: true }, orderBy: { name: "asc" } });
@@ -254,7 +268,7 @@ function localDateKey(date: Date): string {
 
 /** Grade mensal: para cada colaborador ativo, o status do turno (ou a exceção lançada) de cada dia do mês. */
 export async function getScheduleGrid(user: CurrentUser, params: { month: number; year: number; areaId?: string }) {
-  requirePermission(user, PERMISSIONS.SCHEDULE_MANAGE);
+  await requireScheduleView(user);
 
   const monthStart = new Date(params.year, params.month - 1, 1);
   const daysInMonth = new Date(params.year, params.month, 0).getDate();

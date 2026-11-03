@@ -25,16 +25,10 @@ import { Cinema } from "./cinema";
 import { getYesterdayStory } from "@/server/services/day-story.service";
 import { loadHomeNovoProps } from "./load-home-data";
 import { getUiTheme } from "@/lib/ui-theme";
-import { formatLongDate, APP_TIMEZONE } from "@/lib/dates";
-import { formatInTimeZone } from "date-fns-tz";
+import { formatLongDate } from "@/lib/dates";
 import { cn } from "@/lib/utils";
-
-function greeting(): string {
-  const hour = Number(formatInTimeZone(new Date(), APP_TIMEZONE, "H"));
-  if (hour < 12) return "Bom dia";
-  if (hour < 18) return "Boa tarde";
-  return "Boa noite";
-}
+import { Greeting } from "@/components/domain/greeting";
+import { greetingNow } from "@/lib/greeting";
 
 function HeroBriefingSkeleton() {
   return (
@@ -406,7 +400,7 @@ export default async function InicioPage() {
         <div className="relative flex flex-col gap-6 p-6 sm:p-8">
           <div className="min-w-0">
             <h1 className="text-2xl font-bold text-white sm:text-3xl">
-              {greeting()}, {firstName}
+              <Greeting initial={greetingNow()} />, {firstName}
             </h1>
             <p className="mt-1 text-sm text-white/60">{formatLongDate()}</p>
             <div className="mt-4 max-w-xl">

@@ -1,3 +1,5 @@
+import { Greeting } from "@/components/domain/greeting";
+import { greetingNow } from "@/lib/greeting";
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import { buildHeadline, type MarkTone } from "@/domain/home/headline";
@@ -46,7 +48,7 @@ export function HomeNovo(p: HomeNovoProps) {
     <div className="mx-auto flex w-full max-w-[1180px] flex-col gap-7 px-4 py-7 sm:px-8 sm:py-9">
       <div>
         <p className="text-[13px] font-medium text-foreground-subtle">
-          {p.dateLabel} · bom dia, {p.firstName}
+          {p.dateLabel} · <Greeting initial={greetingNow()} lowercase />, {p.firstName}
         </p>
         <h1 className="mt-2 max-w-[880px] text-[34px] font-medium leading-[1.1] tracking-[-0.035em] text-foreground sm:text-[46px]">
           {headline.map((part, i) => (

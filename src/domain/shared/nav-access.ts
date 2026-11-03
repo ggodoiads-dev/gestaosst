@@ -3,6 +3,24 @@
  * administrador marcou. Sem nenhuma aba guardada = sem restrição (o comportamento de sempre).
  */
 
+/**
+ * Abas que o perfil Auditor NÃO tem por padrão e que só aparecem se o administrador marcar (dados de pessoas, só leitura). Marcar todas as abas
+ * comuns não as inclui: elas precisam ser marcadas uma a uma.
+ */
+export const OPT_IN_HREFS = ["/escalas"] as const;
+
+export const isOptInHref = (href: string) => (OPT_IN_HREFS as readonly string[]).includes(href);
+
+/** Acrescenta ao menu as abas extras marcadas (grupo RH). Só chamar para quem tem lista de abas (o Auditor). */
+export function withOptInNav<G extends { key: string; title?: string; items: { href: string; label: string; icon: string }[] }>(groups: G[], allowed: ReadonlySet<string>): G[] {
+  if (!allowed.has("/escalas")) return groups;
+  const item = { href: "/escalas", label: "Escalas de Trabalho", icon: "schedules" };
+  if (groups.some((g) => g.items.some((i) => i.href === item.href))) return groups;
+  const rh = groups.find((g) => g.key === "rh");
+  if (rh) return groups.map((g) => (g === rh ? { ...g, items: [...g.items, item] } : g));
+  return [...groups, { key: "rh", title: "RH", items: [item] } as unknown as G];
+}
+
 /** Sempre liberadas para quem tem restrição: a tela inicial e os termos de uso. */
 export const ALWAYS_ALLOWED_HREFS = ["/inicio", "/termos-de-uso"] as const;
 

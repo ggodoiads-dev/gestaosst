@@ -1,5 +1,7 @@
 "use client";
 
+import { Greeting } from "@/components/domain/greeting";
+import { greetingNow } from "@/lib/greeting";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { ArrowRight, ChevronsDown } from "lucide-react";
@@ -87,7 +89,7 @@ function Chapters({ p, refs, only }: { p: CinemaProps; refs?: React.MutableRefOb
       <div ref={set(0)} className={place(0, "justify-end px-6 pb-[14vh] sm:px-14")}>
         <p className="text-[13px] font-medium uppercase tracking-[0.14em] text-[#9db4dc]">{p.dateLabel}</p>
         <h2 className="mt-3 text-[clamp(52px,9vw,128px)] font-medium leading-[0.95] tracking-[-0.045em] text-white">
-          Bom dia,
+          <Greeting initial={greetingNow()} />,
           <br />
           <span className="sigo-serif text-[1.06em]">{p.firstName}.</span>
         </h2>

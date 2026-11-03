@@ -46,7 +46,9 @@ export function ScheduleGridClient({
   rows,
   turnos,
   functions,
+  readOnly = false,
 }: {
+  readOnly?: boolean;
   rows: RowData[];
   turnos: (Turno & { scheduleType: ScheduleType })[];
   functions: { id: string; name: string }[];
@@ -142,7 +144,8 @@ export function ScheduleGridClient({
                 <td className="sticky left-0 z-10 bg-surface px-3 py-2 whitespace-nowrap">
                   <button
                     type="button"
-                    className="text-left"
+                    className={cn("text-left", readOnly && "cursor-default")}
+                    disabled={readOnly}
                     onClick={() => setTurnoFor(row.collaborator)}
                   >
                     <p className="font-medium text-foreground hover:underline">{row.collaborator.name}</p>
@@ -158,6 +161,7 @@ export function ScheduleGridClient({
                     <td key={d.date} className="px-1 py-1 text-center">
                       <button
                         type="button"
+                        disabled={readOnly}
                         title={d.note ? (d.note.createdByName ? `${d.note.notes}
 Lançado por ${d.note.createdByName}${d.note.createdAt ? ` em ${formatDateTime(d.note.createdAt)}` : ""}` : d.note.notes) : undefined}
                         onClick={() =>
@@ -170,7 +174,9 @@ Lançado por ${d.note.createdByName}${d.note.createdAt ? ` em ${formatDateTime(d
                           })
                         }
                         className={cn(
-                          "mx-auto flex h-7 w-9 items-center justify-center rounded text-[10px] font-semibold transition-opacity hover:opacity-75",
+                          "mx-auto flex h-7 w-9 items-center justify-center rounded text-[10px] font-semibold transition-opacity",
+                          !readOnly && "hover:opacity-75",
+                          readOnly && "cursor-default",
                           d.note
                             ? "bg-warning-soft text-warning"
                             : d.computed === "TRABALHO"

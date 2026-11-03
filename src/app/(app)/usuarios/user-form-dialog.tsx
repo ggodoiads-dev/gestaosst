@@ -24,6 +24,7 @@ import {
 } from "@/server/actions/user.actions";
 import { useCloseOnSuccess } from "@/lib/use-close-on-success";
 import { NavAccessPicker } from "./nav-access-picker";
+import { isOptInHref } from "@/domain/shared/nav-access";
 import type { SelectableNavGroup } from "@/server/services/nav-access.service";
 import { ROLE_LABELS, type RoleKeyValue } from "@/domain/shared/permissions";
 import type { Area, JobFunction, Role, Unit, User } from "@/generated/prisma/client";
@@ -506,7 +507,7 @@ export function EditUserDialog({ user, roles, units, areas, functions, turnos, c
               <FunctionChecklist functions={functions} selected={selectedFunctions} onToggle={toggleFunction} />
             </div>
             {roleId === auditorNav.roleId && (
-              <NavAccessPicker groups={auditorNav.groups} initial={navWhitelist ?? auditorNav.groups.flatMap((g) => g.items.map((i) => i.href))} />
+              <NavAccessPicker groups={auditorNav.groups} initial={navWhitelist ?? auditorNav.groups.flatMap((g) => g.items.map((i) => i.href)).filter((h) => !isOptInHref(h))} />
             )}
             <RollCallFields
               areas={areas}

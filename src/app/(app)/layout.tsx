@@ -7,7 +7,7 @@ import { getNavGroups } from "@/components/layout/nav-items";
 import { AppShell } from "@/components/layout/app-shell";
 import { getAlertsSummary } from "@/server/services/alerts.service";
 import { getUserNavWhitelist } from "@/server/services/nav-access.service";
-import { filterNavGroups, isPathAllowed } from "@/domain/shared/nav-access";
+import { filterNavGroups, isPathAllowed, withOptInNav } from "@/domain/shared/nav-access";
 import { getUiTheme } from "@/lib/ui-theme";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -22,9 +22,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const whitelist = await getUserNavWhitelist(user);
   if (whitelist) {
     const allowed = new Set(whitelist);
+    const groupsWithExtras = withOptInNav(allNavGroups, allowed);
     const pathname = (await headers()).get("x-pathname");
-    if (pathname && !isPathAllowed(pathname, allowed, allNavGroups.flatMap((g) => g.items.map((i) => i.href)))) redirect("/inicio");
-    navGroups = filterNavGroups(allNavGroups, allowed);
+    if (pathname && !isPathAllowed(pathname, allowed, groupsWithExtras.flatMap((g) => g.items.map((i) => i.href)))) redirect("/inicio");
+    navGroups = filterNavGroups(groupsWithExtras, allowed);
     showRico = allowed.has("/rico");
     alerts = { items: [], count: 0 };
   }

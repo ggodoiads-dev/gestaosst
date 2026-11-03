@@ -1,3 +1,5 @@
+import { Greeting } from "@/components/domain/greeting";
+import { greetingNow } from "@/lib/greeting";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ChevronLeft, ChevronRight, ArrowUpRight } from "lucide-react";
@@ -186,7 +188,13 @@ export default async function PainelPage({ searchParams }: { searchParams: Promi
 
       <div>
         <p className="text-[13px] font-medium text-foreground-subtle">
-          {month === nowKey ? `${formatLongDate(new Date())} · bom dia, ${user.name.split(" ")[0]}` : `Painel de ${monthLabelOf(month)}`}
+          {month === nowKey ? (
+            <>
+              {formatLongDate(new Date())} · <Greeting initial={greetingNow()} lowercase />, {user.name.split(" ")[0]}
+            </>
+          ) : (
+            `Painel de ${monthLabelOf(month)}`
+          )}
         </p>
         <h1 className="mt-2 max-w-[900px] text-[34px] font-medium leading-[1.1] tracking-[-0.035em] text-foreground sm:text-[46px]">
           {buildHeadline({

@@ -1,5 +1,7 @@
 import { requireUser } from "@/server/auth/current-user";
-import { getScheduleGrid, listTurnos } from "@/server/services/schedule.service";
+import { getScheduleGrid, listTurnosForScheduleView } from "@/server/services/schedule.service";
+import { hasPermission } from "@/server/auth/current-user";
+import { PERMISSIONS } from "@/domain/shared/permissions";
 import { PageHeader, PageBody } from "@/components/domain/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -35,8 +37,10 @@ export default async function EscalasPage({
   const user = await requireUser();
   const [{ rows }, turnos] = await Promise.all([
     getScheduleGrid(user, { month, year }),
-    listTurnos(user),
+    listTurnosForScheduleView(user),
   ]);
+  // Auditor liberado vê só a grade (sem editar turno, falta, atestado ou férias, e sem o texto das observações).
+  const readOnly = !hasPermission(user, PERMISSIONS.SCHEDULE_MANAGE);
 
   const prevMonth = month === 1 ? 12 : month - 1;
   const prevYear = month === 1 ? year - 1 : year;
@@ -61,7 +65,7 @@ export default async function EscalasPage({
       day: d.date.getDate(),
       weekday: WEEKDAY_LABELS[d.date.getDay()],
       computed: d.computed,
-      note: d.note,
+      note: readOnly && d.note ? { ...d.note, notes: "", attachments: [], createdByName: undefined } : d.note,
     })),
   }));
 
@@ -79,10 +83,10 @@ export default async function EscalasPage({
     <>
       <PageHeader
         title="Escalas de Trabalho"
-        description="Grade mensal de trabalho/folga por colaborador — clique no nome pra definir o turno, ou num dia pra registrar falta, atestado ou outra observação. Use Cadastrar férias para lançar o período de uma vez."
+        description={readOnly ? "Grade mensal de trabalho/folga por colaborador (somente leitura)." : "Grade mensal de trabalho/folga por colaborador — clique no nome pra definir o turno, ou num dia pra registrar falta, atestado ou outra observação. Use Cadastrar férias para lançar o período de uma vez."}
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <VacationDialog collaborators={gridRows.map((r) => ({ id: r.collaborator.id, name: r.collaborator.name }))} />
+            {!readOnly && <VacationDialog collaborators={gridRows.map((r) => ({ id: r.collaborator.id, name: r.collaborator.name }))} />}
             <Button size="icon" variant="secondary" asChild>
               <Link href={`/escalas?month=${prevMonth}&year=${prevYear}`} aria-label="Mês anterior">
                 <ChevronLeft className="size-4" />
@@ -107,7 +111,7 @@ export default async function EscalasPage({
             </CardContent>
           </Card>
         ) : (
-          <ScheduleGridClient rows={gridRows} turnos={turnos} functions={functions} />
+          <ScheduleGridClient rows={gridRows} turnos={turnos} functions={functions} readOnly={readOnly} />
         )}
       </PageBody>
     </>
