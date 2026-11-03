@@ -4,8 +4,9 @@ import { turnoverMetric, windowEndFor, surveyKey, type TurnoverContext, type Win
 const ex = (o: Partial<WindowExit>): WindowExit => ({ kind: "VOLUNTARIO", tenureDays: 200, turno: "A", area: "Expedição", cargo: "Ajudante", interview: null, ...o });
 const iv = (primaryReason: string, extra: Partial<NonNullable<WindowExit["interview"]>> = {}) => ({ primaryReason, ratings: {}, wouldReturn: null, ...extra });
 
-const ctx = (exits: WindowExit[], rate: number | null = 15.3): TurnoverContext => ({
-  rate,
+const ctx = (exits: WindowExit[], rate: number | null = 18.75): TurnoverContext => ({
+  monthRate: rate,
+  ytdRate: rate === null ? null : 26.32,
   exits,
   satisfaction: { byCategory: new Map([["remuneracao", { satisfacao: 77.7, criticos: 8.3 }]]), total: { satisfacao: 80, criticos: 2.2 } },
   platformMotives: new Map([["gestorimediato", { peak: 18.8, byBucket: new Map([["6a12meses", 18.8], ["0a3meses", null]]) }]]),
@@ -20,15 +21,15 @@ describe("turnoverMetric", () => {
   ];
   const c = ctx(exits);
 
-  it("turnover e contagem vêm da janela", () => {
-    expect(turnoverMetric("turnover.rolling12", c)).toBe(15.3);
-    expect(turnoverMetric("turnover.rolling12.ytd", c)).toBe(15.3);
-    expect(turnoverMetric("turnover.exits12", c)).toBe(4);
+  it("turnover do mês e acumulado vêm calculados; a contagem é das saídas do ano", () => {
+    expect(turnoverMetric("turnover.month", c)).toBe(18.75);
+    expect(turnoverMetric("turnover.ytd", c)).toBe(26.32);
+    expect(turnoverMetric("turnover.exits.ytd", c)).toBe(4);
   });
-  it("sem janela coberta, sem número", () => {
+  it("sem QLP, sem número de turnover", () => {
     const c2 = ctx(exits, null);
-    expect(turnoverMetric("turnover.rolling12", c2)).toBeNull();
-    expect(turnoverMetric("turnover.exits12", c2)).toBeNull();
+    expect(turnoverMetric("turnover.month", c2)).toBeNull();
+    expect(turnoverMetric("turnover.ytd", c2)).toBeNull();
   });
   it("percentuais sobre a base certa", () => {
     expect(turnoverMetric("turnover.voluntary.pct", c)).toBe(75);
@@ -71,10 +72,9 @@ describe("turnoverMetric", () => {
 });
 
 describe("windowEndFor", () => {
-  it("mês fechado vale ele mesmo; mês corrente usa o anterior; futuro não tem", () => {
+  it("o período vale ele mesmo (inclusive o corrente, até hoje); futuro não tem", () => {
     expect(windowEndFor("2026-09", "2026-11")).toBe("2026-09");
-    expect(windowEndFor("2026-11", "2026-11")).toBe("2026-10");
+    expect(windowEndFor("2026-11", "2026-11")).toBe("2026-11");
     expect(windowEndFor("2027-01", "2026-12")).toBeNull();
-    expect(windowEndFor("2026-01", "2026-01")).toBe("2025-12");
   });
 });

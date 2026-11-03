@@ -158,7 +158,7 @@ export default async function PainelPage({ searchParams }: { searchParams: Promi
     month === nowKey ? listAlerts().catch(() => []) : Promise.resolve([]),
   ]);
 
-  const turnoverSeries = pdca ? pdca.rolling.map((r) => ({ label: r.label, value: r.rate })) : [];
+  const turnoverSeries = pdca ? pdca.months.map((r) => ({ label: r.label, value: r.ytdRate })) : [];
   const turnoverNow = pdca?.current ?? null;
   const goal = pdca?.data.annualGoal ?? null;
   const executive = report?.executive ?? [];
@@ -216,10 +216,10 @@ export default async function PainelPage({ searchParams }: { searchParams: Promi
         <div className="flex flex-col gap-4">
           {turnoverNow && (
             <section className="relative overflow-hidden rounded-[24px] bg-brand p-5 text-white">
-              <p className="text-[12px] font-semibold uppercase tracking-[0.08em] text-[#9db4dc]">Turnover 12 meses · {turnoverNow.label}</p>
+              <p className="text-[12px] font-semibold uppercase tracking-[0.08em] text-[#9db4dc]">Turnover acumulado do ano · {turnoverNow.label}</p>
               <div className="mt-2 flex items-end justify-between gap-3">
                 <p className="text-[64px] font-semibold leading-none tracking-[-0.05em]">
-                  {String(turnoverNow.rate ?? "—").replace(".", ",")}
+                  {String(turnoverNow.ytdRate ?? "—").replace(".", ",")}
                   <span className="ml-1 text-[24px] font-medium text-[#9db4dc]">%</span>
                 </p>
                 <Link href="/desligamentos/pdca" className="inline-flex items-center gap-1 text-[12.5px] font-semibold text-[#9db4dc] hover:text-white">
@@ -228,7 +228,7 @@ export default async function PainelPage({ searchParams }: { searchParams: Promi
               </div>
               <p className="mt-2 text-[13px] text-[#b9c8e6]">
                 {goal !== null ? `Meta do ano ${String(goal).replace(".", ",")}%. ` : ""}
-                {turnoverNow.exits12} saída(s) nos 12 meses, efetivo médio de {turnoverNow.avgHeadcount}.
+                {turnoverNow.ytdExits} demissão(ões) no ano ÷ QLP médio de {String(Math.round(turnoverNow.ytdQlp * 100) / 100).replace(".", ",")}. No mês: {String(turnoverNow.rate ?? "—").replace(".", ",")}%.
               </p>
             </section>
           )}
@@ -243,7 +243,7 @@ export default async function PainelPage({ searchParams }: { searchParams: Promi
           )}
           {turnoverSeries.length > 0 && (
             <section className="rounded-[24px] border border-border bg-surface p-5">
-              <LineChart title="Turnover móvel de 12 meses" points={turnoverSeries} goal={goal} />
+              <LineChart title="Turnover acumulado do ano (%)" points={turnoverSeries} goal={goal} />
             </section>
           )}
         </div>

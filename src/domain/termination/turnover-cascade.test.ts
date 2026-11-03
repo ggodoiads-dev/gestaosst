@@ -18,7 +18,7 @@ describe("turnoverStaticIvs", () => {
     }
   });
   it("cada sigoKey é reconhecida pelo cálculo (não devolve undefined e não cai em chave desconhecida sem querer)", () => {
-    const ctx = { rate: 10, exits: [], satisfaction: { byCategory: new Map(), total: null }, platformMotives: new Map() };
+    const ctx = { monthRate: 10, ytdRate: 10, exits: [], satisfaction: { byCategory: new Map(), total: null }, platformMotives: new Map() };
     for (const iv of ivs.filter((i) => i.sigoKey)) expect(turnoverMetric(iv.sigoKey!, ctx)).not.toBeUndefined();
     expect(ivs.find((i) => i.seedKey === "iv:to:motivo:BENEFICIOS")?.description).toContain("Pergunte o por quê");
     expect(ivs.find((i) => i.seedKey === "iv:to:nota:beneficios")?.parentSeedKey).toBe("iv:to:motivo:BENEFICIOS");

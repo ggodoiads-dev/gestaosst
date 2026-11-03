@@ -35,7 +35,7 @@ const SEED_DRE_KEYS: Record<string, string> = {
   // TMA e TMC leem da planilha de controle de atendimento importada (TMA = o da planilha da Ambev, dos liberados com agendamento).
   "ic:tma": "tma.avg",
   "ic:tmc": "tma.tmc",
-  // O TO geral lê o turnover dos 12 meses fechados dos desligamentos importados (o mesmo número do PDCA do turnover).
+  // O TO geral lê o turnover pela conta do BI (demissões ÷ QLP, do mês e acumulado do ano), o mesmo número do PDCA do turnover.
   [TURNOVER_IC_SEED_KEY]: TURNOVER_IC_SIGO_KEY,
 };
 

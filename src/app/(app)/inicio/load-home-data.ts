@@ -43,7 +43,7 @@ export async function loadHomeNovoProps(user: CurrentUser): Promise<HomeNovoProp
   ]);
 
   const checklistPct = checklist ? compliancePercent(checklist.today) : null;
-  const turnoverRate = pdca?.current?.rate ?? null;
+  const turnoverRate = pdca?.current?.ytdRate ?? null;
   const turnoverGoal = pdca?.data.annualGoal ?? null;
   const navGroups = allowedSet ? filterNavGroups(getNavGroups(user), allowedSet) : getNavGroups(user);
 
@@ -63,7 +63,7 @@ export async function loadHomeNovoProps(user: CurrentUser): Promise<HomeNovoProp
       .map((i) => ({ href: i.href, label: i.label })),
     featured:
       turnoverRate !== null
-        ? { id: "turnover", label: "Turnover 12 meses", value: String(turnoverRate).replace(".", ","), unit: "%", note: turnoverGoal !== null ? `Meta do ano ${String(turnoverGoal).replace(".", ",")}%. Abrir o PDCA do turnover.` : "Abrir o PDCA do turnover.", href: "/desligamentos/pdca" }
+        ? { id: "turnover", label: "Turnover do ano (acumulado)", value: String(turnoverRate).replace(".", ","), unit: "%", note: turnoverGoal !== null ? `Meta do ano ${String(turnoverGoal).replace(".", ",")}%. Abrir o PDCA do turnover.` : "Abrir o PDCA do turnover.", href: "/desligamentos/pdca" }
         : checklistPct !== null
           ? { id: "checklist", label: "Aderência de checklist", value: String(checklistPct), unit: "%", note: "Último dia fechado. Abrir os indicadores.", href: "/indicadores" }
           : null,

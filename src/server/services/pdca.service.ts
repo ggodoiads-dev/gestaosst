@@ -6,13 +6,13 @@ import type { CurrentUser } from "@/server/auth/current-user";
 import { requirePermission } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
 import { countsAsTurnover, effectiveKind, tenureDays, TERMINATION_KIND_LABEL, type TerminationKind } from "@/domain/termination/rules";
-import { lastClosedMonth, presenceAt, windowIsCovered } from "@/domain/termination/presence";
+import { lastCountedMonth } from "@/domain/termination/presence";
 import { loadPresence } from "@/server/services/turnover-base";
 import { interviewDiagnosis, sanitizeRatings, summarizeInterviews, type InterviewSummary } from "@/domain/termination/interview";
 import { loadHeadcountBase } from "@/server/services/exit-interview.service";
 import { getExitSurvey } from "@/server/services/exit-survey.service";
 import { surveyDiagnosis } from "@/domain/termination/survey";
-import { averageHeadcount, diagnose, exitsBudget, goalStatus, rollingTurnover, type GoalStatus, type PdcaAction, type PdcaActionStatus, type PdcaCause, type WindowMonth } from "@/domain/termination/pdca";
+import { buildYearResults, diagnose, exitsBudget, goalStatus, yearMonthInputs, type GoalStatus, type PdcaAction, type PdcaActionStatus, type PdcaCause, type YearMonthResult } from "@/domain/termination/pdca";
 
 const RH = PERMISSIONS.HR_MANAGE;
 const MONTH_LABEL = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
@@ -31,27 +31,29 @@ export type PdcaView = {
   ready: boolean;
   year: number;
   data: PdcaData;
-  /** Turnover móvel (12 meses) no fim de cada mês do ano. */
-  rolling: { month: string; label: string; exits: number; rate: number | null }[];
-  current: { month: string; label: string; rate: number | null; exits12: number; avgHeadcount: number } | null;
+  /** Turnover de cada mês fechado do ano (conta do BI): do mês e acumulado. */
+  months: (YearMonthResult & { label: string })[];
+  /** Último mês contado (o corrente, até hoje): turnover do mês e acumulado do ano. */
+  current: { month: string; label: string; rate: number | null; ytdRate: number | null; monthExits: number; monthQlp: number; ytdExits: number; ytdQlp: number } | null;
   status: { monthly: GoalStatus; ytd: GoalStatus; annual: GoalStatus };
   budget: number | null;
   diagnosis: string[];
   firstTermination: Date | null;
   kinds: { label: string; count: number }[];
   interviews: InterviewSummary | null;
-  /** Último mês fechado do ano (AAAA-MM), ou null se nenhum fechou: é o período da cascata do turnover. */
+  /** Último mês contado do ano (AAAA-MM), ou null se o ano ainda não começou: é o período da cascata do turnover. */
   closedMonthKey: string | null;
   survey: Awaited<ReturnType<typeof getExitSurvey>>;
   /** Efetivo oficial informado (AAAA-MM → pessoas), no lugar da estimativa do cadastro. */
   headcountBase: Record<string, number>;
   /** Como o número foi calculado: o que o RH precisa ver para confiar nele. */
   basis: {
-    /** Último mês fechado usado ("Out/2026") ou null se o ano ainda não fechou nenhum mês. */
+    /** Último mês contado ("Nov/2026") ou null se o ano ainda não começou. */
     closedLabel: string | null;
+    /** Período contado ("Jan/2026 a Out/2026"). */
     windowLabel: string | null;
-    /** A janela de 12 meses começa depois do primeiro desligamento importado? Senão o histórico está incompleto. */
-    covered: boolean;
+    /** O primeiro desligamento importado é de fevereiro ou depois (ou não há nenhum): saídas de janeiro podem estar faltando. */
+    historyStartsLate: boolean;
     unplaced: number;
     source: "oficial" | "cadastro" | "misto";
   };
@@ -93,51 +95,21 @@ export async function getPdcaView(user: CurrentUser, year: number): Promise<Pdca
     : empty();
 
   const [presence, headcountBase] = await Promise.all([loadPresence(), loadHeadcountBase()]);
-  const people = presence.people;
   const counted = all.filter((t) => countsAsTurnover(effectiveKind(t.kind, t.reason)));
   const now = new Date();
-  // O indicador usa só MESES FECHADOS: o mês corrente tem saídas parciais contra um efetivo cheio e puxaria o número para baixo.
-  const lastMonthIdx = lastClosedMonth(year, now);
+  // Como no BI: o mês corrente conta até hoje (ele aparece no gráfico do BI mesmo parcial).
+  const lastMonthIdx = lastCountedMonth(year, now);
   const firstExit = all[0]?.terminationDate ?? null;
 
-  // Estatística de cada mês de (ano-1) até o último mês do ano, para montar as janelas de 12 meses.
-  const stats = new Map<string, WindowMonth>();
-  for (let y = year - 1; y <= year; y++) {
-    for (let m = 0; m < 12; m++) {
-      if (y === year && m > lastMonthIdx) break;
-      const start = new Date(y, m, 1);
-      const end = new Date(y, m + 1, 1);
-      // Efetivo oficial do mês, quando informado, vale no lugar da estimativa feita pelo cadastro.
-      const official = headcountBase.get(`${y}-${String(m + 1).padStart(2, "0")}`);
-      stats.set(`${y}-${m}`, {
-        exits: counted.filter((t) => t.terminationDate.getFullYear() === y && t.terminationDate.getMonth() === m).length,
-        headcountStart: official ?? presenceAt(people, start),
-        headcountEnd: official ?? presenceAt(people, end > now ? now : end),
-      });
-    }
-  }
-  const windowAt = (m: number): WindowMonth[] => {
-    const w: WindowMonth[] = [];
-    for (let k = 11; k >= 0; k--) {
-      const idx = year * 12 + m - k;
-      const s = stats.get(`${Math.floor(idx / 12)}-${idx % 12}`);
-      if (s) w.push(s);
-    }
-    return w;
-  };
-  const rolling = Array.from({ length: Math.max(lastMonthIdx + 1, 0) }, (_, m) => {
-    const w = windowAt(m);
-    const covered = windowIsCovered(new Date(year, m - 11, 1), firstExit);
-    return { month: `${year}-${String(m + 1).padStart(2, "0")}`, label: MONTH_LABEL[m], exits: w.reduce((s, x) => s + x.exits, 0), rate: covered && w.length === 12 ? rollingTurnover(w) : null };
-  });
-  const lastWindow = windowAt(lastMonthIdx);
-  const exits12 = lastWindow.reduce((s, x) => s + x.exits, 0);
-  const avg = averageHeadcount(lastWindow);
-  const currentRate = lastMonthIdx >= 0 ? (rolling[lastMonthIdx]?.rate ?? null) : null;
-  const covered = lastMonthIdx >= 0 && windowIsCovered(new Date(year, lastMonthIdx - 11, 1), firstExit);
+  // Conta do BI: turnover do mês = demissões do mês ÷ QLP do mês; acumulado = demissões do ano ÷ média do QLP dos meses.
+  const results = buildYearResults(yearMonthInputs({ year, lastIdx: lastMonthIdx, now, counted, people: presence.people, headcountBase }));
+  const months = results.map((r, m) => ({ ...r, label: MONTH_LABEL[m] }));
+  const last = results[results.length - 1] ?? null;
+  const currentRate = last?.ytdRate ?? null;
+  const historyStartsLate = firstExit === null || firstExit >= new Date(year, 1, 1);
 
-  // Diagnóstico sobre as saídas da janela atual.
-  const windowStart = new Date(year, Math.max(lastMonthIdx, 0) - 11, 1);
+  // Diagnóstico sobre as saídas do ano até hoje.
+  const windowStart = new Date(year, 0, 1);
   const windowEnd = new Date(year, Math.max(lastMonthIdx, -1) + 1, 1);
   const inWindow = counted.filter((t) => t.terminationDate >= windowStart && t.terminationDate < windowEnd);
   const top = (key: (t: (typeof inWindow)[number]) => string | null) => {
@@ -195,10 +167,10 @@ export async function getPdcaView(user: CurrentUser, year: number): Promise<Pdca
     ready,
     year,
     data,
-    rolling,
-    current: ready && lastMonthIdx >= 0 && covered ? { month: rolling[lastMonthIdx].month, label: `${MONTH_LABEL[lastMonthIdx]}/${year}`, rate: currentRate, exits12, avgHeadcount: Math.round(avg) } : null,
-    status: { monthly: goalStatus(currentRate, data.monthlyGoal), ytd: goalStatus(currentRate, data.ytdGoal), annual: goalStatus(currentRate, data.annualGoal) },
-    budget: exitsBudget(data.annualGoal, avg, exits12),
+    months,
+    current: ready && last && lastMonthIdx >= 0 ? { month: last.month, label: `${MONTH_LABEL[lastMonthIdx]}/${year}`, rate: last.rate, ytdRate: last.ytdRate, monthExits: last.exits, monthQlp: last.qlp, ytdExits: last.ytdExits, ytdQlp: last.ytdQlp } : null,
+    status: { monthly: goalStatus(last?.rate ?? null, data.monthlyGoal), ytd: goalStatus(currentRate, data.ytdGoal), annual: goalStatus(currentRate, data.annualGoal) },
+    budget: last ? exitsBudget(data.annualGoal, last.ytdQlp, last.ytdExits) : null,
     diagnosis,
     firstTermination: counted[0]?.terminationDate ?? null,
     kinds: [...kinds.entries()].map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count),
@@ -208,17 +180,10 @@ export async function getPdcaView(user: CurrentUser, year: number): Promise<Pdca
     headcountBase: Object.fromEntries(headcountBase),
     basis: {
       closedLabel: lastMonthIdx >= 0 ? `${MONTH_LABEL[lastMonthIdx]}/${year}` : null,
-      windowLabel: lastMonthIdx >= 0 ? `${MONTH_LABEL[((lastMonthIdx - 11) % 12 + 12) % 12]}/${new Date(year, lastMonthIdx - 11, 1).getFullYear()} a ${MONTH_LABEL[lastMonthIdx]}/${year}` : null,
-      covered,
+      windowLabel: lastMonthIdx >= 0 ? `Jan/${year} a ${MONTH_LABEL[lastMonthIdx]}/${year}` : null,
+      historyStartsLate,
       unplaced: presence.unplaced,
-      source: (() => {
-        const months = [...stats.keys()].length;
-        const official = [...stats.keys()].filter((k) => {
-          const [yy, mm] = k.split("-").map(Number);
-          return headcountBase.has(`${yy}-${String(mm + 1).padStart(2, "0")}`);
-        }).length;
-        return official === 0 ? ("cadastro" as const) : official >= months ? ("oficial" as const) : ("misto" as const);
-      })(),
+      source: results.length === 0 ? ("cadastro" as const) : results.every((r) => r.qlpSource === "oficial") ? ("oficial" as const) : results.some((r) => r.qlpSource === "oficial") ? ("misto" as const) : ("cadastro" as const),
     },
   };
 }

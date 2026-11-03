@@ -5,7 +5,7 @@ import { formatInTimeZone } from "date-fns-tz";
 import { requireUser, hasPermission } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
 import { getPdcaView } from "@/server/services/pdca.service";
-import { GOAL_STATUS_LABEL, type GoalStatus } from "@/domain/termination/pdca";
+import { GOAL_STATUS_LABEL, goalStatus, type GoalStatus } from "@/domain/termination/pdca";
 import { PageHeader, PageBody } from "@/components/domain/page-header";
 import { StatCard } from "@/components/domain/stat-card";
 import { Button } from "@/components/ui/button";
@@ -26,7 +26,7 @@ import { MotivosTable, SatisfacaoTable } from "../entrevistas/resumo/survey-tabl
 
 const TONE: Record<GoalStatus, "success" | "warning" | "danger" | "neutral"> = { DENTRO: "success", ATENCAO: "warning", FORA: "danger", SEM_META: "neutral" };
 const pct = (v: number | null) => (v === null ? "—" : `${v.toLocaleString("pt-BR")}%`);
-const SOURCE_LABEL = { cadastro: "estimado pelo cadastro de colaboradores e pelos desligamentos importados", oficial: "informado por você (efetivo oficial de cada mês)", misto: "parte informado por você, parte estimado pelo cadastro" } as const;
+const SOURCE_LABEL = { cadastro: "estimado pelo cadastro de colaboradores (informe o QLP de cada mês, no fim da página, para bater com o BI)", oficial: "informado por você (QLP de cada mês)", misto: "parte informado por você, parte estimado pelo cadastro (informe os meses que faltam, no fim da página)" } as const;
 
 export default async function PdcaTurnoverPage({ searchParams }: { searchParams: Promise<{ ano?: string }> }) {
   const user = await requireUser();
@@ -61,7 +61,7 @@ export default async function PdcaTurnoverPage({ searchParams }: { searchParams:
         <div>
           <p className="text-sm font-semibold text-foreground">Cascata do turnover — do número à causa raiz</p>
           <p className="text-xs text-foreground-subtle">
-            Mesmo modelo do Cascateamento de metas: o IC é o <strong className="text-foreground">TO geral</strong> e os IVs mostram como e por que ele está nesse número. Os IVs com <span className="whitespace-nowrap">⚡</span> são calculados pelo SIGO para o fechamento de {v.basis.closedLabel ?? "mês anterior"}.
+            Mesmo modelo do Cascateamento de metas: o IC é o <strong className="text-foreground">TO geral</strong> e os IVs mostram como e por que ele está nesse número. Os IVs com <span className="whitespace-nowrap">⚡</span> são calculados pelo SIGO até {v.basis.closedLabel ?? "hoje"} (as saídas do ano).
           </p>
         </div>
         {cascadeAllowed && (
@@ -85,16 +85,16 @@ export default async function PdcaTurnoverPage({ searchParams }: { searchParams:
     </div>
   );
 
-  const lastClosedAnnual = v.rolling.length > 0 ? v.rolling.filter((r) => r.rate !== null) : [];
+  const closedMonths = v.months.filter((r) => r.rate !== null);
 
   const interviewsCard = (
     <div className="flex flex-col gap-3 rounded-md border border-border p-3">
       <div>
         <p className="text-sm font-semibold text-foreground">O que dizem as entrevistas de desligamento</p>
-        <p className="text-xs text-foreground-subtle">Motivo real da saída, dito pelo colaborador (últimos 12 meses fechados). Registre cada entrevista na lista de desligamentos ou suba o resumo da plataforma de entrevistas.</p>
+        <p className="text-xs text-foreground-subtle">Motivo real da saída, dito pelo colaborador (saídas do ano). Registre cada entrevista na lista de desligamentos ou suba o resumo da plataforma de entrevistas.</p>
       </div>
       {!v.interviews || v.interviews.count === 0 ? (
-        <p className="text-sm text-foreground-subtle">Nenhuma entrevista registrada na janela.</p>
+        <p className="text-sm text-foreground-subtle">Nenhuma entrevista registrada neste ano.</p>
       ) : (
         <>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -178,33 +178,47 @@ export default async function PdcaTurnoverPage({ searchParams }: { searchParams:
       <CardHeader>
         <div>
           <CardTitle>Check — como o turnover evoluiu</CardTitle>
-          <CardDescription>Turnover de cada mês fechado, olhando os 12 meses até ele. Só aparece quando o histórico importado já cobria a janela inteira.</CardDescription>
+          <CardDescription>Mesma conta do BI: turnover do mês = demissões do mês ÷ QLP do mês; acumulado = demissões do ano ÷ QLP médio do ano. O mês corrente conta até hoje.</CardDescription>
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        {lastClosedAnnual.length > 0 ? (
-          <SeriesBars series={{ title: "Turnover móvel de 12 meses (%)", unit: "%", highlightLast: true, points: lastClosedAnnual.map((r) => ({ label: r.label, value: r.rate ?? 0 })) }} />
+        {closedMonths.length > 0 ? (
+          <SeriesBars series={{ title: "Turnover do mês (%)", unit: "%", highlightLast: true, points: closedMonths.map((r) => ({ label: r.label, value: r.rate ?? 0 })) }} />
         ) : (
-          <p className="text-sm text-foreground-subtle">Ainda não há mês com 12 meses de histórico importado para desenhar o gráfico.</p>
+          <p className="text-sm text-foreground-subtle">Ainda não há mês com QLP para desenhar o gráfico.</p>
         )}
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Mês fechado</TableHead>
-              <TableHead className="text-right">Saídas nos 12 meses</TableHead>
-              <TableHead className="text-right">Turnover 12 meses</TableHead>
-              <TableHead>Contra a meta do ano</TableHead>
+              <TableHead>Mês</TableHead>
+              <TableHead className="text-right">Demissões</TableHead>
+              <TableHead className="text-right">QLP</TableHead>
+              <TableHead className="text-right">Turnover do mês</TableHead>
+              <TableHead>Contra a meta do mês</TableHead>
+              <TableHead className="text-right">Acumulado (YTD)</TableHead>
+              <TableHead>Contra a meta YTD</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {v.rolling.map((r) => {
-              const g = r.rate === null || v.data.annualGoal === null ? "SEM_META" : r.rate <= v.data.annualGoal ? "DENTRO" : r.rate <= v.data.annualGoal * 1.1 ? "ATENCAO" : "FORA";
+            {v.months.map((r) => {
+              const gm = goalStatus(r.rate, v.data.monthlyGoal);
+              const gy = goalStatus(r.ytdRate, v.data.ytdGoal);
               return (
                 <TableRow key={r.month}>
                   <TableCell>{r.label}</TableCell>
                   <TableCell className="text-right tabular-nums">{r.exits}</TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {String(Math.round(r.qlp * 100) / 100).replace(".", ",")}
+                    {r.qlpSource === "cadastro" && (
+                      <span className="ml-1 text-[11px] text-foreground-subtle" title="Estimado pelo cadastro: informe o QLP oficial no fim da página">
+                        est.
+                      </span>
+                    )}
+                  </TableCell>
                   <TableCell className="text-right tabular-nums font-medium">{pct(r.rate)}</TableCell>
-                  <TableCell>{r.rate === null ? <span className="text-foreground-subtle">sem histórico completo</span> : <Badge tone={TONE[g]}>{GOAL_STATUS_LABEL[g]}</Badge>}</TableCell>
+                  <TableCell>{r.rate === null ? <span className="text-foreground-subtle">sem QLP</span> : <Badge tone={TONE[gm]}>{GOAL_STATUS_LABEL[gm]}</Badge>}</TableCell>
+                  <TableCell className="text-right tabular-nums font-medium">{pct(r.ytdRate)}</TableCell>
+                  <TableCell>{r.ytdRate === null ? <span className="text-foreground-subtle">sem QLP</span> : <Badge tone={TONE[gy]}>{GOAL_STATUS_LABEL[gy]}</Badge>}</TableCell>
                 </TableRow>
               );
             })}
@@ -218,7 +232,7 @@ export default async function PdcaTurnoverPage({ searchParams }: { searchParams:
     <>
       <PageHeader
         title="PDCA do turnover"
-        description="Planejar (onde e por que as pessoas saem), fazer (o plano de ação), verificar (o turnover contra a meta) e agir (o que vira padrão). Redução de QLP e transferência para cliente não monitorado não entram na conta."
+        description="Planejar (onde e por que as pessoas saem), fazer (o plano de ação), verificar (o turnover contra a meta, na mesma conta do BI: demissões ÷ QLP) e agir (o que vira padrão). Redução de QLP e transferência para cliente não monitorado não entram nas demissões."
         actions={
           <Button variant="secondary" asChild>
             <Link href={`/desligamentos?ano=${year}`}>Ver desligamentos</Link>
@@ -248,14 +262,15 @@ export default async function PdcaTurnoverPage({ searchParams }: { searchParams:
               <CardHeader>
                 <div>
                   <CardTitle>Situação{v.basis.closedLabel ? ` — fechamento de ${v.basis.closedLabel}` : ""}</CardTitle>
-                  <CardDescription>Turnover dos últimos 12 meses fechados: desligamentos da janela ÷ efetivo médio da janela.</CardDescription>
+                  <CardDescription>Conta do BI: demissões ÷ QLP. No mês, as demissões do mês ÷ o QLP do mês; no ano, as demissões acumuladas ÷ o QLP médio do ano.</CardDescription>
                 </div>
               </CardHeader>
               <CardContent className="flex flex-col gap-4">
                 {v.current ? (
                   <>
-                    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                      <StatCard label="Turnover 12 meses" value={pct(v.current.rate)} hint={`${v.current.exits12} saída(s) ÷ efetivo médio ${v.current.avgHeadcount}`} />
+                    <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+                      <StatCard label="Turnover do ano (YTD)" value={pct(v.current.ytdRate)} hint={`${v.current.ytdExits} demissão(ões) ÷ QLP ${String(Math.round(v.current.ytdQlp * 100) / 100).replace(".", ",")}`} />
+                      <StatCard label="Turnover do mês" value={pct(v.current.rate)} hint={`${v.current.monthExits} demissão(ões) ÷ QLP ${String(Math.round(v.current.monthQlp * 100) / 100).replace(".", ",")}`} />
                       {goals.map((g) => (
                         <StatCard key={g.label} label={g.label} value={pct(g.goal)} tone={TONE[g.status]} hint={GOAL_STATUS_LABEL[g.status]} />
                       ))}
@@ -263,12 +278,22 @@ export default async function PdcaTurnoverPage({ searchParams }: { searchParams:
                     {v.budget !== null && (
                       <p className={cn("rounded-md px-3 py-2 text-sm", v.budget >= 0 ? "bg-success-soft text-success" : "bg-danger-soft text-danger")}>
                         {v.budget >= 0
-                          ? `Para fechar na meta do ano (${pct(v.data.annualGoal)}), ainda cabem cerca de ${v.budget} desligamento(s) na janela de 12 meses.`
-                          : `A janela de 12 meses já passou ${Math.abs(v.budget)} desligamento(s) do que a meta do ano (${pct(v.data.annualGoal)}) comporta.`}
+                          ? `Para fechar na meta do ano (${pct(v.data.annualGoal)}), ainda cabem cerca de ${v.budget} demissão(ões) até aqui.`
+                          : `O ano já passou ${Math.abs(v.budget)} demissão(ões) do que a meta do ano (${pct(v.data.annualGoal)}) comporta.`}
                       </p>
                     )}
+                    {v.basis.historyStartsLate && (
+                      <div className="flex items-start gap-3 rounded-md bg-warning-soft px-3 py-2 text-sm text-warning">
+                        <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                        <p>
+                          {v.firstTermination
+                            ? `O primeiro desligamento importado é de ${formatDate(v.firstTermination)}. Se houve saídas em ${year} antes disso, o turnover está menor que o real: importe o histórico do ano inteiro.`
+                            : "Não há desligamentos importados."}
+                        </p>
+                      </div>
+                    )}
                     <p className="text-xs text-foreground-subtle">
-                      Janela: {v.basis.windowLabel}. Efetivo {SOURCE_LABEL[v.basis.source]}.
+                      Período: {v.basis.windowLabel}. QLP {SOURCE_LABEL[v.basis.source]}.
                       {v.basis.unplaced > 0 ? ` ${v.basis.unplaced} colaborador(es) inativo(s) sem data de saída ficaram fora do efetivo do passado (informe a data na ficha ou importe o desligamento).` : ""}
                     </p>
                   </>
@@ -276,14 +301,8 @@ export default async function PdcaTurnoverPage({ searchParams }: { searchParams:
                   <div className="flex items-start gap-3 rounded-md bg-warning-soft px-3 py-3 text-sm text-warning">
                     <AlertTriangle className="mt-0.5 size-4 shrink-0" />
                     <div className="flex flex-col gap-1">
-                      <p className="font-semibold">O turnover ainda não pode ser calculado com segurança.</p>
-                      <p>
-                        {!v.basis.closedLabel
-                          ? `Nenhum mês de ${year} fechou ainda. Veja o ano anterior ou volte depois da virada do mês.`
-                          : !v.firstTermination
-                            ? "Não há desligamentos importados. Importe o relatório do RH em Desligamentos e Turnover."
-                            : `O histórico importado começa em ${formatDate(v.firstTermination)}, e a janela de 12 meses até ${v.basis.closedLabel} começa antes disso. Calcular assim daria um número menor que o real (os meses sem importação contam como zero saídas). Importe o histórico completo dos 12 meses.`}
-                      </p>
+                      <p className="font-semibold">O turnover ainda não pode ser calculado.</p>
+                      <p>{`O ano de ${year} ainda não começou. Veja o ano anterior.`}</p>
                     </div>
                   </div>
                 )}

@@ -1,7 +1,9 @@
 /**
- * PDCA do turnover. O indicador é o turnover dos ÚLTIMOS 12 MESES: desligamentos da janela de 12 meses ÷ efetivo médio dessa janela.
+ * PDCA do turnover. O indicador segue o BI da empresa: demissões do mês e do ano ÷ QLP (ver `buildYearResults`).
  * As regras abaixo são puras (sem banco) e alimentam a tela do PDCA.
  */
+import { presenceAt, type Presence } from "./presence";
+
 
 /** Uma causa na cascata: `parentId` é o ramo dos dados ("a:motivo:BENEFICIOS") ou outra causa (o "por quê?" do nível seguinte). `root` marca a causa raiz. */
 export type PdcaCause = { id: string; text: string; evidence: string; parentId?: string | null; root?: boolean };
@@ -11,19 +13,36 @@ export type PdcaAction = { id: string; what: string; why: string; who: string; d
 
 export const PDCA_ACTION_STATUS_LABEL: Record<PdcaActionStatus, string> = { PENDENTE: "Pendente", EM_ANDAMENTO: "Em andamento", CONCLUIDA: "Concluída" };
 
-export type WindowMonth = { exits: number; headcountStart: number; headcountEnd: number };
+/**
+ * Conta do BI (número oficial): turnover do mês = demissões do mês ÷ QLP do mês; acumulado do ano (YTD) = demissões acumuladas ÷ média do QLP dos
+ * meses do ano até ali (ex.: 15 demissões ÷ QLP 57,00 = 26,32%). Só entram demissões que contam no turnover.
+ */
+export type YearMonthInput = { month: string; exits: number; qlp: number; qlpSource: "oficial" | "cadastro" };
+export type YearMonthResult = YearMonthInput & {
+  /** Turnover do mês (%). */
+  rate: number | null;
+  ytdExits: number;
+  /** Média do QLP de janeiro até o mês. */
+  ytdQlp: number;
+  /** Turnover acumulado do ano (%). */
+  ytdRate: number | null;
+};
 
-/** Turnover móvel: soma dos desligamentos ÷ média do efetivo mensal (média de início e fim de cada mês) da janela. `null` sem base. */
-export function rollingTurnover(window: WindowMonth[]): number | null {
-  if (window.length === 0) return null;
-  const avg = window.reduce((s, m) => s + (m.headcountStart + m.headcountEnd) / 2, 0) / window.length;
-  if (avg <= 0) return null;
-  const exits = window.reduce((s, m) => s + m.exits, 0);
-  return Math.round((exits / avg) * 1000) / 10;
+/** Demissões ÷ QLP em %, com 2 casas (como o BI). `null` sem QLP. */
+export function qlpRate(exits: number, qlp: number): number | null {
+  return qlp > 0 ? Math.round((exits / qlp) * 10000) / 100 : null;
 }
 
-export function averageHeadcount(window: WindowMonth[]): number {
-  return window.length ? window.reduce((s, m) => s + (m.headcountStart + m.headcountEnd) / 2, 0) / window.length : 0;
+/** Meses fechados do ano, em ordem (janeiro primeiro), com o turnover do mês e o acumulado. */
+export function buildYearResults(months: YearMonthInput[]): YearMonthResult[] {
+  let ytdExits = 0;
+  let qlpSum = 0;
+  return months.map((m, i) => {
+    ytdExits += m.exits;
+    qlpSum += m.qlp;
+    const ytdQlp = qlpSum / (i + 1);
+    return { ...m, rate: qlpRate(m.exits, m.qlp), ytdExits, ytdQlp, ytdRate: qlpRate(ytdExits, ytdQlp) };
+  });
 }
 
 export type GoalStatus = "DENTRO" | "ATENCAO" | "FORA" | "SEM_META";
@@ -70,4 +89,32 @@ export function diagnose(i: DiagnosisInput): string[] {
   if (pctOf(i.unclassified, i.exits) >= 20) out.push(`${pctOf(i.unclassified, i.exits)}% das saídas estão sem classificação de tipo: o diagnóstico fica incompleto até o motivo ser padronizado na planilha do RH.`);
   if (out.length === 0) out.push("Nenhum padrão forte nos números (sem concentração acima de 40% em área, turno ou cargo, e sem excesso de saídas precoces ou pedidos de demissão).");
   return out;
+}
+
+/**
+ * Entrada mensal da conta do BI para os meses fechados do ano (janeiro até `lastIdx`). O QLP do mês é o informado pelo RH (base oficial);
+ * sem ele, estimativa pelo cadastro: média do efetivo no início e no fim do mês.
+ */
+export function yearMonthInputs(args: {
+  year: number;
+  lastIdx: number;
+  now: Date;
+  counted: { terminationDate: Date }[];
+  people: Presence[];
+  headcountBase: Map<string, number>;
+}): YearMonthInput[] {
+  const { year, lastIdx, now, counted, people, headcountBase } = args;
+  return Array.from({ length: Math.max(lastIdx + 1, 0) }, (_, m) => {
+    const key = `${year}-${String(m + 1).padStart(2, "0")}`;
+    const official = headcountBase.get(key);
+    const start = new Date(year, m, 1);
+    const end = new Date(year, m + 1, 1);
+    const estimated = (presenceAt(people, start) + presenceAt(people, end > now ? now : end)) / 2;
+    return {
+      month: key,
+      exits: counted.filter((t) => t.terminationDate.getFullYear() === year && t.terminationDate.getMonth() === m).length,
+      qlp: official ?? estimated,
+      qlpSource: official !== undefined ? ("oficial" as const) : ("cadastro" as const),
+    };
+  });
 }

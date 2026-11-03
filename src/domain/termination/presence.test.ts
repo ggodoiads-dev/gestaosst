@@ -1,7 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { buildPresence, lastClosedMonth, presenceAt, windowIsCovered } from "./presence";
+import { buildPresence, lastClosedMonth, lastCountedMonth, presenceAt, windowIsCovered } from "./presence";
 
 const d = (y: number, m: number, day = 1) => new Date(y, m - 1, day);
+
+describe("lastCountedMonth", () => {
+  it("o mês corrente entra (até hoje); ano passado inteiro; futuro não", () => {
+    const now = new Date(2026, 10, 3);
+    expect(lastCountedMonth(2026, now)).toBe(10);
+    expect(lastCountedMonth(2025, now)).toBe(11);
+    expect(lastCountedMonth(2027, now)).toBe(-1);
+  });
+});
 
 describe("buildPresence", () => {
   it("ativo sem datas conta como presente", () => {

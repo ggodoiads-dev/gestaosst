@@ -1,6 +1,6 @@
 /**
- * Indicadores do turnover que alimentam os IVs do cascateamento (IC "TO geral"). Tudo calculado sobre as saídas da janela de 12 meses fechados
- * que contam no turnover. Regras puras: o serviço só busca os dados e entrega aqui.
+ * Indicadores do turnover que alimentam o IC "TO geral" e os IVs do cascateamento. O turnover segue a conta do BI (demissões ÷ QLP, do mês e
+ * acumulado do ano); os IVs olham as saídas do ano até o mês fechado que contam no turnover. Regras puras: o serviço só busca os dados e entrega aqui.
  */
 import type { ExitRatings } from "./interview";
 import type { TerminationKind } from "./rules";
@@ -16,8 +16,9 @@ export type WindowExit = {
 };
 
 export type TurnoverContext = {
-  /** Turnover dos 12 meses (%), ou null quando a janela não tem histórico completo. */
-  rate: number | null;
+  /** Turnover do mês (%) e acumulado do ano (%), pela conta do BI; null sem QLP. */
+  monthRate: number | null;
+  ytdRate: number | null;
   exits: WindowExit[];
   /** Satisfação da plataforma de entrevistas, por categoria (chave = surveyKey da categoria) e o total. */
   satisfaction: { byCategory: Map<string, { satisfacao: number | null; criticos: number | null }>; total: { satisfacao: number | null; criticos: number | null } | null };
@@ -34,7 +35,7 @@ export const surveyKey = (s: string) =>
 
 const pct = (part: number, total: number) => (total === 0 ? null : Math.round((part / total) * 10000) / 100);
 
-/** Chave do SIGO → valor. Chaves: turnover.rolling12, .exits12, .voluntary.pct, .early90.pct, .interviews.coverage, .wouldreturn.pct, .motive:KEY,
+/** Chave do SIGO → valor. Chaves: turnover.month, turnover.ytd, turnover.exits.ytd, .voluntary.pct, .early90.pct, .interviews.coverage, .wouldreturn.pct, .motive:KEY,
  * .rating:KEY, .turno:NOME, .area:NOME, .cargo:NOME, .platform.sat:CATEGORIA (ou "total"), .platform.crit:CATEGORIA (ou "total"),
  * .platform.motive:MOTIVO (maior % entre as faixas de tempo de casa) e .platform.motive:MOTIVO~FAIXA. NOME vem com encodeURIComponent. */
 export function turnoverMetric(key: string, ctx: TurnoverContext): number | null {
@@ -44,11 +45,12 @@ export function turnoverMetric(key: string, ctx: TurnoverContext): number | null
   const interviews = exits.filter((e) => e.interview);
 
   switch (base) {
-    case "turnover.rolling12":
-    case "turnover.rolling12.ytd":
-      return ctx.rate;
-    case "turnover.exits12":
-      return ctx.rate === null ? null : exits.length;
+    case "turnover.month":
+      return ctx.monthRate;
+    case "turnover.ytd":
+      return ctx.ytdRate;
+    case "turnover.exits.ytd":
+      return exits.length;
     case "turnover.voluntary.pct":
       return pct(exits.filter((e) => e.kind === "VOLUNTARIO").length, exits.length);
     case "turnover.early90.pct": {
@@ -90,13 +92,9 @@ export function turnoverMetric(key: string, ctx: TurnoverContext): number | null
   }
 }
 
-/** Mês (AAAA-MM) em que a janela de 12 meses fechados termina para o período pedido: o próprio mês se já fechou; senão o último fechado. Null no futuro. */
+/** Mês (AAAA-MM) em que a conta termina para o período pedido: o próprio mês (o corrente conta até hoje, como no BI). Null no futuro. */
 export function windowEndFor(periodKey: string, currentKey: string): string | null {
-  if (periodKey > currentKey) return null;
-  if (periodKey < currentKey) return periodKey;
-  const [y, m] = currentKey.split("-").map(Number);
-  const d = new Date(Date.UTC(y, m - 2, 1));
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+  return periodKey > currentKey ? null : periodKey;
 }
 
 export const isTurnoverKey = (key: string) => key.startsWith("turnover.");

@@ -9,7 +9,7 @@ import { surveyKey } from "./turnover-metrics";
 import type { MotivosTempo, Satisfacao } from "./survey";
 
 export const TURNOVER_IC_SEED_KEY = "ic:to-geral";
-export const TURNOVER_IC_SIGO_KEY = "turnover.rolling12";
+export const TURNOVER_IC_SIGO_KEY = "turnover.month";
 
 export type SeedIvNode = {
   seedKey: string;
@@ -105,7 +105,7 @@ export function turnoverStaticIvs(): SeedIvNode[] {
       unit: "NUMBER",
       polarity: "HIGHER",
       sigoKey: `turnover.rating:${rt.key}`,
-      description: "Média das notas das entrevistas de desligamento da janela. Sem meta ainda: informe a nota mínima aceitável.",
+      description: "Média das notas das entrevistas de desligamento do ano. Sem meta ainda: informe a nota mínima aceitável.",
     });
   }
 
@@ -128,7 +128,7 @@ export function turnoverStaticIvs(): SeedIvNode[] {
       unit: "NUMBER",
       polarity: "HIGHER",
       sigoKey: "turnover.rating:treinamento",
-      description: "Média das notas das entrevistas de desligamento da janela. Sem meta ainda.",
+      description: "Média das notas das entrevistas de desligamento do ano. Sem meta ainda.",
     },
     {
       seedKey: "iv:to:voltaria",
@@ -195,7 +195,7 @@ export function turnoverDimensionIv(dim: "turno" | "area" | "cargo", value: stri
     unit: "PERCENT",
     polarity: "LOWER",
     sigoKey: `turnover.${dim}:${encodeURIComponent(value)}`,
-    description: `% das saídas da janela que eram de ${label.toLowerCase()} ${value}. O que é diferente aqui (liderança, escala, carga, ambiente)?`,
+    description: `% das saídas do ano que eram de ${label.toLowerCase()} ${value}. O que é diferente aqui (liderança, escala, carga, ambiente)?`,
   };
 }
 

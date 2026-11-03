@@ -148,8 +148,8 @@ async function resolveOne(key: string, periodKey: string, todayKey: string): Pro
 
 /** Chave que dá o ACUMULADO DO ANO (YTD) de quem tem um resultado do mês contável. Só vale para contagens (somam). */
 export function ytdKeyOf(sigoKey: string): string | null {
-  // O turnover de 12 meses já é um acumulado: o "acumulado do ano" do IC é o mesmo número.
-  if (sigoKey === "turnover.rolling12") return "turnover.rolling12.ytd";
+  // Turnover do TO geral (conta do BI): o mês é demissões do mês ÷ QLP do mês; o acumulado do ano, demissões do ano ÷ QLP médio.
+  if (sigoKey === "turnover.month") return "turnover.ytd";
   const tma = parseTmaKey(sigoKey);
   if (tma) return tma.ytd ? null : sigoKey.replace(/^tma\.(avg|ambev|atendimento|within3h|tmc|stage)/, "tma.$1.ytd");
   const dre = parseDreKey(sigoKey);

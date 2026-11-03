@@ -48,6 +48,13 @@ export function lastClosedMonth(year: number, now: Date): number {
   return now.getMonth() - 1;
 }
 
+/** Último mês que entra na conta do BI no ano (0 a 11): o mês corrente conta até hoje, como no BI; ano passado inteiro; ano futuro, -1. */
+export function lastCountedMonth(year: number, now: Date): number {
+  if (year < now.getFullYear()) return 11;
+  if (year > now.getFullYear()) return -1;
+  return now.getMonth();
+}
+
 /** A janela de 12 meses só é confiável se o histórico importado já existia quando ela começou. `firstExit` = data do desligamento mais antigo importado. */
 export function windowIsCovered(windowStart: Date, firstExit: Date | null): boolean {
   if (!firstExit) return false;

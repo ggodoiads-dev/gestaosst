@@ -60,7 +60,7 @@ export default async function DesligamentosPage({ searchParams }: { searchParams
     <>
       <PageHeader
         title="Desligamentos e turnover"
-        description="Base do turnover da operação. O efetivo de cada mês vem do cadastro de colaboradores (admissão e inativação); os desligamentos vêm da planilha do RH importada aqui. Reimportar o mesmo arquivo não duplica."
+        description="Base do turnover da operação. O turnover segue a conta do BI (demissões ÷ QLP); o QLP de cada mês é informado no PDCA do turnover (ou estimado pelo cadastro) e os desligamentos vêm da planilha do RH importada aqui. Reimportar o mesmo arquivo não duplica."
         actions={
           <div className="flex flex-wrap gap-2">
             <Button variant="secondary" asChild>
@@ -107,7 +107,7 @@ export default async function DesligamentosPage({ searchParams }: { searchParams
           <>
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
               <StatCard label={`Desligamentos em ${year}`} value={t.exits} hint={t.outside > 0 ? `+ ${t.outside} fora do turnover (QLP / transferência)` : undefined} />
-              <StatCard label="Turnover do ano" value={t.yearRate === null ? "—" : `${t.yearRate}%`} hint="desligamentos ÷ efetivo médio" />
+              <StatCard label="Turnover do ano (YTD)" value={t.yearRate === null ? "—" : `${String(t.yearRate).replace(".", ",")}%`} hint="demissões ÷ QLP médio (conta do BI)" />
               <StatCard label="Pedido de demissão" value={t.voluntary} hint={t.exits ? `${Math.round((t.voluntary / t.exits) * 100)}% do total` : undefined} />
               <StatCard label="Iniciativa da empresa" value={t.company} hint={t.exits ? `${Math.round((t.company / t.exits) * 100)}% do total` : undefined} />
               <StatCard label="Saíram em até 90 dias" value={t.early90} tone={t.early90 > 0 ? "warning" : "neutral"} hint={t.withTenure ? `de ${t.withTenure} com data de admissão` : "sem data de admissão"} />
@@ -128,25 +128,28 @@ export default async function DesligamentosPage({ searchParams }: { searchParams
                   <TableHeader>
                     <TableRow>
                       <TableHead>Mês</TableHead>
-                      <TableHead className="text-right">Efetivo no início</TableHead>
-                      <TableHead className="text-right">Efetivo no fim</TableHead>
+                      <TableHead className="text-right">QLP</TableHead>
                       <TableHead className="text-right">Desligamentos</TableHead>
-                      <TableHead className="text-right">Turnover</TableHead>
+                      <TableHead className="text-right">Turnover do mês</TableHead>
+                      <TableHead className="text-right">Acumulado (YTD)</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {v.months.map((m) => (
                       <TableRow key={m.month}>
                         <TableCell>{MONTHS[Number(m.month.slice(5, 7)) - 1]}</TableCell>
-                        <TableCell className="text-right tabular-nums text-foreground-subtle">{m.headcountStart}</TableCell>
-                        <TableCell className="text-right tabular-nums text-foreground-subtle">{m.headcountEnd}</TableCell>
+                        <TableCell className="text-right tabular-nums text-foreground-subtle">
+                          {String(Math.round(m.qlp * 100) / 100).replace(".", ",")}
+                          {m.qlpSource === "cadastro" ? " (est.)" : ""}
+                        </TableCell>
                         <TableCell className="text-right tabular-nums">{m.exits}</TableCell>
-                        <TableCell className="text-right tabular-nums font-medium">{m.rate === null ? "—" : `${m.rate}%`}</TableCell>
+                        <TableCell className="text-right tabular-nums font-medium">{m.rate === null ? "—" : `${String(m.rate).replace(".", ",")}%`}</TableCell>
+                        <TableCell className="text-right tabular-nums font-medium">{m.ytdRate === null ? "—" : `${String(m.ytdRate).replace(".", ",")}%`}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
-                <p className="text-xs text-foreground-subtle">Efetivo estimado pelo cadastro: quem tinha admissão até a data e ainda não estava inativado. Colaborador sem data de admissão conta como já presente.</p>
+                <p className="text-xs text-foreground-subtle">Turnover = demissões ÷ QLP, como no BI. O QLP de cada mês é o que você informa no PDCA do turnover; sem ele, é estimado pelo cadastro (est.): quem tinha admissão até a data e ainda não estava inativado. O mês corrente conta até hoje.</p>
               </CardContent>
             </Card>
 

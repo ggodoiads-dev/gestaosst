@@ -1,18 +1,36 @@
 import { describe, expect, it } from "vitest";
-import { diagnose, exitsBudget, goalStatus, rollingTurnover, type DiagnosisInput } from "./pdca";
+import { buildYearResults, diagnose, exitsBudget, goalStatus, qlpRate, yearMonthInputs, type DiagnosisInput } from "./pdca";
 
-const month = (exits: number, hs = 100, he = 100) => ({ exits, headcountStart: hs, headcountEnd: he });
+const m = (month: string, exits: number, qlp: number) => ({ month, exits, qlp, qlpSource: "oficial" as const });
 
-describe("rollingTurnover", () => {
-  it("12 meses com 1 saída para 100 pessoas dá 12%", () => {
-    expect(rollingTurnover(Array.from({ length: 12 }, () => month(1)))).toBe(12);
+describe("qlpRate", () => {
+  it("demissões ÷ QLP com 2 casas, como o BI", () => {
+    expect(qlpRate(15, 57)).toBe(26.32);
+    expect(qlpRate(1, 54)).toBe(1.85);
+    expect(qlpRate(0, 57)).toBe(0);
   });
-  it("usa a média do efetivo da janela", () => {
-    expect(rollingTurnover([month(5, 90, 110), month(5, 110, 90)])).toBe(10);
+  it("sem QLP não calcula", () => {
+    expect(qlpRate(3, 0)).toBeNull();
   });
-  it("sem base não calcula", () => {
-    expect(rollingTurnover([])).toBeNull();
-    expect(rollingTurnover([month(1, 0, 0)])).toBeNull();
+});
+
+describe("buildYearResults", () => {
+  it("mês = demissões do mês ÷ QLP do mês; acumulado = demissões do ano ÷ média do QLP", () => {
+    const r = buildYearResults([m("2026-01", 0, 54), m("2026-02", 1, 54), m("2026-03", 2, 60)]);
+    expect(r[1].rate).toBe(1.85);
+    expect(r[2].rate).toBe(3.33);
+    expect(r[2].ytdExits).toBe(3);
+    expect(r[2].ytdQlp).toBe(56);
+    expect(r[2].ytdRate).toBe(5.36); // 3 ÷ 56
+  });
+  it("reproduz o BI: 15 demissões no ano com QLP médio 57 dá 26,32%", () => {
+    const qlps = [54, 54, 54, 54, 54, 54, 54, 54, 64, 64]; // média 56,6 ≈ 57 (exemplo)
+    const r = buildYearResults(qlps.map((q, i) => m(`2026-${String(i + 1).padStart(2, "0")}`, i === 1 ? 1 : i === 9 ? 12 : i === 4 ? 2 : 0, q)));
+    expect(r[r.length - 1].ytdExits).toBe(15);
+    expect(r[r.length - 1].ytdRate).toBeCloseTo((15 / 56) * 100, 1);
+  });
+  it("vazio dá lista vazia", () => {
+    expect(buildYearResults([])).toEqual([]);
   });
 });
 
@@ -49,5 +67,19 @@ describe("diagnose", () => {
   });
   it("sem padrão forte, diz isso", () => {
     expect(diagnose(base)[0]).toContain("Nenhum padrão forte");
+  });
+});
+
+describe("yearMonthInputs", () => {
+  const people = Array.from({ length: 50 }, () => ({ admissionDate: new Date(2020, 0, 1), departureDate: null }));
+  const counted = [{ terminationDate: new Date(2026, 1, 10) }, { terminationDate: new Date(2026, 1, 20) }, { terminationDate: new Date(2026, 2, 5) }];
+  it("conta as saídas de cada mês e usa o QLP informado; sem ele, estima pelo cadastro", () => {
+    const r = yearMonthInputs({ year: 2026, lastIdx: 2, now: new Date(2026, 3, 15), counted, people, headcountBase: new Map([["2026-02", 54]]) });
+    expect(r.map((x) => x.exits)).toEqual([0, 2, 1]);
+    expect(r[1]).toMatchObject({ qlp: 54, qlpSource: "oficial" });
+    expect(r[0]).toMatchObject({ qlp: 50, qlpSource: "cadastro" });
+  });
+  it("sem mês fechado, nada", () => {
+    expect(yearMonthInputs({ year: 2026, lastIdx: -1, now: new Date(2026, 0, 10), counted, people, headcountBase: new Map() })).toEqual([]);
   });
 });

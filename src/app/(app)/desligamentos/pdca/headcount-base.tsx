@@ -10,7 +10,7 @@ import { saveHeadcountBaseAction } from "@/server/actions/exit-interview.actions
 
 const MONTHS = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
-/** Efetivo oficial de cada mês. Mês em branco usa a estimativa do cadastro (admissão e inativação). */
+/** QLP oficial de cada mês (o mesmo do BI). Mês em branco usa a estimativa do cadastro (admissão e inativação). */
 export function HeadcountBase({ year, base, lastMonthIdx }: { year: number; base: Record<string, number>; lastMonthIdx: number }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -30,7 +30,7 @@ export function HeadcountBase({ year, base, lastMonthIdx }: { year: number; base
     start(async () => {
       const res = await saveHeadcountBaseAction(entries);
       if (res.ok) {
-        toast.success("Efetivo salvo.");
+        toast.success("QLP salvo.");
         setDirty(false);
         router.refresh();
       } else toast.error(res.error);
@@ -40,9 +40,9 @@ export function HeadcountBase({ year, base, lastMonthIdx }: { year: number; base
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Base de efetivo (opcional)</CardTitle>
+        <CardTitle>QLP de cada mês (igual ao do BI)</CardTitle>
         <CardDescription>
-          O turnover divide as saídas pelo efetivo médio. Por padrão o SIGO estima o efetivo pelo cadastro. Se você tem o efetivo oficial de cada mês (a base do RH), informe aqui: o mês preenchido passa a valer no lugar da estimativa. Deixe em branco para usar o cadastro.
+          O turnover é demissões ÷ QLP. Informe o QLP de cada mês como está no BI: o mês preenchido vale no lugar da estimativa feita pelo cadastro, e é o que faz o turnover do SIGO bater com o do BI. Deixe em branco para usar a estimativa.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
@@ -74,7 +74,7 @@ export function HeadcountBase({ year, base, lastMonthIdx }: { year: number; base
         ))}
         <div>
           <Button onClick={save} loading={pending} disabled={!dirty}>
-            Salvar efetivo
+            Salvar QLP
           </Button>
         </div>
       </CardContent>

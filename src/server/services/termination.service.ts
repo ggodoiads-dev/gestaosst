@@ -12,12 +12,13 @@ import {
   tenureBucket,
   tenureDays,
   terminationKey,
-  turnoverRate,
   TENURE_BUCKET_LABEL,
   TERMINATION_KIND_LABEL,
   type TerminationKind,
 } from "@/domain/termination/rules";
-import { presenceAt } from "@/domain/termination/presence";
+import { lastCountedMonth } from "@/domain/termination/presence";
+import { buildYearResults, yearMonthInputs } from "@/domain/termination/pdca";
+import { loadHeadcountBase } from "@/server/services/exit-interview.service";
 import { loadPresence } from "@/server/services/turnover-base";
 import { parseSpreadsheet, suggestMapping as suggestMappingGeneric, getCell, normalize, parseDateCell } from "@/lib/spreadsheet-import";
 
@@ -155,7 +156,8 @@ export async function deleteTermination(user: CurrentUser, id: string) {
   await recordAudit({ userId: user.id, action: "DELETE", entityType: "Termination", entityId: id, previousValue: { name: row.name, terminationDate: row.terminationDate.toISOString().slice(0, 10), kind: row.kind } });
 }
 
-export type TurnoverMonth = { month: string; exits: number; headcountStart: number; headcountEnd: number; rate: number | null };
+/** Mês da conta do BI: demissões ÷ QLP do mês (rate) e demissões do ano ÷ QLP médio (ytdRate). */
+export type TurnoverMonth = { month: string; exits: number; qlp: number; qlpSource: "oficial" | "cadastro"; rate: number | null; ytdRate: number | null };
 
 export type TurnoverView = {
   ready: boolean;
@@ -181,7 +183,7 @@ const countBy = <T,>(list: T[], key: (t: T) => string | null, empty = "Não info
   return [...m.entries()].map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count);
 };
 
-/** Visão do ano: turnover mês a mês (desligamentos ÷ média do efetivo, que vem do cadastro: admissão e inativação), tipos, tempo de casa e onde se concentram. */
+/** Visão do ano: turnover mês a mês na conta do BI (demissões ÷ QLP; o QLP é o informado pelo RH ou, sem ele, estimado pelo cadastro), tipos, tempo de casa e onde se concentram. */
 export async function getTurnoverView(user: CurrentUser, year: number): Promise<TurnoverView> {
   requirePermission(user, RH);
   const empty: TurnoverView = {
@@ -209,20 +211,10 @@ export async function getTurnoverView(user: CurrentUser, year: number): Promise<
   const kindOfRow = (t: (typeof all)[number]): TerminationKind => effectiveKind(t.kind, t.reason);
   const ofYear = all.filter((t) => t.terminationDate.getFullYear() === year);
   const rows = ofYear.filter((t) => countsAsTurnover(kindOfRow(t)));
-  const { people } = await loadPresence();
+  const [{ people }, headcountBase] = await Promise.all([loadPresence(), loadHeadcountBase()]);
 
   const now = new Date();
-  const months: TurnoverMonth[] = [];
-  for (let m = 0; m < 12; m++) {
-    const start = new Date(year, m, 1);
-    if (start > now) break;
-    const end = new Date(year, m + 1, 1);
-    const hs = presenceAt(people, start);
-    const he = presenceAt(people, end > now ? now : end);
-    const exits = rows.filter((t) => t.terminationDate.getMonth() === m).length;
-    months.push({ month: `${year}-${String(m + 1).padStart(2, "0")}`, exits, headcountStart: hs, headcountEnd: he, rate: turnoverRate(exits, hs, he) });
-  }
-  const avgHeadcount = months.length ? months.reduce((s, x) => s + (x.headcountStart + x.headcountEnd) / 2, 0) / months.length : 0;
+  const months: TurnoverMonth[] = buildYearResults(yearMonthInputs({ year, lastIdx: lastCountedMonth(year, now), now, counted: rows, people, headcountBase })).map((r) => ({ month: r.month, exits: r.exits, qlp: r.qlp, qlpSource: r.qlpSource, rate: r.rate, ytdRate: r.ytdRate }));
   const withDays = rows.map((t) => tenureDays(t.admissionDate, t.terminationDate));
   const known = withDays.filter((d): d is number => d !== null);
   const kindOf = kindOfRow;
@@ -255,8 +247,8 @@ export async function getTurnoverView(user: CurrentUser, year: number): Promise<
       unclassified: rows.filter((t) => kindOfRow(t) === "NAO_CLASSIFICADO").length,
       early90: known.filter((d) => d <= 90).length,
       withTenure: known.length,
-      // Taxa do ano = desligamentos acumulados ÷ efetivo médio dos meses já corridos (não é a soma das taxas mensais).
-      yearRate: avgHeadcount > 0 ? Math.round((rows.length / avgHeadcount) * 1000) / 10 : null,
+      // Taxa do ano (como no BI) = desligamentos acumulados ÷ QLP médio dos meses até hoje (não é a soma das taxas mensais).
+      yearRate: months.length ? months[months.length - 1].ytdRate : null,
       avgTenureDays: known.length ? Math.round(known.reduce((s, d) => s + d, 0) / known.length) : null,
     },
     months,

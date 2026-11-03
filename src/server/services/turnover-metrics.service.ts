@@ -1,8 +1,7 @@
 import "server-only";
 import { db } from "@/server/db";
 import { countsAsTurnover, effectiveKind, tenureDays } from "@/domain/termination/rules";
-import { presenceAt, windowIsCovered } from "@/domain/termination/presence";
-import { rollingTurnover, type WindowMonth } from "@/domain/termination/pdca";
+import { buildYearResults, yearMonthInputs } from "@/domain/termination/pdca";
 import { sanitizeRatings } from "@/domain/termination/interview";
 import { surveyKey, turnoverMetric, windowEndFor, type TurnoverContext, type WindowExit } from "@/domain/termination/turnover-metrics";
 import { loadPresence } from "@/server/services/turnover-base";
@@ -18,31 +17,18 @@ const cache = new Map<string, { at: number; value: Promise<TurnoverContext | nul
 async function buildContext(windowEnd: string): Promise<TurnoverContext | null> {
   const [endYear, endMonth] = windowEnd.split("-").map(Number);
   const endIdx = endMonth - 1;
-  const windowStart = new Date(endYear, endIdx - 11, 1);
+  const yearStart = new Date(endYear, 0, 1);
   const windowEndDate = new Date(endYear, endIdx + 1, 1);
   const now = new Date();
 
   const [presence, headcountBase, all] = await Promise.all([loadPresence(), loadHeadcountBase(), db.termination.findMany({ orderBy: { terminationDate: "asc" } })]);
   const counted = all.filter((t) => countsAsTurnover(effectiveKind(t.kind, t.reason)));
 
-  const window: WindowMonth[] = [];
-  for (let k = 11; k >= 0; k--) {
-    const date = new Date(endYear, endIdx - k, 1);
-    const y = date.getFullYear();
-    const m = date.getMonth();
-    const start = new Date(y, m, 1);
-    const end = new Date(y, m + 1, 1);
-    const official = headcountBase.get(`${y}-${String(m + 1).padStart(2, "0")}`);
-    window.push({
-      exits: counted.filter((t) => t.terminationDate.getFullYear() === y && t.terminationDate.getMonth() === m).length,
-      headcountStart: official ?? presenceAt(presence.people, start),
-      headcountEnd: official ?? presenceAt(presence.people, end > now ? now : end),
-    });
-  }
-  const covered = windowIsCovered(windowStart, presence.firstExit);
-  const rate = covered ? rollingTurnover(window) : null;
+  // Conta do BI: demissões do mês ÷ QLP do mês e demissões do ano ÷ QLP médio do ano.
+  const results = buildYearResults(yearMonthInputs({ year: endYear, lastIdx: endIdx, now, counted, people: presence.people, headcountBase }));
+  const last = results[endIdx] ?? null;
 
-  const inWindow = counted.filter((t) => t.terminationDate >= windowStart && t.terminationDate < windowEndDate);
+  const inWindow = counted.filter((t) => t.terminationDate >= yearStart && t.terminationDate < windowEndDate);
   const interviewByTermination = new Map<string, { primaryReason: string; ratings: ReturnType<typeof sanitizeRatings>; wouldReturn: string | null }>();
   if (inWindow.length > 0) {
     try {
@@ -72,7 +58,7 @@ async function buildContext(windowEnd: string): Promise<TurnoverContext | null> 
     const known = row.values.filter((v): v is number => v !== null);
     platformMotives.set(surveyKey(row.motivo), { peak: known.length ? Math.max(...known) : null, byBucket });
   }
-  return { rate, exits, satisfaction: { byCategory, total: survey.satisfacao?.data.total ?? null }, platformMotives };
+  return { monthRate: last?.rate ?? null, ytdRate: last?.ytdRate ?? null, exits, satisfaction: { byCategory, total: survey.satisfacao?.data.total ?? null }, platformMotives };
 }
 
 /** Valor de uma chave `turnover.*` para o mês pedido (a janela de 12 meses fechados termina nele; no mês corrente, no último fechado). */
