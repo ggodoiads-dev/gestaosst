@@ -59,6 +59,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { logoutAction } from "@/server/actions/auth.actions";
 import { setUiThemeAction } from "@/server/actions/ui-theme.actions";
+import { HomeTabs } from "@/app/(app)/inicio/home-tabs";
 import { CopyrightNotice } from "@/components/domain/copyright-notice";
 import type { NavGroup, NavIconKey } from "@/components/layout/nav-items";
 import { ROLE_LABELS, type RoleKeyValue } from "@/domain/shared/permissions";
@@ -209,6 +210,8 @@ export function AppShell({
     }
   }, [pathname, router]);
   const roleLabel = ROLE_LABELS[user.roleKey as RoleKeyValue] ?? user.roleKey;
+  // Início do visual novo: tela cheia, sem menu fixo nem barra; o menu abre por cima e os controles flutuam.
+  const immersive = novo && pathname === "/inicio";
 
   return (
     <RicoProvider userFirstName={user.name.split(" ")[0]}>
@@ -216,14 +219,15 @@ export function AppShell({
       {mobileOpen && (
         <button
           aria-label="Fechar menu"
-          className="fixed inset-0 z-40 bg-black/40 lg:hidden"
+          className={cn("fixed inset-0 z-40 bg-black/50", !immersive && "lg:hidden")}
           onClick={() => setMobileOpen(false)}
         />
       )}
 
       <aside
         className={cn(
-          "fixed z-50 inset-y-0 left-0 w-64 flex-col transition-transform lg:static lg:flex lg:translate-x-0 print:hidden",
+          "fixed z-50 inset-y-0 left-0 w-64 flex-col transition-transform print:hidden",
+          !immersive && "lg:static lg:flex lg:translate-x-0",
           novo ? "bg-surface-muted border-r border-border" : "bg-brand",
           mobileOpen ? "flex translate-x-0" : "hidden -translate-x-full",
         )}
@@ -234,7 +238,7 @@ export function AppShell({
             <Image src="/sigo-logo.png" alt="SIGO" width={112} height={36} priority />
           </Link>
           <button
-            className="lg:hidden text-white/70 hover:text-white"
+            className={cn("text-white/70 hover:text-white", !immersive && "lg:hidden")}
             onClick={() => setMobileOpen(false)}
             aria-label="Fechar menu"
           >
@@ -292,14 +296,26 @@ export function AppShell({
       </aside>
 
       <div className="flex flex-1 flex-col min-w-0">
-        <header className={cn("sticky top-0 z-30 flex items-center gap-3 h-14 px-3 sm:px-4 print:hidden", novo ? "border-b border-border/70 bg-background/85 backdrop-blur" : "border-b border-border bg-surface")}>
+        <header
+          data-immersive={immersive ? "" : undefined}
+          className={cn(
+            "z-30 flex items-center gap-3 h-14 px-3 sm:px-4 print:hidden",
+            immersive ? "fixed inset-x-0 top-0 h-16 bg-gradient-to-b from-[#010a1f]/70 to-transparent px-4 sm:px-8" : "sticky top-0",
+            !immersive && (novo ? "border-b border-border/70 bg-background/85 backdrop-blur" : "border-b border-border bg-surface"),
+          )}
+        >
           <button
-            className="lg:hidden text-foreground-subtle"
+            className={cn(immersive ? "grid size-10 place-items-center rounded-full border border-white/25 bg-white/10 text-white backdrop-blur hover:bg-white/20" : "lg:hidden text-foreground-subtle")}
             onClick={() => setMobileOpen(true)}
             aria-label="Abrir menu"
           >
             <Menu className="size-5" />
           </button>
+          {immersive && (
+            <Link href="/inicio" className="flex items-center rounded-full bg-brand px-3 py-1.5" aria-label="SIGO">
+              <Image src="/sigo-logo.png" alt="SIGO" width={84} height={27} priority />
+            </Link>
+          )}
 
           {showBack && (
             <button
@@ -313,9 +329,15 @@ export function AppShell({
             </button>
           )}
 
-          <div className="flex-1 max-w-md">
-            <GlobalSearch />
-          </div>
+          {immersive ? (
+            <div className="flex flex-1 justify-center">
+              <HomeTabs active="inicio" floating />
+            </div>
+          ) : (
+            <div className="flex-1 max-w-md">
+              <GlobalSearch />
+            </div>
+          )}
 
           <div className="ml-auto flex items-center gap-1.5">
             <AlertsBell items={alerts.items} count={alerts.count} />
@@ -353,9 +375,9 @@ export function AppShell({
           </div>
         </header>
 
-        <main className="flex-1 min-w-0 pb-24 lg:pb-0">
+        <main className={cn("flex-1 min-w-0", !immersive && "pb-24 lg:pb-0")}>
           {children}
-          <CopyrightNotice className="px-4 pb-6 pt-2" href="/termos-de-uso" />
+          {!immersive && <CopyrightNotice className="px-4 pb-6 pt-2" href="/termos-de-uso" />}
         </main>
       </div>
 

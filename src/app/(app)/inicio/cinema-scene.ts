@@ -62,11 +62,12 @@ function makeNoise(seed: number) {
  * uma câmera que percorre o caminho da carga conforme o scroll. Procedural (sem arquivo de modelo) e com brilho (bloom) para o acabamento de cinema.
  */
 export async function createCinemaScene(THREE: Three, canvas: HTMLCanvasElement): Promise<SceneHandle> {
-  const [{ EffectComposer }, { RenderPass }, { UnrealBloomPass }, { OutputPass }] = await Promise.all([
+  const [{ EffectComposer }, { RenderPass }, { UnrealBloomPass }, { OutputPass }, { RoomEnvironment }] = await Promise.all([
     import("three/examples/jsm/postprocessing/EffectComposer.js"),
     import("three/examples/jsm/postprocessing/RenderPass.js"),
     import("three/examples/jsm/postprocessing/UnrealBloomPass.js"),
     import("three/examples/jsm/postprocessing/OutputPass.js"),
+    import("three/examples/jsm/environments/RoomEnvironment.js"),
   ]);
 
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: "high-performance" });
@@ -74,19 +75,32 @@ export async function createCinemaScene(THREE: Three, canvas: HTMLCanvasElement)
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.15;
 
+  const disposables: { dispose: () => void }[] = [];
   const scene = new THREE.Scene();
   const FOG = 0x020b22;
   scene.background = new THREE.Color(FOG);
   scene.fog = new THREE.FogExp2(FOG, 0.0105);
   const camera = new THREE.PerspectiveCamera(52, 1, 0.1, 700);
+  scene.add(camera);
+  // Reflexos de estúdio para os materiais físicos (o capacete); o relevo e as luzes usam shaders próprios e não são afetados.
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+  scene.environmentIntensity = 0.45;
+
+  const phaseColors = [0x0b1f4a, 0x0d3470, 0x3a2c5c, 0x020b22].map((c) => new THREE.Color(c));
+  const phaseTmp = new THREE.Color();
+  const hat = buildHat(THREE, (o) => disposables.push(o));
+  camera.add(hat);
+  const rim = new THREE.PointLight(0x7fe7ff, 6, 12, 1.5);
+  rim.position.set(-1.5, 1.4, -1.2);
+  camera.add(rim);
 
   const composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
-  const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.8, 0.65, 0.16);
+  const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.8, 0.65, 0.42);
   composer.addPass(bloom);
   composer.addPass(new OutputPass());
 
-  const disposables: { dispose: () => void }[] = [];
   const track = <T extends { dispose: () => void }>(o: T): T => {
     disposables.push(o);
     return o;
@@ -195,7 +209,7 @@ export async function createCinemaScene(THREE: Three, canvas: HTMLCanvasElement)
   ];
 
   // ---------- pontos da rede: feixe de luz, anéis e construções
-  const beamMat = track(new THREE.MeshBasicMaterial({ color: 0x35e1ff, transparent: true, opacity: 0.11, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+  const beamMat = track(new THREE.MeshBasicMaterial({ color: 0x35e1ff, transparent: true, opacity: 0.07, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
   const beamGeo = track(new THREE.CylinderGeometry(0.4, 2.6, 46, 18, 1, true));
   const ringGeo = track(new THREE.RingGeometry(1, 1.12, 64));
   const rings: ThreeNS.Mesh[] = [];
@@ -294,8 +308,8 @@ export async function createCinemaScene(THREE: Three, canvas: HTMLCanvasElement)
       [2, 13, 12],
       [46, 16, 2],
       [78, 19, -34],
-      [100, 36, -84],
-      [86, 62, -52],
+      [108, 40, -40],
+      [112, 58, -4],
     ].map(([x, y, z]) => new THREE.Vector3(x, y, z)),
     false,
     "centripetal",
@@ -309,8 +323,8 @@ export async function createCinemaScene(THREE: Three, canvas: HTMLCanvasElement)
       [14, 4, 0],
       [26, 4, -16],
       [62, 4, -48],
-      [74, 4, -62],
-      [74, 2, -62],
+      [70, 4, -52],
+      [52, 2, -34],
     ].map(([x, y, z]) => new THREE.Vector3(x, y, z)),
     false,
     "centripetal",
@@ -332,6 +346,26 @@ export async function createCinemaScene(THREE: Three, canvas: HTMLCanvasElement)
       const roll = Math.sin(p * 9) * 0.05;
       camera.up.set(Math.sin(roll), Math.cos(roll), 0);
       camera.lookAt(lookPos);
+
+      // cor do céu e da névoa percorre o dia (manhã cedo, dia, entardecer, noite)
+      const ph = p * (phaseColors.length - 1);
+      const pi = Math.min(Math.floor(ph), phaseColors.length - 2);
+      phaseTmp.lerpColors(phaseColors[pi], phaseColors[pi + 1], ph - pi);
+      (scene.background as ThreeNS.Color).copy(phaseTmp);
+      (scene.fog as ThreeNS.FogExp2).color.copy(phaseTmp);
+
+      // capacete: aparece na abertura, some durante a viagem e volta no fechamento
+      const sm = (a: number, b: number, x: number) => {
+        const t = Math.min(Math.max((x - a) / (b - a), 0), 1);
+        return t * t * (3 - 2 * t);
+      };
+      const heroV = 1 - sm(0.08, 0.2, p);
+      const endV = sm(0.84, 0.93, p);
+      const vis = Math.max(heroV, endV);
+      hat.visible = vis > 0.01;
+      hat.scale.setScalar(Math.max(vis, 0.001) * (0.4 + 0.1 * (1 - endV)));
+      hat.position.set(0.95 * heroV * (1 - endV), -0.1 + 1.05 * endV, -3.1);
+      hat.rotation.set(0.5 + Math.sin(time * 0.6) * 0.04, time * 0.5 + p * 4, 0.05);
 
       terrainMat.uniforms.uTime.value = time;
       terrainMat.uniforms.uCam.value.copy(camPos);
@@ -396,7 +430,90 @@ export async function createCinemaScene(THREE: Three, canvas: HTMLCanvasElement)
       disposables.forEach((d) => d.dispose());
       [blds, wins].forEach((m) => m.dispose());
       composer.dispose();
+      pmrem.dispose();
       renderer.dispose();
     },
   };
+}
+
+
+/** Capacete de segurança procedural: cúpula torneada, aba com viseira e três nervuras, em amarelo de segurança com verniz. */
+function buildHat(THREE: Three, onDispose: (o: { dispose: () => void }) => void): ThreeNS.Group {
+  const g = new THREE.Group();
+  const yellow = new THREE.MeshPhysicalMaterial({ color: 0xeab000, roughness: 0.42, metalness: 0.0, clearcoat: 0.8, clearcoatRoughness: 0.25 });
+  const dark = new THREE.MeshStandardMaterial({ color: 0x0f1a2e, roughness: 0.7, metalness: 0.1, side: THREE.DoubleSide });
+  const blue = new THREE.MeshStandardMaterial({ color: 0x0068d8, roughness: 0.4, metalness: 0.2 });
+  onDispose(yellow);
+  onDispose(dark);
+  onDispose(blue);
+
+  // cúpula
+  const profile = [
+    [0.0, 0.98],
+    [0.3, 0.95],
+    [0.58, 0.85],
+    [0.82, 0.66],
+    [0.97, 0.4],
+    [1.03, 0.14],
+    [1.04, 0.0],
+  ].map(([x, y]) => new THREE.Vector2(x, y));
+  const domeGeo = new THREE.LatheGeometry([...profile].reverse(), 72);
+  onDispose(domeGeo);
+  g.add(new THREE.Mesh(domeGeo, yellow));
+
+  // forro interno escuro
+  const linerGeo = new THREE.LatheGeometry(profile.map((v) => new THREE.Vector2(v.x * 0.94, v.y * 0.94)), 48);
+  onDispose(linerGeo);
+  g.add(new THREE.Mesh(linerGeo, dark));
+
+  // aba: contorno circular com projeção à frente (viseira)
+  const brim = new THREE.Shape();
+  const N = 96;
+  for (let i = 0; i <= N; i++) {
+    const a = (i / N) * Math.PI * 2;
+    const front = Math.max(0, Math.cos(a - Math.PI / 2));
+    const r = 1.08 + 0.3 * front * front;
+    const x = Math.cos(a) * r;
+    const y = Math.sin(a) * r;
+    if (i === 0) brim.moveTo(x, y);
+    else brim.lineTo(x, y);
+  }
+  const hole = new THREE.Path();
+  for (let i = 0; i <= 48; i++) {
+    const a = (i / 48) * Math.PI * 2;
+    const x = Math.cos(a) * 0.96;
+    const y = Math.sin(a) * 0.96;
+    if (i === 0) hole.moveTo(x, y);
+    else hole.lineTo(x, y);
+  }
+  brim.holes.push(hole);
+  const brimGeo = new THREE.ExtrudeGeometry(brim, { depth: 0.045, bevelEnabled: true, bevelThickness: 0.02, bevelSize: 0.02, bevelSegments: 3, curveSegments: 48 });
+  onDispose(brimGeo);
+  const brimMesh = new THREE.Mesh(brimGeo, yellow);
+  brimMesh.rotation.x = Math.PI / 2;
+  g.add(brimMesh);
+
+  // nervuras: arcos de trás para a frente por cima da cúpula
+  for (const off of [-0.34, 0, 0.34]) {
+    const pts: ThreeNS.Vector3[] = [];
+    for (let i = 0; i <= 28; i++) {
+      const ang = -Math.PI / 2 + (i / 28) * Math.PI;
+      const y = Math.cos(ang) * 0.93 + 0.04;
+      const z = Math.sin(ang) * 0.98;
+      pts.push(new THREE.Vector3(off * (0.55 + 0.45 * Math.cos(ang)), Math.max(y, 0.02), z));
+    }
+    const tube = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 40, 0.045, 8, false);
+    onDispose(tube);
+    g.add(new THREE.Mesh(tube, yellow));
+  }
+
+  // faixa azul da marca
+  const bandGeo = new THREE.TorusGeometry(1.035, 0.024, 12, 72);
+  onDispose(bandGeo);
+  const band = new THREE.Mesh(bandGeo, blue);
+  band.rotation.x = Math.PI / 2;
+  band.position.y = 0.22;
+  g.add(band);
+
+  return g;
 }

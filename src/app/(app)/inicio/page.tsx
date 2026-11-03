@@ -22,7 +22,7 @@ import { getUserNavWhitelist } from "@/server/services/nav-access.service";
 import { filterNavGroups } from "@/domain/shared/nav-access";
 import { CommandPalette } from "./command-palette";
 import { Cinema } from "./cinema";
-import { HomeTabs } from "./home-tabs";
+import { getYesterdayStory } from "@/server/services/day-story.service";
 import { loadHomeNovoProps } from "./load-home-data";
 import { getUiTheme } from "@/lib/ui-theme";
 import { formatLongDate, APP_TIMEZONE } from "@/lib/dates";
@@ -323,14 +323,11 @@ export default async function InicioPage() {
     if (d.ncAbertas !== null) kpis.push({ label: "NCs abertas", value: String(d.ncAbertas).padStart(2, "0") });
     if (d.equipamentosBloqueados !== null) kpis.push({ label: "Equip. bloqueados", value: String(d.equipamentosBloqueados).padStart(2, "0") });
     if (kpis.length === 0) kpis.push({ label: "Seu checklist hoje", value: `${d.meuChecklist.realizados}/${d.meuChecklist.previstos}`, note: d.meuChecklist.atrasados > 0 ? `${d.meuChecklist.atrasados} atrasado(s)` : "Nada atrasado" });
+    const story = await getYesterdayStory(user);
     return (
       <div className="relative">
-        <div className="pointer-events-none absolute inset-x-0 top-3 z-20 flex justify-center">
-          <div className="pointer-events-auto">
-            <HomeTabs active="inicio" floating />
-          </div>
-        </div>
         <Cinema
+          story={story}
           firstName={d.firstName}
           dateLabel={d.dateLabel}
           alerts={d.alerts.map((a) => ({ key: a.key, title: a.title, severity: a.severity, href: a.href }))}

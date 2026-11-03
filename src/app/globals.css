@@ -353,3 +353,13 @@ html[data-ui="novo"] .sigo-mono {
   font-family: ui-monospace, "JetBrains Mono", SFMono-Regular, Menlo, monospace;
   font-variant-numeric: tabular-nums;
 }
+
+/* Início em tela cheia: os controles flutuam sobre a cena escura, então o texto do cabeçalho fica claro. */
+html[data-ui="novo"] header[data-immersive] .text-foreground,
+html[data-ui="novo"] header[data-immersive] .text-foreground-subtle,
+html[data-ui="novo"] header[data-immersive] svg {
+  color: #ffffff;
+}
+html[data-ui="novo"] header[data-immersive] .hover\:bg-surface-muted:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
