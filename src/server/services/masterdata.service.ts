@@ -274,7 +274,8 @@ export async function getAreaPublicOverview(area: { id: string; name: string }) 
     db.activity.findFirst({ where: { name: { equals: area.name, mode: "insensitive" } }, select: { id: true } }),
     db.activityArea.findMany({ where: { areaId: area.id }, select: { activityId: true } }).catch(() => [] as { activityId: string }[]),
     db.user.findMany({
-      where: { active: true, canRollCall: true, userRollCallAreas: { some: { areaId: area.id } } },
+      // Liderança da área: quem faz a chamada dela, mas nunca quem entra com o perfil Colaborador (operador com acesso a várias áreas não é liderança de nenhuma).
+      where: { active: true, canRollCall: true, role: { key: { not: "COLABORADOR" } }, userRollCallAreas: { some: { areaId: area.id } } },
       select: { name: true, userRollCallTurnos: { select: { turno: { select: { name: true } } } } },
       orderBy: { name: "asc" },
     }),
