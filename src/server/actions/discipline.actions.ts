@@ -16,7 +16,7 @@ async function run(fn: () => Promise<{ id: string } | void>): Promise<Discipline
     return { ok: true, id: created ? created.id : undefined };
   } catch (error) {
     if (error instanceof ForbiddenError) return { ok: false, error: error.message };
-    if (error instanceof Error && /Motivo inválido|Medida inválida|Data inválida|Escreva o motivo|já foi tratada|Registro não encontrado/.test(error.message)) {
+    if (error instanceof Error && /Motivo inválido|Medida inválida|Data inválida|Escreva o motivo|já foi tratada|Registro não encontrado|Nenhum dia|Dias demais/.test(error.message)) {
       return { ok: false, error: error.message };
     }
     console.error("[discipline] falha:", error);
@@ -38,4 +38,22 @@ export async function undoDecisionAction(id: string) {
   return run(async () => {
     await service.undoDecision(await requireUser(), id);
   });
+}
+
+/** Dispensa vários dias do mesmo colaborador com uma justificativa só. */
+export async function dismissManyAction(input: { reason: DisciplineReasonKey; collaboratorId: string; dayKeys: string[]; note: string }): Promise<DisciplineResult & { count?: number }> {
+  let count = 0;
+  const res = await run(async () => {
+    count = await service.dismissMany(await requireUser(), input);
+  });
+  return res.ok ? { ...res, count } : res;
+}
+
+/** Trava o histórico de dias de checklist já fechados (o cadastro novo não muda mais dia passado). */
+export async function freezeHistoryAction(): Promise<DisciplineResult & { count?: number }> {
+  let count = 0;
+  const res = await run(async () => {
+    count = await service.freezeHistory(await requireUser());
+  });
+  return res.ok ? { ...res, count } : res;
 }

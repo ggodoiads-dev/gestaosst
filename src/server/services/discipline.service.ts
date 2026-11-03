@@ -5,7 +5,7 @@ import type { CurrentUser } from "@/server/auth/current-user";
 import { hasPermission, ForbiddenError } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
 import { stepHasDocument } from "@/domain/discipline/document";
-import { listChecklistNonCompletion } from "@/server/services/checklist-compliance.service";
+import { freezeChecklistDays, listChecklistNonCompletion } from "@/server/services/checklist-compliance.service";
 import {
   DISCIPLINE_START_KEY,
   DISCIPLINE_REASONS,
@@ -201,6 +201,32 @@ async function decide(user: CurrentUser, input: DecideInput, status: "APLICADA" 
     newValue: { ...input, status },
   });
   return created;
+}
+
+/** Dispensa de uma vez vários dias de um colaborador (ex.: cadastro de checklist errado gerou ocorrências que não existiram). Cada dia fica registrado como dispensado, com a mesma justificativa. */
+export async function dismissMany(user: CurrentUser, input: { reason: DisciplineReasonKey; collaboratorId: string; dayKeys: string[]; note: string }) {
+  requireDiscipline(user);
+  const dayKeys = [...new Set(input.dayKeys)];
+  if (dayKeys.length === 0) throw new Error("Nenhum dia para dispensar.");
+  if (dayKeys.length > 100) throw new Error("Dias demais de uma vez.");
+  let done = 0;
+  for (const dayKey of dayKeys) {
+    try {
+      await decide(user, { reason: input.reason, collaboratorId: input.collaboratorId, dayKey, step: "DTO_1", note: input.note }, "DISPENSADA");
+      done++;
+    } catch (error) {
+      if (!(error instanceof Error) || error.message !== "Essa ocorrência já foi tratada.") throw error;
+    }
+  }
+  return done;
+}
+
+/** Trava o resultado de todos os dias fechados, desde o início das medidas, que ainda não estavam travados. Usar depois de conferir que a lista está certa. */
+export async function freezeHistory(user: CurrentUser) {
+  requireDiscipline(user);
+  const count = await freezeChecklistDays(DISCIPLINE_START_KEY);
+  await recordAudit({ userId: user.id, action: "CREATE", entityType: "ChecklistDayResult", entityId: "freeze", newValue: { days: count } });
+  return count;
 }
 
 export const applyMeasure = (user: CurrentUser, input: DecideInput) => decide(user, input, "APLICADA");

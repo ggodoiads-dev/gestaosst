@@ -1963,3 +1963,18 @@ model TurnoverHeadcount {
   updatedById String?
   updatedAt   DateTime @updatedAt
 }
+
+/// Resultado travado de cada dia FECHADO de checklist por colaborador (quantos equipamentos eram exigidos e quantos foram feitos). Depois de travado, o
+/// dia não muda mais quando o cadastro muda (equipamento de área, checklist da função...): é daqui que saem as medidas disciplinares.
+model ChecklistDayResult {
+  collaboratorId   String
+  dayKey           String // AAAA-MM-DD
+  collaboratorName String
+  areaName         String?
+  required         Int
+  done             Int
+  frozenAt         DateTime @default(now())
+
+  @@id([collaboratorId, dayKey])
+  @@index([dayKey])
+}

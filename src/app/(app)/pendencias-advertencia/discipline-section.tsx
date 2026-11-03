@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { FileDown, Gavel, History } from "lucide-react";
+import { FileDown, Gavel, History, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatPersonName, initials } from "@/lib/format-name";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { FormField } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter, DialogClose } from "@/components/ui/dialog";
-import { applyMeasureAction, dismissOccurrenceAction, undoDecisionAction } from "@/server/actions/discipline.actions";
+import { applyMeasureAction, dismissManyAction, dismissOccurrenceAction, freezeHistoryAction, undoDecisionAction } from "@/server/actions/discipline.actions";
 import { stepHasDocument } from "@/domain/discipline/document";
 import {
   DISCIPLINE_STEPS,
@@ -159,9 +159,12 @@ export function DisciplineSection({ items, history }: { items: DisciplineEntry[]
             2º DTO → advertência verbal → 1ª escrita → 2ª escrita → suspensão de 1 dia → suspensão de 3 dias → comitê.
           </p>
         </div>
-        <Button size="sm" variant="ghost" onClick={() => setShowHistory((v) => !v)}>
-          <History className="size-4" /> {showHistory ? "Ocultar histórico" : "Histórico de medidas"}
-        </Button>
+        <div className="flex items-center gap-1">
+          <FreezeHistoryButton />
+          <Button size="sm" variant="ghost" onClick={() => setShowHistory((v) => !v)}>
+            <History className="size-4" /> {showHistory ? "Ocultar histórico" : "Histórico de medidas"}
+          </Button>
+        </div>
       </div>
 
       {checklist.length === 0 ? (
@@ -178,6 +181,9 @@ export function DisciplineSection({ items, history }: { items: DisciplineEntry[]
                   {formatPersonName(g.name)}
                 </Link>
                 <span className="text-xs text-foreground-subtle">{g.items.length} dia(s) abaixo de 80%</span>
+                <span className="ml-auto">
+                  <DismissAllDialog name={g.name} collaboratorId={g.id} dayKeys={g.items.map((i) => i.dayKey)} />
+                </span>
               </div>
               <div className="divide-y divide-border">
                 {g.items.map((item) => (
@@ -232,6 +238,82 @@ export function DisciplineSection({ items, history }: { items: DisciplineEntry[]
         </div>
       )}
     </section>
+  );
+}
+
+/** Dispensa de uma vez todos os dias listados de um colaborador, com uma justificativa. */
+function DismissAllDialog({ name, collaboratorId, dayKeys }: { name: string; collaboratorId: string; dayKeys: string[] }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [note, setNote] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  function confirm() {
+    setError(null);
+    startTransition(async () => {
+      const res = await dismissManyAction({ reason: "CHECKLIST", collaboratorId, dayKeys, note });
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      toast.success(`${res.count ?? dayKeys.length} ocorrência(s) dispensada(s).`);
+      setOpen(false);
+      setNote("");
+      router.refresh();
+    });
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <Button size="sm" variant="secondary" onClick={() => setOpen(true)}>
+        Dispensar todos ({dayKeys.length})
+      </Button>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Dispensar {dayKeys.length} ocorrência(s)</DialogTitle>
+        </DialogHeader>
+        <DialogBody className="flex flex-col gap-3 text-sm">
+          <p className="font-medium text-foreground">{formatPersonName(name)}</p>
+          <p className="text-foreground-subtle">
+            Todos os dias listados deste colaborador são dispensados: não geram medida e não avançam a escada. Cada dia fica registrado com a justificativa abaixo, e dá para desfazer um a um no histórico.
+          </p>
+          <FormField label="Motivo da justificativa" required>
+            <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} placeholder="Ex.: o cadastro do checklist estava errado nesses dias, a pessoa cumpriu o checklist dela." />
+          </FormField>
+          {error && <p className="text-sm text-danger">{error}</p>}
+        </DialogBody>
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button type="button" variant="secondary">Cancelar</Button>
+          </DialogClose>
+          <Button onClick={confirm} loading={pending} disabled={note.trim().length < 3}>Dispensar todos</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** Trava o resultado dos dias de checklist já fechados: mudar equipamento de área ou checklist da função não cria mais ocorrência retroativa. */
+function FreezeHistoryButton() {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  function freeze() {
+    if (!window.confirm("Travar o histórico? Os dias de checklist já fechados passam a valer como estão agora e não mudam mais se o cadastro mudar (equipamento de área, checklist da função). Confira antes que a lista de ocorrências está certa.")) return;
+    startTransition(async () => {
+      const res = await freezeHistoryAction();
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success(`${res.count ?? 0} dia(s) travado(s).`);
+      router.refresh();
+    });
+  }
+  return (
+    <Button size="sm" variant="ghost" onClick={freeze} loading={pending} title="Trava os dias já fechados">
+      <Lock className="size-4" /> Travar histórico
+    </Button>
   );
 }
 

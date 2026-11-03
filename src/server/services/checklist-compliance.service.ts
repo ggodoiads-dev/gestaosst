@@ -971,13 +971,14 @@ export type ChecklistNonCompletion = {
   done: number;
 };
 
+export type ChecklistDayResultRow = ChecklistNonCompletion;
+
 /**
- * Dias FECHADOS (de `fromKey` até ontem) em que quem é cobrado por checklist estava escalado e fez MENOS de 80% dos
- * equipamentos exigidos — a base das medidas disciplinares. 80% ou mais = cumpriu, não entra. Não
- * entram: equipamento que estava bloqueado/em manutenção no dia (não era exigido), item justificado com motivo que conta
- * como cumprido e quem ainda não tem login (não tem como fazer).
+ * Resultado de cada dia FECHADO em que quem é cobrado por checklist estava escalado e tinha equipamento exigido (feitos x exigidos). Não entram: equipamento
+ * que estava bloqueado/em manutenção no dia (não era exigido), item justificado com motivo que conta como cumprido (vale como feito) e quem ainda não tem
+ * login (não tem como fazer). `skip` = "colaborador|dia" já travados, que não são recalculados.
  */
-export async function listChecklistNonCompletion(fromKey: string): Promise<ChecklistNonCompletion[]> {
+async function computeChecklistDayResults(fromKey: string, skip: Set<string> = new Set()): Promise<ChecklistDayResultRow[]> {
   const [fy, fm, fd] = fromKey.split("-").map(Number);
   const rangeStart = new Date(fy, fm - 1, fd);
   const rangeEndExclusive = addDays(lastClosedDay(), 1);
@@ -1015,23 +1016,60 @@ export async function listChecklistNonCompletion(fromKey: string): Promise<Check
     eligible.map((c) => c.id),
   );
 
-  const result: ChecklistNonCompletion[] = [];
+  const result: ChecklistDayResultRow[] = [];
   for (const c of eligible) {
     const required = getRequiredItemsForCollaborator(c, requiredByArea).items;
     for (let date = rangeStart; date < rangeEndExclusive; date = addDays(date, 1)) {
       const dayKey = localDateKey(date);
+      if (skip.has(`${c.id}|${dayKey}`)) continue;
       const note = notesByKey.get(`${c.id}|${dayKey}`);
       if ((note ? note.overrideStatus : dayStatusFor(date, c)) !== "TRABALHO") continue;
       const effective = required.filter((e) => !unavailable(e.id, dayKey));
+      if (effective.length === 0) continue;
       const completedIds = new Set([
         ...(completedByKey.get(`${c.userId}|${dayKey}`) ?? []),
         ...justifiedItemIds(justificationsByKey.get(`${c.id}|${dayKey}`)),
       ]);
-      const done = effective.filter((e) => completedIds.has(e.id)).length;
-      if (isChecklistInfraction({ required: effective.length, doneOrJustified: done })) {
-        result.push({ collaboratorId: c.id, name: c.name, areaName: c.area?.name ?? null, dayKey, required: effective.length, done });
-      }
+      result.push({ collaboratorId: c.id, name: c.name, areaName: c.area?.name ?? null, dayKey, required: effective.length, done: effective.filter((e) => completedIds.has(e.id)).length });
     }
   }
   return result;
+}
+
+/** Dias já travados a partir de `fromKey`. Tolerante: sem a tabela, nada está travado e vale o cálculo na hora. */
+async function loadFrozenDays(fromKey: string): Promise<ChecklistDayResultRow[]> {
+  try {
+    const rows = await db.checklistDayResult.findMany({ where: { dayKey: { gte: fromKey } } });
+    return rows.map((r) => ({ collaboratorId: r.collaboratorId, name: r.collaboratorName, areaName: r.areaName, dayKey: r.dayKey, required: r.required, done: r.done }));
+  } catch (error) {
+    console.error("[checklist-compliance] dias travados indisponíveis:", error);
+    return [];
+  }
+}
+
+/**
+ * Dias FECHADOS (de `fromKey` até ontem) em que a pessoa fez MENOS de 80% dos equipamentos exigidos: a base das medidas disciplinares. Dia travado vale
+ * como foi travado (mudar o cadastro depois não cria nem apaga ocorrência de dia passado); dia ainda não travado é calculado com o cadastro de agora.
+ */
+export async function listChecklistNonCompletion(fromKey: string): Promise<ChecklistNonCompletion[]> {
+  const frozen = await loadFrozenDays(fromKey);
+  const live = await computeChecklistDayResults(fromKey, new Set(frozen.map((f) => `${f.collaboratorId}|${f.dayKey}`)));
+  return [...frozen, ...live].filter((r) => isChecklistInfraction({ required: r.required, doneOrJustified: r.done }));
+}
+
+/** Trava o resultado dos dias fechados ainda não travados, de `fromKey` até ontem. Devolve quantos dias-pessoa foram travados. */
+export async function freezeChecklistDays(fromKey: string): Promise<number> {
+  const frozen = await loadFrozenDays(fromKey);
+  const live = await computeChecklistDayResults(fromKey, new Set(frozen.map((f) => `${f.collaboratorId}|${f.dayKey}`)));
+  if (live.length === 0) return 0;
+  const saved = await db.checklistDayResult.createMany({
+    skipDuplicates: true,
+    data: live.map((r) => ({ collaboratorId: r.collaboratorId, dayKey: r.dayKey, collaboratorName: r.name, areaName: r.areaName, required: r.required, done: r.done })),
+  });
+  return saved.count;
+}
+
+/** Ontem (calendário de Brasília), AAAA-MM-DD: o dia que a rotina diária trava. */
+export function yesterdayKey(): string {
+  return localDateKey(lastClosedDay());
 }
