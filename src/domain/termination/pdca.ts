@@ -3,9 +3,11 @@
  * As regras abaixo são puras (sem banco) e alimentam a tela do PDCA.
  */
 
-export type PdcaCause = { id: string; text: string; evidence: string };
+/** Uma causa na cascata: `parentId` é o ramo dos dados ("a:motivo:BENEFICIOS") ou outra causa (o "por quê?" do nível seguinte). `root` marca a causa raiz. */
+export type PdcaCause = { id: string; text: string; evidence: string; parentId?: string | null; root?: boolean };
 export type PdcaActionStatus = "PENDENTE" | "EM_ANDAMENTO" | "CONCLUIDA";
-export type PdcaAction = { id: string; what: string; why: string; who: string; due: string; status: PdcaActionStatus; note: string };
+/** `causeId` liga a ação à causa que ela ataca na cascata. */
+export type PdcaAction = { id: string; what: string; why: string; who: string; due: string; status: PdcaActionStatus; note: string; causeId?: string | null };
 
 export const PDCA_ACTION_STATUS_LABEL: Record<PdcaActionStatus, string> = { PENDENTE: "Pendente", EM_ANDAMENTO: "Em andamento", CONCLUIDA: "Concluída" };
 

@@ -4,7 +4,7 @@ import type { MotivosTempo, Satisfacao } from "@/domain/termination/survey";
 const pct = (v: number | null) => (v === null ? "—" : `${v.toLocaleString("pt-BR")}%`);
 
 /** Quanto maior o %, mais forte o fundo da célula. */
-const shade = (v: number | null) => (v === null ? undefined : { backgroundColor: `color-mix(in srgb, var(--color-primary, #2563eb) ${Math.min(Math.round(v * 1.6), 60)}%, transparent)` });
+const shade = (v: number | null) => (v === null ? undefined : { backgroundColor: `color-mix(in srgb, var(--color-accent) ${Math.min(Math.round(v * 1.6), 60)}%, transparent)` });
 
 export function MotivosTable({ data }: { data: MotivosTempo }) {
   return (

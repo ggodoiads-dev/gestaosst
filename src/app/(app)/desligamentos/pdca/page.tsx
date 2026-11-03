@@ -37,6 +37,9 @@ export default async function PdcaTurnoverPage({ searchParams }: { searchParams:
     { label: "Meta acumulada (YTD)", goal: v.data.ytdGoal, status: v.status.ytd },
     { label: "Meta do ano", goal: v.data.annualGoal, status: v.status.annual },
   ];
+  const rootLabel = v.current
+    ? `Turnover de ${pct(v.current.rate)} nos 12 meses até ${v.basis.closedLabel}${v.data.annualGoal !== null ? ` (meta do ano ${pct(v.data.annualGoal)})` : ""} — ${v.current.exits12} saída(s) para efetivo médio de ${v.current.avgHeadcount}`
+    : "Turnover ainda sem cálculo seguro (veja o aviso acima). Os ramos abaixo usam as saídas dos últimos 12 meses fechados.";
   const lastClosedAnnual = v.rolling.length > 0 ? v.rolling.filter((r) => r.rate !== null) : [];
 
   const interviewsCard = (
@@ -119,7 +122,7 @@ export default async function PdcaTurnoverPage({ searchParams }: { searchParams:
           )}
         </div>
       )}
-      <Link href="/desligamentos/entrevistas/resumo" className="text-xs text-primary underline-offset-2 hover:underline">
+      <Link href="/desligamentos/entrevistas/resumo" className="text-xs text-accent underline-offset-2 hover:underline">
         {v.survey.motivos || v.survey.satisfacao ? "Atualizar o resumo da plataforma" : "Importar o resumo da plataforma de entrevistas (tabelas somadas)"}
       </Link>
     </div>
@@ -242,7 +245,7 @@ export default async function PdcaTurnoverPage({ searchParams }: { searchParams:
               </CardContent>
             </Card>
 
-            <PdcaEditor year={year} initial={v.data} diagnosis={v.diagnosis} kinds={v.kinds} planExtra={interviewsCard} checkSlot={checkCard} />
+            <PdcaEditor year={year} initial={v.data} diagnosis={v.diagnosis} kinds={v.kinds} cascade={v.cascade} rootLabel={rootLabel} planExtra={interviewsCard} checkSlot={checkCard} />
 
             <HeadcountBase year={year} base={v.headcountBase} lastMonthIdx={year === nowYear ? Number(formatInTimeZone(new Date(), APP_TIMEZONE, "M")) - 1 : 11} />
           </>

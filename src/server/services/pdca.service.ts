@@ -5,7 +5,8 @@ import { recordAudit } from "@/server/services/audit";
 import type { CurrentUser } from "@/server/auth/current-user";
 import { requirePermission } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
-import { countsAsTurnover, effectiveKind, tenureDays, TERMINATION_KIND_LABEL, type TerminationKind } from "@/domain/termination/rules";
+import { countsAsTurnover, effectiveKind, tenureBucket, tenureDays, TENURE_BUCKET_LABEL, TERMINATION_KIND_LABEL, type TerminationKind } from "@/domain/termination/rules";
+import { buildCascade, type CascadeGroup } from "@/domain/termination/cascade";
 import { lastClosedMonth, presenceAt, windowIsCovered } from "@/domain/termination/presence";
 import { loadPresence } from "@/server/services/turnover-base";
 import { interviewDiagnosis, sanitizeRatings, summarizeInterviews, type InterviewSummary } from "@/domain/termination/interview";
@@ -41,6 +42,8 @@ export type PdcaView = {
   kinds: { label: string; count: number }[];
   interviews: InterviewSummary | null;
   survey: Awaited<ReturnType<typeof getExitSurvey>>;
+  /** Ramos da cascata de causas (Plan), montados dos dados da janela. */
+  cascade: CascadeGroup[];
   /** Efetivo oficial informado (AAAA-MM → pessoas), no lugar da estimativa do cadastro. */
   headcountBase: Record<string, number>;
   /** Como o número foi calculado: o que o RH precisa ver para confiar nele. */
@@ -65,12 +68,12 @@ const str = (v: unknown, max = 600) => (typeof v === "string" ? v.trim().slice(0
 const STATUSES: PdcaActionStatus[] = ["PENDENTE", "EM_ANDAMENTO", "CONCLUIDA"];
 
 function toCauses(value: unknown): PdcaCause[] {
-  return readList(value, (o) => (str(o.text) ? { id: str(o.id, 60) || randomUUID(), text: str(o.text), evidence: str(o.evidence) } : null)).slice(0, 30);
+  return readList(value, (o) => (str(o.text) ? { id: str(o.id, 60) || randomUUID(), text: str(o.text), evidence: str(o.evidence), parentId: str(o.parentId, 80) || null, root: o.root === true } : null)).slice(0, 200);
 }
 function toActions(value: unknown): PdcaAction[] {
   return readList(value, (o) =>
     str(o.what)
-      ? { id: str(o.id, 60) || randomUUID(), what: str(o.what), why: str(o.why), who: str(o.who, 120), due: /^\d{4}-\d{2}-\d{2}$/.test(str(o.due, 10)) ? str(o.due, 10) : "", status: STATUSES.includes(o.status as PdcaActionStatus) ? (o.status as PdcaActionStatus) : "PENDENTE", note: str(o.note) }
+      ? { id: str(o.id, 60) || randomUUID(), what: str(o.what), why: str(o.why), who: str(o.who, 120), due: /^\d{4}-\d{2}-\d{2}$/.test(str(o.due, 10)) ? str(o.due, 10) : "", status: STATUSES.includes(o.status as PdcaActionStatus) ? (o.status as PdcaActionStatus) : "PENDENTE", note: str(o.note), causeId: str(o.causeId, 60) || null }
       : null,
   ).slice(0, 60);
 }
@@ -189,6 +192,30 @@ export async function getPdcaView(user: CurrentUser, year: number): Promise<Pdca
   const kinds = new Map<string, number>();
   for (const t of inWindow) kinds.set(TERMINATION_KIND_LABEL[kindOf(t)].split(" (")[0], (kinds.get(TERMINATION_KIND_LABEL[kindOf(t)].split(" (")[0]) ?? 0) + 1);
 
+  const countBy = (key: (t: (typeof inWindow)[number]) => string | null) => {
+    const m = new Map<string, number>();
+    for (const t of inWindow) {
+      const k = key(t);
+      if (k) m.set(k, (m.get(k) ?? 0) + 1);
+    }
+    return [...m.entries()].sort((a, b) => b[1] - a[1]).map(([label, count]) => ({ label, count }));
+  };
+  const cascade = ready
+    ? buildCascade({
+        total: inWindow.length,
+        kinds: [...kinds.entries()].map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count),
+        motives: interviews?.primary ?? [],
+        interviewCount: interviews?.count ?? 0,
+        ratings: interviews?.ratings ?? [],
+        wouldReturnPct: interviews?.wouldReturnPct ?? null,
+        tenure: (["ATE_90", "91_180", "181_365", "MAIS_1_ANO"] as const).map((b) => ({ label: TENURE_BUCKET_LABEL[b], count: inWindow.filter((t) => tenureBucket(tenureDays(t.admissionDate, t.terminationDate)) === b).length })),
+        areas: countBy((t) => t.areaName),
+        turnos: countBy((t) => t.turnoName),
+        cargos: countBy((t) => t.cargo),
+        survey: { motivos: survey.motivos?.data ?? null, satisfacao: survey.satisfacao?.data ?? null, motivosPeriod: survey.motivos?.periodLabel ?? null, satisfacaoPeriod: survey.satisfacao?.periodLabel ?? null },
+      })
+    : [];
+
   return {
     ready,
     year,
@@ -202,6 +229,7 @@ export async function getPdcaView(user: CurrentUser, year: number): Promise<Pdca
     kinds: [...kinds.entries()].map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count),
     interviews,
     survey,
+    cascade,
     headcountBase: Object.fromEntries(headcountBase),
     basis: {
       closedLabel: lastMonthIdx >= 0 ? `${MONTH_LABEL[lastMonthIdx]}/${year}` : null,

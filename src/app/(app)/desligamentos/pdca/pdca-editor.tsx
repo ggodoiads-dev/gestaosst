@@ -11,14 +11,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { savePdcaAction } from "@/server/actions/pdca.actions";
 import type { PdcaData } from "@/server/services/pdca.service";
-import { PDCA_ACTION_STATUS_LABEL, type PdcaAction, type PdcaActionStatus, type PdcaCause } from "@/domain/termination/pdca";
+import { PDCA_ACTION_STATUS_LABEL, type PdcaAction, type PdcaActionStatus } from "@/domain/termination/pdca";
+import type { CascadeGroup } from "@/domain/termination/cascade";
+import { CauseCascade } from "./cause-cascade";
 
 const newId = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : String(Math.random()).slice(2));
 const field = "flex flex-col gap-1.5";
 const label = "text-[13px] font-medium text-foreground-muted";
 
 /** Metas, causas (Plan), ações (Do) e padronização (Act) do ano, salvos juntos. O Check (acompanhamento) vem pronto do servidor. */
-export function PdcaEditor({ year, initial, diagnosis, kinds, planExtra, checkSlot }: { year: number; initial: PdcaData; diagnosis: string[]; kinds: { label: string; count: number }[]; planExtra?: React.ReactNode; checkSlot?: React.ReactNode }) {
+export function PdcaEditor({ year, initial, diagnosis, kinds, cascade, rootLabel, planExtra, checkSlot }: { year: number; initial: PdcaData; diagnosis: string[]; kinds: { label: string; count: number }[]; cascade: CascadeGroup[]; rootLabel: string; planExtra?: React.ReactNode; checkSlot?: React.ReactNode }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [data, setData] = useState<PdcaData>(initial);
@@ -38,7 +40,6 @@ export function PdcaEditor({ year, initial, diagnosis, kinds, planExtra, checkSl
     setGoals((g) => ({ ...g, ...patch }));
     setDirty(true);
   };
-  const setCause = (id: string, patch: Partial<PdcaCause>) => set({ causes: data.causes.map((c) => (c.id === id ? { ...c, ...patch } : c)) });
   const setAction = (id: string, patch: Partial<PdcaAction>) => set({ actions: data.actions.map((a) => (a.id === id ? { ...a, ...patch } : a)) });
 
   function save() {
@@ -81,8 +82,8 @@ export function PdcaEditor({ year, initial, diagnosis, kinds, planExtra, checkSl
 
       <Card>
         <CardHeader>
-          <CardTitle>Plan — diagnóstico e causas</CardTitle>
-          <CardDescription>O diagnóstico vem dos números das saídas dos últimos 12 meses. As causas são suas: registre a hipótese e a evidência que a sustenta (entrevista de desligamento, dado, observação).</CardDescription>
+          <CardTitle>Plan — diagnóstico e cascata de causas</CardTitle>
+          <CardDescription>O diagnóstico e os ramos vêm dos números das saídas dos últimos 12 meses. Você desce cada ramo com “por quê?” até a causa raiz e registra a evidência de cada passo.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <div className="flex flex-col gap-2 rounded-md bg-surface-muted p-3">
@@ -93,20 +94,7 @@ export function PdcaEditor({ year, initial, diagnosis, kinds, planExtra, checkSl
             {kinds.length > 0 && <p className="text-xs text-foreground-subtle">Tipos na janela: {kinds.map((k) => `${k.label} ${k.count}`).join(" · ")}.</p>}
           </div>
           {planExtra}
-          {data.causes.map((c) => (
-            <div key={c.id} className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr_auto]">
-              <Textarea rows={2} value={c.text} onChange={(e) => setCause(c.id, { text: e.target.value })} placeholder="Causa (hipótese)" maxLength={600} />
-              <Textarea rows={2} value={c.evidence} onChange={(e) => setCause(c.id, { evidence: e.target.value })} placeholder="Evidência" maxLength={600} />
-              <Button size="icon" variant="ghost" onClick={() => set({ causes: data.causes.filter((x) => x.id !== c.id) })} aria-label="Remover causa">
-                <Trash2 className="size-4" />
-              </Button>
-            </div>
-          ))}
-          <div>
-            <Button variant="secondary" onClick={() => set({ causes: [...data.causes, { id: newId(), text: "", evidence: "" }] })}>
-              <Plus className="size-4" /> Adicionar causa
-            </Button>
-          </div>
+          <CauseCascade rootLabel={rootLabel} groups={cascade} causes={data.causes} actions={data.actions} onCauses={(causes) => set({ causes })} onActions={(actions) => set({ actions })} />
         </CardContent>
       </Card>
 
@@ -122,6 +110,19 @@ export function PdcaEditor({ year, initial, diagnosis, kinds, planExtra, checkSl
                 <Textarea rows={2} value={a.what} onChange={(e) => setAction(a.id, { what: e.target.value })} placeholder="O que será feito" maxLength={600} />
                 <Textarea rows={2} value={a.why} onChange={(e) => setAction(a.id, { why: e.target.value })} placeholder="Por quê (qual causa ataca)" maxLength={600} />
               </div>
+              <Select value={a.causeId ?? "none"} onValueChange={(v) => setAction(a.id, { causeId: v === "none" ? null : v })}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Sem causa ligada na cascata</SelectItem>
+                  {data.causes.filter((c) => c.text.trim() !== "").map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {(c.root ? "Causa raiz: " : "Causa: ") + (c.text.length > 80 ? c.text.slice(0, 80) + "…" : c.text)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_9rem_10rem_auto]">
                 <Input value={a.who} onChange={(e) => setAction(a.id, { who: e.target.value })} placeholder="Quem" maxLength={120} />
                 <Input type="date" value={a.due} onChange={(e) => setAction(a.id, { due: e.target.value })} aria-label="Prazo" />
@@ -145,7 +146,7 @@ export function PdcaEditor({ year, initial, diagnosis, kinds, planExtra, checkSl
             </div>
           ))}
           <div>
-            <Button variant="secondary" onClick={() => set({ actions: [...data.actions, { id: newId(), what: "", why: "", who: "", due: "", status: "PENDENTE", note: "" }] })}>
+            <Button variant="secondary" onClick={() => set({ actions: [...data.actions, { id: newId(), what: "", why: "", who: "", due: "", status: "PENDENTE", note: "", causeId: null }] })}>
               <Plus className="size-4" /> Adicionar ação
             </Button>
           </div>
