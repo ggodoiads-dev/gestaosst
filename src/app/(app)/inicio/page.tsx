@@ -21,10 +21,10 @@ import { getNavGroups } from "@/components/layout/nav-items";
 import { getUserNavWhitelist } from "@/server/services/nav-access.service";
 import { filterNavGroups } from "@/domain/shared/nav-access";
 import { CommandPalette } from "./command-palette";
-import { HomeNovo } from "./home-novo";
+import { Cinema } from "./cinema";
+import { HomeTabs } from "./home-tabs";
+import { loadHomeNovoProps } from "./load-home-data";
 import { getUiTheme } from "@/lib/ui-theme";
-import { listAlerts } from "@/server/services/daily-digest.service";
-import { getPdcaView } from "@/server/services/pdca.service";
 import { formatLongDate, APP_TIMEZONE } from "@/lib/dates";
 import { formatInTimeZone } from "date-fns-tz";
 import { cn } from "@/lib/utils";
@@ -314,6 +314,33 @@ export default async function InicioPage() {
   const user = await requireUser();
   const firstName = user.name.split(" ")[0];
 
+  // Visual novo (opt-in): o Início vira a experiência em 3D e os números ficam na aba Painel. O clássico segue logo abaixo, sem mudança.
+  if ((await getUiTheme()) === "novo") {
+    const d = await loadHomeNovoProps(user);
+    const kpis: { label: string; value: string; unit?: string; note?: string }[] = [];
+    if (d.checklistPct !== null) kpis.push({ label: "Aderência de checklist", value: String(d.checklistPct), unit: "%", note: "Último dia fechado" });
+    if (d.turnover && d.turnover.rate !== null) kpis.push({ label: "Turnover 12 meses", value: String(d.turnover.rate).replace(".", ","), unit: "%", note: d.turnover.goal !== null ? `Meta do ano ${String(d.turnover.goal).replace(".", ",")}%` : undefined });
+    if (d.ncAbertas !== null) kpis.push({ label: "NCs abertas", value: String(d.ncAbertas).padStart(2, "0") });
+    if (d.equipamentosBloqueados !== null) kpis.push({ label: "Equip. bloqueados", value: String(d.equipamentosBloqueados).padStart(2, "0") });
+    if (kpis.length === 0) kpis.push({ label: "Seu checklist hoje", value: `${d.meuChecklist.realizados}/${d.meuChecklist.previstos}`, note: d.meuChecklist.atrasados > 0 ? `${d.meuChecklist.atrasados} atrasado(s)` : "Nada atrasado" });
+    return (
+      <div className="relative">
+        <div className="pointer-events-none absolute inset-x-0 top-3 z-20 flex justify-center">
+          <div className="pointer-events-auto">
+            <HomeTabs active="inicio" floating />
+          </div>
+        </div>
+        <Cinema
+          firstName={d.firstName}
+          dateLabel={d.dateLabel}
+          alerts={d.alerts.map((a) => ({ key: a.key, title: a.title, severity: a.severity, href: a.href }))}
+          kpis={kpis}
+          panelHref="/painel"
+        />
+      </div>
+    );
+  }
+
   // Acesso restrito por abas (Auditor): a tela inicial é a mesma de todo mundo, mas só mostra os blocos das abas liberadas.
   const whitelist = await getUserNavWhitelist(user);
   const allowedSet = whitelist ? new Set(whitelist) : null;
@@ -349,38 +376,6 @@ export default async function InicioPage() {
   const headlineSummary = gestaoSummary ?? colaboradorSummary;
 
   const navGroups = allowedSet ? filterNavGroups(getNavGroups(user), allowedSet) : getNavGroups(user);
-
-  // Visual novo (opt-in): mesma informação, outra apresentação. O clássico segue logo abaixo, sem mudança.
-  if ((await getUiTheme()) === "novo") {
-    const canSeeConsolidated = hasPermission(user, PERMISSIONS.INDICATORS_VIEW_CONSOLIDATED) && allow("/indicadores");
-    const [alerts, pdca] = await Promise.all([
-      canSeeConsolidated ? listAlerts().catch(() => []) : Promise.resolve([]),
-      canSeeHr && allow("/desligamentos") ? getPdcaView(user, new Date().getFullYear()).catch(() => null) : Promise.resolve(null),
-    ]);
-    const checklistPct = checklistComplianceDashboard ? compliancePercent(checklistComplianceDashboard.today) : null;
-    const turnoverRate = pdca?.current?.rate ?? null;
-    const turnoverGoal = pdca?.data.annualGoal ?? null;
-    return (
-      <HomeNovo
-        firstName={firstName}
-        dateLabel={formatLongDate(new Date())}
-        alerts={alerts}
-        checklistPct={checklistPct}
-        turnover={turnoverRate !== null ? { rate: turnoverRate, goal: turnoverGoal } : null}
-        ncAbertas={gestaoSummary?.ncAbertas ?? null}
-        equipamentosBloqueados={gestaoSummary?.equipamentosBloqueados ?? null}
-        meuChecklist={{ previstos: colaboradorSummary.previstos, realizados: colaboradorSummary.realizados, atrasados: colaboradorSummary.atrasados }}
-        quickLinks={navGroups.flatMap((g) => g.items).filter((i) => i.href !== "/inicio").slice(0, 8).map((i) => ({ href: i.href, label: i.label }))}
-        featured={
-          turnoverRate !== null
-            ? { id: "turnover" as const, label: "Turnover 12 meses", value: String(turnoverRate).replace(".", ","), unit: "%", note: turnoverGoal !== null ? `Meta do ano ${String(turnoverGoal).replace(".", ",")}%. Abrir o PDCA do turnover.` : "Abrir o PDCA do turnover.", href: "/desligamentos/pdca" }
-            : checklistPct !== null
-              ? { id: "checklist" as const, label: "Aderência de checklist", value: String(checklistPct), unit: "%", note: "Último dia fechado. Abrir os indicadores.", href: "/indicadores" }
-              : null
-        }
-      />
-    );
-  }
 
   const briefingContext: DailyBriefingContext = {
     seguranca: {
