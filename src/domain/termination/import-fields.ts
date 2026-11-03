@@ -8,7 +8,7 @@ export const TERMINATION_IMPORT_FIELDS: { key: TerminationImportField; label: st
   { key: "cargo", label: "Cargo / função", required: false },
   { key: "area", label: "Área / setor", required: false },
   { key: "turno", label: "Turno", required: false },
-  { key: "kind", label: "Tipo (pedido de demissão, dispensa, acordo...)", required: false },
+  { key: "kind", label: "Forma de demissão (pedido de demissão, dispensa, acordo, redução de QLP...) — é ela que define se conta no turnover", required: false },
   { key: "reason", label: "Motivo do desligamento", required: false },
   { key: "notes", label: "Observações", required: false },
 ];
@@ -24,7 +24,7 @@ export const TERMINATION_FIELD_ALIASES: Record<TerminationImportField, string[]>
   cargo: ["=cargo", "=funcao"],
   area: ["=area", "=setor", "=departamento", "=secao"],
   turno: ["=turno"],
-  kind: ["tipodedesligamento", "tipodesligamento", "iniciativa", "modalidade", "=tipo"],
+  kind: ["formadedemissao", "formadedesligamento", "formadadispensa", "tipodedesligamento", "tipodesligamento", "tipodedispensa", "iniciativa", "modalidade", "=tipo"],
   reason: ["motivododesligamento", "motivodesligamento", "motivodademissao", "causadodesligamento", "=motivo", "=causa"],
   notes: ["observacoes", "observacao", "=obs"],
 };

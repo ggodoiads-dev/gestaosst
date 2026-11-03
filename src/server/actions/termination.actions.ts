@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireUser, requirePermission, ForbiddenError } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
 import * as service from "@/server/services/termination.service";
-import type { TerminationImportMapping, TerminationImportRow } from "@/server/services/termination.service";
+import type { TerminationImportMapping, TerminationImportMode, TerminationImportRow } from "@/server/services/termination.service";
 
 export type UploadResult = { ok: true; headers: string[]; rows: string[][]; suggestedMapping: TerminationImportMapping } | { ok: false; error: string };
 
@@ -26,10 +26,10 @@ export async function uploadTerminationSpreadsheetAction(formData: FormData): Pr
 
 export type PreviewResult = { ok: true; rows: TerminationImportRow[] } | { ok: false; error: string };
 
-export async function previewTerminationImportAction(rows: string[][], mapping: TerminationImportMapping): Promise<PreviewResult> {
+export async function previewTerminationImportAction(rows: string[][], mapping: TerminationImportMapping, mode: TerminationImportMode = "update"): Promise<PreviewResult> {
   try {
     const user = await requireUser();
-    return { ok: true, rows: await service.buildTerminationImportPreview(user, rows, mapping) };
+    return { ok: true, rows: await service.buildTerminationImportPreview(user, rows, mapping, mode) };
   } catch (error) {
     if (error instanceof ForbiddenError) return { ok: false, error: error.message };
     console.error("[termination] falha ao montar preview:", error);
@@ -37,12 +37,12 @@ export async function previewTerminationImportAction(rows: string[][], mapping: 
   }
 }
 
-export type CommitResult = { ok: true; created: number; skipped: number; errors: number } | { ok: false; error: string };
+export type CommitResult = { ok: true; created: number; updated: number; removed: number; skipped: number; errors: number } | { ok: false; error: string };
 
-export async function commitTerminationImportAction(rows: TerminationImportRow[]): Promise<CommitResult> {
+export async function commitTerminationImportAction(rows: TerminationImportRow[], mode: TerminationImportMode = "update"): Promise<CommitResult> {
   try {
     const user = await requireUser();
-    const result = await service.commitTerminationImport(user, rows);
+    const result = await service.commitTerminationImport(user, rows, mode);
     revalidatePath("/desligamentos");
     return { ok: true, ...result };
   } catch (error) {

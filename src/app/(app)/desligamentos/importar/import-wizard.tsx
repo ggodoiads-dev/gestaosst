@@ -15,7 +15,7 @@ import {
   previewTerminationImportAction,
   commitTerminationImportAction,
 } from "@/server/actions/termination.actions";
-import type { TerminationImportRow } from "@/server/services/termination.service";
+import type { TerminationImportMode, TerminationImportRow } from "@/server/services/termination.service";
 import { formatDate } from "@/lib/dates";
 
 type Step = "upload" | "mapping" | "review" | "done";
@@ -30,7 +30,8 @@ export function ImportWizard() {
   const [rows, setRows] = useState<string[][]>([]);
   const [mapping, setMapping] = useState<TerminationImportMapping>({});
   const [previewRows, setPreviewRows] = useState<TerminationImportRow[]>([]);
-  const [result, setResult] = useState<{ created: number; skipped: number; errors: number } | null>(null);
+  const [result, setResult] = useState<{ created: number; updated: number; removed: number; skipped: number; errors: number } | null>(null);
+  const [mode, setMode] = useState<TerminationImportMode>("update");
 
   function handleUpload() {
     const file = fileInputRef.current?.files?.[0];
@@ -57,7 +58,7 @@ export function ImportWizard() {
   function handleBuildPreview() {
     setError(null);
     startTransition(async () => {
-      const res = await previewTerminationImportAction(rows, mapping);
+      const res = await previewTerminationImportAction(rows, mapping, mode);
       if (!res.ok) {
         setError(res.error);
         return;
@@ -70,17 +71,18 @@ export function ImportWizard() {
   function handleCommit() {
     setError(null);
     startTransition(async () => {
-      const res = await commitTerminationImportAction(previewRows);
+      const res = await commitTerminationImportAction(previewRows, mode);
       if (!res.ok) {
         setError(res.error);
         return;
       }
-      setResult({ created: res.created, skipped: res.skipped, errors: res.errors });
+      setResult({ created: res.created, updated: res.updated, removed: res.removed, skipped: res.skipped, errors: res.errors });
       setStep("done");
     });
   }
 
   const toCreate = previewRows.filter((r) => r.action === "create").length;
+  const toUpdate = previewRows.filter((r) => r.action === "update").length;
   const withErrors = previewRows.filter((r) => r.action === "error").length;
   const skipped = previewRows.filter((r) => r.action === "skip").length;
   const unclassified = previewRows.filter((r) => r.action === "create" && r.kind === "NAO_CLASSIFICADO").length;
@@ -137,6 +139,22 @@ export function ImportWizard() {
               ))}
             </div>
 
+            <div className="flex flex-col gap-2 rounded-md border border-border p-3">
+              <p className="text-[13px] font-medium text-foreground-muted">Se o desligamento já estiver no SIGO</p>
+              <label className="flex items-start gap-2 text-sm text-foreground-muted">
+                <input type="radio" name="mode" checked={mode === "update"} onChange={() => setMode("update")} className="mt-1" />
+                <span>
+                  <strong>Atualizar</strong> com o que veio da planilha (recomendado). Corrige a forma de demissão e as outras colunas; o que não está na planilha fica como está.
+                </span>
+              </label>
+              <label className="flex items-start gap-2 text-sm text-foreground-muted">
+                <input type="radio" name="mode" checked={mode === "replace"} onChange={() => setMode("replace")} className="mt-1" />
+                <span>
+                  <strong>Substituir tudo:</strong> apaga todos os desligamentos importados antes, e as entrevistas ligadas a eles, e importa de novo. Use se a importação anterior veio com colunas erradas.
+                </span>
+              </label>
+            </div>
+
             {rows.length > 0 && (
               <div>
                 <p className="mb-1.5 text-xs font-medium text-foreground-subtle">Prévia — {rows.length} linha(s) na planilha</p>
@@ -180,7 +198,7 @@ export function ImportWizard() {
           <CardHeader>
             <CardTitle>3. Revisar e confirmar</CardTitle>
             <CardDescription>
-              {toCreate} desligamento(s) pronto(s) para importar{skipped > 0 ? `, ${skipped} ignorado(s) (já estão no SIGO ou repetidos)` : ""}
+              {toCreate} novo(s) para importar{toUpdate > 0 ? `, ${toUpdate} já existente(s) para atualizar` : ""}{skipped > 0 ? `, ${skipped} ignorado(s) (repetidos no arquivo)` : ""}{mode === "replace" ? ". Todos os desligamentos importados antes (e as entrevistas ligadas a eles) serão apagados antes" : ""}
               {withErrors > 0 ? `, ${withErrors} com erro` : ""}.
               {unclassified > 0 ? ` ${unclassified} sem classificação de tipo: o motivo da planilha não indica pedido de demissão nem iniciativa da empresa.` : ""}
               {unlinked > 0 ? ` ${unlinked} não ligado(s) a um colaborador cadastrado (entram assim mesmo).` : ""}
@@ -219,6 +237,7 @@ export function ImportWizard() {
                     </TableCell>
                     <TableCell>
                       {row.action === "create" && <Badge tone="success">Criar</Badge>}
+                      {row.action === "update" && <Badge tone="info">Atualizar</Badge>}
                       {row.action === "skip" && <Badge tone="neutral">Ignorada: {row.skipReason}</Badge>}
                       {row.action === "error" && (
                         <Badge tone="danger" title={row.error}>
@@ -236,7 +255,7 @@ export function ImportWizard() {
             <Button variant="secondary" onClick={() => setStep("mapping")}>
               <ArrowLeft className="size-4" /> Voltar
             </Button>
-            <Button onClick={handleCommit} loading={pending} disabled={toCreate === 0}>
+            <Button onClick={handleCommit} loading={pending} disabled={toCreate + toUpdate === 0}>
               Confirmar importação
             </Button>
           </CardFooter>
@@ -251,7 +270,7 @@ export function ImportWizard() {
             </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-2 text-sm text-foreground-subtle">
-            <p>{result.created} desligamento(s) importado(s).</p>
+            <p>{result.created} desligamento(s) novo(s) importado(s){result.updated > 0 ? `, ${result.updated} atualizado(s)` : ""}{result.removed > 0 ? `. ${result.removed} apagado(s) antes da nova importação` : ""}.</p>
             {result.skipped > 0 && <p>{result.skipped} linha(s) ignorada(s) (já estavam no SIGO ou repetidas).</p>}
             {result.errors > 0 && (
               <p className="flex items-center gap-1.5 text-warning">

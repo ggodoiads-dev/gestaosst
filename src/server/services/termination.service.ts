@@ -30,7 +30,9 @@ export function suggestMapping(headers: string[]): TerminationImportMapping {
 
 export type TerminationImportRow = {
   rowIndex: number;
-  action: "create" | "skip" | "error";
+  action: "create" | "update" | "skip" | "error";
+  /** Desligamento já importado que esta linha vai atualizar. */
+  existingId?: string;
   skipReason?: string;
   error?: string;
   name: string;
@@ -50,7 +52,10 @@ export type TerminationImportRow = {
 const RH = PERMISSIONS.HR_MANAGE;
 
 /** Lê as linhas, casa cada uma com o cadastro (matrícula, depois nome inteiro) e marca as que já estão no SIGO ou repetidas no arquivo. Não grava nada. */
-export async function buildTerminationImportPreview(user: CurrentUser, rows: string[][], mapping: TerminationImportMapping): Promise<TerminationImportRow[]> {
+/** "update": linhas que já estão no SIGO são atualizadas com o que veio da planilha (padrão). "replace": apaga os importados antes e importa tudo de novo. */
+export type TerminationImportMode = "update" | "replace";
+
+export async function buildTerminationImportPreview(user: CurrentUser, rows: string[][], mapping: TerminationImportMapping, mode: TerminationImportMode = "update"): Promise<TerminationImportRow[]> {
   requirePermission(user, RH);
   const collaborators = await db.collaborator.findMany({ select: { id: true, name: true, matricula: true } });
   const byMatricula = new Map(collaborators.filter((c) => c.matricula).map((c) => [normalize(c.matricula!), c.id]));
@@ -59,9 +64,9 @@ export async function buildTerminationImportPreview(user: CurrentUser, rows: str
     const k = normalize(c.name);
     byName.set(k, byName.has(k) ? null : c.id); // nome repetido: não dá para ter certeza de quem é
   }
-  const existing = new Set<string>();
+  const existing = new Map<string, string>();
   try {
-    for (const t of await db.termination.findMany({ select: { dedupKey: true } })) existing.add(t.dedupKey);
+    if (mode === "update") for (const t of await db.termination.findMany({ select: { id: true, dedupKey: true } })) existing.set(t.dedupKey, t.id);
   } catch (error) {
     console.error("[termination] tabela de desligamentos indisponível:", error);
   }
@@ -81,7 +86,12 @@ export async function buildTerminationImportPreview(user: CurrentUser, rows: str
       admissionDate: parseDateCell(getCell(row, mapping, "admissionDate")),
       terminationDate,
       kind: classifyTermination(getCell(row, mapping, "kind"), getCell(row, mapping, "reason")),
-      reason: getCell(row, mapping, "reason") ?? getCell(row, mapping, "kind"),
+      // guarda as duas colunas: a forma de demissão (que classifica) e o motivo, para a lista mostrar e a classificação poder ser relida
+      reason: (() => {
+        const forma = getCell(row, mapping, "kind");
+        const motivo = getCell(row, mapping, "reason");
+        return forma && motivo && normalize(forma) !== normalize(motivo) ? `${forma} — ${motivo}` : (motivo ?? forma);
+      })(),
       notes: getCell(row, mapping, "notes"),
       collaboratorId: (matricula ? byMatricula.get(normalize(matricula)) : undefined) ?? (name ? (byName.get(normalize(name)) ?? null) : null),
       dedupKey: null as string | null,
@@ -90,15 +100,30 @@ export async function buildTerminationImportPreview(user: CurrentUser, rows: str
     if (!name) return { ...base, action: "error" as const, error: "Sem nome." };
     if (!terminationDate) return { ...base, action: "error" as const, error: "Data do desligamento ausente ou inválida." };
     const dedupKey = terminationKey(matricula, name, terminationDate);
-    if (existing.has(dedupKey)) return { ...base, dedupKey, action: "skip" as const, skipReason: "já está no SIGO" };
     if (seen.has(dedupKey)) return { ...base, dedupKey, action: "skip" as const, skipReason: "repetida no arquivo" };
     seen.add(dedupKey);
+    const existingId = existing.get(dedupKey);
+    if (existingId) return { ...base, dedupKey, existingId, action: "update" as const };
     return { ...base, dedupKey, action: "create" as const };
   });
 }
 
-export async function commitTerminationImport(user: CurrentUser, rows: TerminationImportRow[]): Promise<{ created: number; skipped: number; errors: number }> {
+export async function commitTerminationImport(user: CurrentUser, rows: TerminationImportRow[], mode: TerminationImportMode = "update"): Promise<{ created: number; updated: number; removed: number; skipped: number; errors: number }> {
   requirePermission(user, RH);
+  let removed = 0;
+  if (mode === "replace") {
+    // apaga tudo o que foi importado antes (e as entrevistas que ficariam sem desligamento) para importar de novo, com as colunas certas
+    const gone = await db.termination.deleteMany({});
+    removed = gone.count;
+    await db.exitInterview.deleteMany({}).catch(() => undefined);
+  }
+  const toUpdate = rows.filter((r) => r.action === "update" && r.existingId && r.terminationDate);
+  for (const r of toUpdate) {
+    await db.termination.update({
+      where: { id: r.existingId! },
+      data: { collaboratorId: r.collaboratorId, name: r.name, matricula: r.matricula, cargo: r.cargo, areaName: r.areaName, turnoName: r.turnoName, admissionDate: r.admissionDate, kind: r.kind, reason: r.reason, notes: r.notes },
+    });
+  }
   const toCreate = rows.filter((r) => r.action === "create" && r.dedupKey && r.terminationDate);
   const result = await db.termination.createMany({
     skipDuplicates: true,
@@ -118,8 +143,8 @@ export async function commitTerminationImport(user: CurrentUser, rows: Terminati
       importedById: user.id,
     })),
   });
-  await recordAudit({ userId: user.id, action: "CREATE", entityType: "Termination", entityId: "import", newValue: { created: result.count, rows: rows.length } });
-  return { created: result.count, skipped: rows.filter((r) => r.action === "skip").length + (toCreate.length - result.count), errors: rows.filter((r) => r.action === "error").length };
+  await recordAudit({ userId: user.id, action: "CREATE", entityType: "Termination", entityId: "import", newValue: { created: result.count, updated: toUpdate.length, removed, mode, rows: rows.length } });
+  return { created: result.count, updated: toUpdate.length, removed, skipped: rows.filter((r) => r.action === "skip").length + (toCreate.length - result.count), errors: rows.filter((r) => r.action === "error").length };
 }
 
 export async function deleteTermination(user: CurrentUser, id: string) {
