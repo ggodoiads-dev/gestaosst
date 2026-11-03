@@ -18,6 +18,7 @@ import { SeriesBars } from "../../relatorios/report-charts";
 import { PdcaEditor } from "./pdca-editor";
 import { HeadcountBase } from "./headcount-base";
 import { WOULD_RETURN } from "@/domain/termination/interview";
+import { MotivosTable, SatisfacaoTable } from "../entrevistas/resumo/survey-tables";
 
 const TONE: Record<GoalStatus, "success" | "warning" | "danger" | "neutral"> = { DENTRO: "success", ATENCAO: "warning", FORA: "danger", SEM_META: "neutral" };
 const pct = (v: number | null) => (v === null ? "—" : `${v.toLocaleString("pt-BR")}%`);
@@ -42,7 +43,7 @@ export default async function PdcaTurnoverPage({ searchParams }: { searchParams:
     <div className="flex flex-col gap-3 rounded-md border border-border p-3">
       <div>
         <p className="text-sm font-semibold text-foreground">O que dizem as entrevistas de desligamento</p>
-        <p className="text-xs text-foreground-subtle">Motivo real da saída, dito pelo colaborador (últimos 12 meses fechados). Registre cada entrevista na lista de desligamentos.</p>
+        <p className="text-xs text-foreground-subtle">Motivo real da saída, dito pelo colaborador (últimos 12 meses fechados). Registre cada entrevista na lista de desligamentos ou suba o resumo da plataforma de entrevistas.</p>
       </div>
       {!v.interviews || v.interviews.count === 0 ? (
         <p className="text-sm text-foreground-subtle">Nenhuma entrevista registrada na janela.</p>
@@ -101,6 +102,26 @@ export default async function PdcaTurnoverPage({ searchParams }: { searchParams:
           </div>
         </>
       )}
+      {(v.survey.motivos || v.survey.satisfacao) && (
+        <div className="flex flex-col gap-3 border-t border-border pt-3">
+          <p className="text-sm font-semibold text-foreground">Resumo da plataforma de entrevistas</p>
+          {v.survey.motivos && (
+            <div className="flex flex-col gap-1.5">
+              <p className="text-xs text-foreground-subtle">Motivos da saída por tempo de casa{v.survey.motivos.periodLabel ? ` (${v.survey.motivos.periodLabel})` : ""}. Tabela somada, sem identificar pessoas.</p>
+              <MotivosTable data={v.survey.motivos.data} />
+            </div>
+          )}
+          {v.survey.satisfacao && (
+            <div className="flex flex-col gap-1.5">
+              <p className="text-xs text-foreground-subtle">Satisfação por categoria entre os que saíram{v.survey.satisfacao.periodLabel ? ` (${v.survey.satisfacao.periodLabel})` : ""}.</p>
+              <SatisfacaoTable data={v.survey.satisfacao.data} />
+            </div>
+          )}
+        </div>
+      )}
+      <Link href="/desligamentos/entrevistas/resumo" className="text-xs text-primary underline-offset-2 hover:underline">
+        {v.survey.motivos || v.survey.satisfacao ? "Atualizar o resumo da plataforma" : "Importar o resumo da plataforma de entrevistas (tabelas somadas)"}
+      </Link>
     </div>
   );
 

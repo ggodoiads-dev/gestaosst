@@ -1964,6 +1964,15 @@ model TurnoverHeadcount {
   updatedAt   DateTime @updatedAt
 }
 
+/// Resumo das entrevistas de desligamento vindo de uma plataforma externa (tabelas já agregadas, sem uma linha por pessoa). Um registro por tipo de tabela.
+model ExitSurveySummary {
+  kind        String   @id // MOTIVOS_TEMPO | SATISFACAO
+  periodLabel String?
+  data        Json
+  updatedById String?
+  updatedAt   DateTime @updatedAt
+}
+
 /// Resultado travado de cada dia FECHADO de checklist por colaborador (quantos equipamentos eram exigidos e quantos foram feitos). Depois de travado, o
 /// dia não muda mais quando o cadastro muda (equipamento de área, checklist da função...): é daqui que saem as medidas disciplinares.
 model ChecklistDayResult {

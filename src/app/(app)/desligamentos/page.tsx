@@ -69,6 +69,9 @@ export default async function DesligamentosPage({ searchParams }: { searchParams
             <Button variant="secondary" asChild>
               <Link href="/desligamentos/entrevistas/importar">Importar entrevistas</Link>
             </Button>
+            <Button variant="secondary" asChild>
+              <Link href="/desligamentos/entrevistas/resumo">Resumo da plataforma</Link>
+            </Button>
             <Button asChild>
             <Link href="/desligamentos/importar">
               <Upload className="size-4" /> Importar relatório de desligamentos

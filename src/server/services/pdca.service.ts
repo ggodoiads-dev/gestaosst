@@ -10,6 +10,8 @@ import { lastClosedMonth, presenceAt, windowIsCovered } from "@/domain/terminati
 import { loadPresence } from "@/server/services/turnover-base";
 import { interviewDiagnosis, sanitizeRatings, summarizeInterviews, type InterviewSummary } from "@/domain/termination/interview";
 import { loadHeadcountBase } from "@/server/services/exit-interview.service";
+import { getExitSurvey } from "@/server/services/exit-survey.service";
+import { surveyDiagnosis } from "@/domain/termination/survey";
 import { averageHeadcount, diagnose, exitsBudget, goalStatus, rollingTurnover, type GoalStatus, type PdcaAction, type PdcaActionStatus, type PdcaCause, type WindowMonth } from "@/domain/termination/pdca";
 
 const RH = PERMISSIONS.HR_MANAGE;
@@ -38,6 +40,7 @@ export type PdcaView = {
   firstTermination: Date | null;
   kinds: { label: string; count: number }[];
   interviews: InterviewSummary | null;
+  survey: Awaited<ReturnType<typeof getExitSurvey>>;
   /** Efetivo oficial informado (AAAA-MM → pessoas), no lugar da estimativa do cadastro. */
   headcountBase: Record<string, number>;
   /** Como o número foi calculado: o que o RH precisa ver para confiar nele. */
@@ -154,6 +157,7 @@ export async function getPdcaView(user: CurrentUser, year: number): Promise<Pdca
   }
   const peak = [...byMonth.entries()].sort((a, b) => b[1] - a[1])[0];
   let interviews: InterviewSummary | null = null;
+  const survey = await getExitSurvey();
   if (ready && inWindow.length > 0) {
     try {
       const rows = await db.exitInterview.findMany({ where: { terminationId: { in: inWindow.map((t) => t.id) } } });
@@ -180,7 +184,7 @@ export async function getPdcaView(user: CurrentUser, year: number): Promise<Pdca
         topTurno: top((t) => t.turnoName),
         topCargo: top((t) => t.cargo),
         peakMonth: peak ? { label: peak[0], count: peak[1] } : null,
-      }).concat(interviews ? interviewDiagnosis(interviews, inWindow.filter((t) => kindOf(t) === "VOLUNTARIO").length) : [])
+      }).concat(interviews ? interviewDiagnosis(interviews, inWindow.filter((t) => kindOf(t) === "VOLUNTARIO").length) : [], surveyDiagnosis(survey.motivos?.data ?? null, survey.satisfacao?.data ?? null))
     : [];
   const kinds = new Map<string, number>();
   for (const t of inWindow) kinds.set(TERMINATION_KIND_LABEL[kindOf(t)].split(" (")[0], (kinds.get(TERMINATION_KIND_LABEL[kindOf(t)].split(" (")[0]) ?? 0) + 1);
@@ -197,6 +201,7 @@ export async function getPdcaView(user: CurrentUser, year: number): Promise<Pdca
     firstTermination: counted[0]?.terminationDate ?? null,
     kinds: [...kinds.entries()].map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count),
     interviews,
+    survey,
     headcountBase: Object.fromEntries(headcountBase),
     basis: {
       closedLabel: lastMonthIdx >= 0 ? `${MONTH_LABEL[lastMonthIdx]}/${year}` : null,
