@@ -211,7 +211,7 @@ export function AppShell({
   }, [pathname, router]);
   const roleLabel = ROLE_LABELS[user.roleKey as RoleKeyValue] ?? user.roleKey;
   // Início do visual novo: tela cheia, sem menu fixo nem barra; o menu abre por cima e os controles flutuam.
-  const immersive = novo && pathname === "/inicio";
+  const immersive = (novo && pathname === "/inicio") || pathname === "/apresentacao";
 
   return (
     <RicoProvider userFirstName={user.name.split(" ")[0]}>
@@ -330,9 +330,7 @@ export function AppShell({
           )}
 
           {immersive ? (
-            <div className="flex flex-1 justify-center">
-              <HomeTabs active="inicio" floating />
-            </div>
+            <div className="flex flex-1 justify-center">{pathname === "/inicio" && <HomeTabs active="inicio" floating />}</div>
           ) : (
             <div className="flex-1 max-w-md">
               <GlobalSearch />
@@ -359,6 +357,12 @@ export function AppShell({
                 >
                   <Sparkles className="size-4" />
                   {novo ? "Voltar ao visual clássico" : "Experimentar o visual novo"}
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/apresentacao">
+                    <Sparkles className="size-4" />
+                    Ver a apresentação (teste)
+                  </Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
