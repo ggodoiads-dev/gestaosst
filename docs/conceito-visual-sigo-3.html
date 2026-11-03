@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SIGO — conceito 3</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root { --canvas: #f4f2ec; --card: #ffffff; --ink: #0c1a2e; --ink2: #5b6676; --ink3: #98a1ae; --line: #e6e2d8; --navy: #001840; --blue: #0068d8; --mint: #c8f0d6; --sky: #c4e4ff; --lemon: #fbeba0; --lilac: #ddd3ff; --rose: #ffd5d5; --ok: #0f8a5a; --bad: #d6342c; --warn: #b9770e; --sans: "Inter Tight", system-ui, sans-serif; --serif: "Instrument Serif", Georgia, serif; --mono: "JetBrains Mono", ui-monospace, monospace; }
+  * { box-sizing: border-box; margin: 0; }
+  body { font-family: var(--sans); background: #dedbd1; color: var(--ink); padding: 20px; }
+  .app { max-width: 1320px; margin: 0 auto; display: grid; grid-template-columns: 236px 1fr; background: var(--canvas); border-radius: 26px; overflow: hidden; box-shadow: 0 30px 80px #2a261a26; border: 1px solid #d6d2c6; }
+  .side { padding: 24px 16px; background: #faf9f5; border-right: 1px solid var(--line); display: flex; flex-direction: column; gap: 2px; }
+  .logo { display: flex; align-items: center; gap: 10px; padding: 2px 10px 20px; font: 700 19px var(--sans); letter-spacing: -.02em; }
+  .logo i { width: 30px; height: 30px; border-radius: 9px; background: var(--navy); color: #00d8f0; display: grid; place-items: center; font: 700 16px var(--sans); font-style: normal; }
+  .g { font: 600 11px var(--sans); letter-spacing: .1em; text-transform: uppercase; color: var(--ink3); padding: 16px 10px 6px; }
+  .n { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; font: 500 14.5px var(--sans); color: var(--ink2); }
+  .n em { font: 500 11px var(--mono); color: var(--ink3); font-style: normal; width: 20px; }
+  .n.on { color: var(--ink); background: var(--lemon); font-weight: 600; }
+  .n.on em { color: var(--ink); }
+  .n b { margin-left: auto; font: 600 11px var(--mono); background: var(--ink); color: #fff; padding: 2px 7px; border-radius: 99px; }
+  .main { padding: 26px 32px 36px; display: flex; flex-direction: column; gap: 22px; min-width: 0; }
+  .top { display: flex; align-items: center; gap: 12px; }
+  .search { flex: 1; display: flex; align-items: center; gap: 10px; padding: 11px 16px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; color: var(--ink3); font-size: 14px; }
+  .search kbd { margin-left: auto; font: 500 11px var(--mono); border: 1px solid var(--line); border-radius: 6px; padding: 2px 7px; color: var(--ink2); }
+  .me { width: 40px; height: 40px; border-radius: 50%; background: var(--sky); display: grid; place-items: center; font: 700 13px var(--sans); color: var(--navy); }
+  h1 { font: 500 46px/1.08 var(--sans); letter-spacing: -.035em; max-width: 880px; }
+  h1 i { font: italic 400 1.08em var(--serif); letter-spacing: -.01em; }
+  mark { background: var(--mint); color: inherit; padding: 0 .18em; border-radius: .22em; }
+  mark.s { background: var(--sky); } mark.l { background: var(--lemon); } mark.r { background: var(--rose); }
+  .grid { display: grid; grid-template-columns: 1.05fr 1fr; gap: 18px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 24px; padding: 22px 24px; }
+  .card.dark { background: var(--navy); color: #fff; border: none; position: relative; overflow: hidden; }
+  .cap { display: flex; align-items: center; gap: 8px; font: 600 12px var(--sans); letter-spacing: .08em; text-transform: uppercase; color: var(--ink2); }
+  .dark .cap { color: #9db4dc; }
+  .cap::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
+  .dark .cap::before { background: #00d8f0; box-shadow: 0 0 0 4px #00d8f022; }
+  .board { margin-top: 16px; display: flex; flex-direction: column; gap: 9px; }
+  .brow { display: grid; grid-template-columns: 112px 1fr auto; align-items: center; gap: 14px; }
+  .flaps { display: flex; gap: 3px; }
+  .fl { width: 20px; height: 30px; border-radius: 4px; background: #0a2a66; display: grid; place-items: center; font: 700 15px var(--mono); position: relative; color: #fff; }
+  .fl::after { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: #001840cc; }
+  .brow small { font: 500 13px var(--sans); color: #b9c8e6; }
+  .st { font: 600 11px var(--mono); letter-spacing: .06em; padding: 5px 9px; border-radius: 6px; text-transform: uppercase; }
+  .st.go { background: #0f8a5a; color: #fff; } .st.wait { background: #fbeba0; color: #3d2f00; } .st.tie { background: #c4e4ff; color: #00224f; }
+  .tiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
+  .big { font: 600 66px/1 var(--sans); letter-spacing: -.05em; margin-top: 14px; }
+  .big small { font: 500 26px var(--sans); color: var(--ink2); letter-spacing: -.02em; }
+  .note { font-size: 14px; color: var(--ink2); margin-top: 8px; line-height: 1.5; }
+  .seg { display: flex; gap: 4px; margin-top: 16px; } .seg i { flex: 1; height: 10px; border-radius: 3px; background: var(--ink); } .seg i.e { background: var(--line); } .seg i.w { background: var(--lemon); }
+  .tags { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+  .tags span { font: 500 13px var(--sans); padding: 7px 13px; border-radius: 12px; color: var(--ink); }
+  .list { margin-top: 12px; display: flex; flex-direction: column; }
+  .li { display: grid; grid-template-columns: 34px 1fr auto; gap: 12px; align-items: baseline; padding: 14px 0; border-bottom: 1px solid var(--line); }
+  .li:last-child { border-bottom: 0; }
+  .li em { font: 500 12px var(--mono); color: var(--ink3); font-style: normal; }
+  .li p { font: 600 16px var(--sans); letter-spacing: -.01em; } .li span { display: block; font: 400 13.5px var(--sans); color: var(--ink2); margin-top: 2px; }
+  .li a { font: 600 13px var(--sans); color: var(--blue); }
+  .foot { max-width: 1320px; margin: 14px auto 0; color: #6f6a5b; font: 400 13.5px/1.6 var(--sans); }
+  @media (max-width: 1000px) { .app { grid-template-columns: 1fr; } .side { display: none; } .grid, .tiles { grid-template-columns: 1fr; } h1 { font-size: 34px; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="logo"><i>S</i> SIGO</div>
+    <div class="n on"><em>01</em>Início</div>
+    <div class="n"><em>02</em>Avisos <b>4</b></div>
+    <div class="g">Operação</div>
+    <div class="n"><em>03</em>Quadro de cargas</div>
+    <div class="n"><em>04</em>Produção</div>
+    <div class="n"><em>05</em>Checklists</div>
+    <div class="g">Pessoas</div>
+    <div class="n"><em>06</em>Colaboradores</div>
+    <div class="n"><em>07</em>Turnover e PDCA</div>
+    <div class="g">Segurança</div>
+    <div class="n"><em>08</em>Acidentes</div>
+    <div class="n"><em>09</em>Relatórios</div>
+  </aside>
+
+  <main class="main">
+    <div class="top"><div class="search">Buscar pessoa, equipamento, NC ou carga…<kbd>Ctrl K</kbd></div><div class="me">GG</div></div>
+
+    <h1>Hoje a operação está <mark>estável</mark>, com <i>quatro pontos</i> que pedem você e o turnover <mark class="s">dentro da meta</mark>.</h1>
+
+    <div class="grid">
+      <section class="card dark">
+        <div class="cap">Quadro de cargas · agora</div>
+        <div class="board">
+          <div class="brow"><div class="flaps"><span class="fl">A</span><span class="fl">B</span><span class="fl">C</span><span class="fl">1</span><span class="fl">2</span><span class="fl">3</span><span class="fl">4</span></div><small>Doca 3 · Ambev</small><span class="st go">Carregando</span></div>
+          <div class="brow"><div class="flaps"><span class="fl">D</span><span class="fl">E</span><span class="fl">F</span><span class="fl">5</span><span class="fl">6</span><span class="fl">7</span><span class="fl">8</span></div><small>Doca 1 · Ambev</small><span class="st tie">Amarrando</span></div>
+          <div class="brow"><div class="flaps"><span class="fl">G</span><span class="fl">H</span><span class="fl">I</span><span class="fl">9</span><span class="fl">0</span><span class="fl">1</span><span class="fl">2</span></div><small>Pátio · Ambev</small><span class="st wait">Aguardando</span></div>
+          <div class="brow"><div class="flaps"><span class="fl">J</span><span class="fl">K</span><span class="fl">L</span><span class="fl">3</span><span class="fl">4</span><span class="fl">5</span><span class="fl">6</span></div><small>Doca 2 · Ambev</small><span class="st go">Carregando</span></div>
+        </div>
+        <p style="margin-top:18px;font:500 13px var(--sans);color:#9db4dc">23 carros carregados hoje · TMA médio de 1h12</p>
+      </section>
+
+      <div class="tiles">
+        <section class="card">
+          <div class="cap">Turnover 12 meses</div>
+          <div class="big">13,1<small>%</small></div>
+          <p class="note">Meta do ano <mark>14,07%</mark>. Cabem mais 3 desligamentos na janela.</p>
+        </section>
+        <section class="card">
+          <div class="cap">Aderência de checklist</div>
+          <div class="big">92<small>%</small></div>
+          <div class="seg"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="w"></i><i class="e"></i></div>
+          <p class="note">3 pessoas abaixo de 80%.</p>
+        </section>
+        <section class="card" style="grid-column: 1 / -1">
+          <div class="cap">Onde olhar</div>
+          <div class="tags">
+            <span style="background:var(--lemon)">Armazém Racks</span><span style="background:var(--lemon)">Carga e descarga</span>
+            <span style="background:var(--sky)">Turno A</span><span style="background:var(--sky)">Turno B</span><span style="background:var(--sky)">Turno C</span>
+            <span style="background:var(--rose)">NCs críticas</span><span style="background:var(--lilac)">Entrevistas</span><span style="background:var(--mint)">Metas no verde</span>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <section class="card">
+      <div class="cap">Precisa de você hoje</div>
+      <div class="list">
+        <div class="li"><em>01</em><div><p>Dois <mark class="r">ASOs vencidos</mark></p><span>Exame ocupacional sem validade. Quem não pode operar até regularizar.</span></div><a>Abrir →</a></div>
+        <div class="li"><em>02</em><div><p>NC crítica <mark class="l">há 9 dias</mark> na EL-014</p><span>Armazém Racks. Sem plano de ação concluído.</span></div><a>Abrir →</a></div>
+        <div class="li"><em>03</em><div><p>Três <mark class="s">entrevistas de desligamento</mark> pendentes</p><span>Pedidos de demissão de outubro. Alimentam o PDCA do turnover.</span></div><a>Abrir →</a></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<p class="foot">Conceito 3, montado a partir de referências do Curated. Do Flighty: o quadro de partidas com letras de placar (aqui, um quadro de cargas), números enormes e o cartão escuro de contraste. Do Product Map: marca-texto pastel nas palavras-chave do título, itálico serifado e filtros em etiquetas coloridas por grupo, e a lista numerada com linhas. Do Lightspark: fundo quente, cartões brancos com borda fina e muito espaço. Dados de exemplo.</p>
+</body>
+</html>

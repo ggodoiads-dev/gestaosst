@@ -21,6 +21,10 @@ import { getNavGroups } from "@/components/layout/nav-items";
 import { getUserNavWhitelist } from "@/server/services/nav-access.service";
 import { filterNavGroups } from "@/domain/shared/nav-access";
 import { CommandPalette } from "./command-palette";
+import { HomeNovo } from "./home-novo";
+import { getUiTheme } from "@/lib/ui-theme";
+import { listAlerts } from "@/server/services/daily-digest.service";
+import { getPdcaView } from "@/server/services/pdca.service";
 import { formatLongDate, APP_TIMEZONE } from "@/lib/dates";
 import { formatInTimeZone } from "date-fns-tz";
 import { cn } from "@/lib/utils";
@@ -345,6 +349,38 @@ export default async function InicioPage() {
   const headlineSummary = gestaoSummary ?? colaboradorSummary;
 
   const navGroups = allowedSet ? filterNavGroups(getNavGroups(user), allowedSet) : getNavGroups(user);
+
+  // Visual novo (opt-in): mesma informação, outra apresentação. O clássico segue logo abaixo, sem mudança.
+  if ((await getUiTheme()) === "novo") {
+    const canSeeConsolidated = hasPermission(user, PERMISSIONS.INDICATORS_VIEW_CONSOLIDATED) && allow("/indicadores");
+    const [alerts, pdca] = await Promise.all([
+      canSeeConsolidated ? listAlerts().catch(() => []) : Promise.resolve([]),
+      canSeeHr && allow("/desligamentos") ? getPdcaView(user, new Date().getFullYear()).catch(() => null) : Promise.resolve(null),
+    ]);
+    const checklistPct = checklistComplianceDashboard ? compliancePercent(checklistComplianceDashboard.today) : null;
+    const turnoverRate = pdca?.current?.rate ?? null;
+    const turnoverGoal = pdca?.data.annualGoal ?? null;
+    return (
+      <HomeNovo
+        firstName={firstName}
+        dateLabel={formatLongDate(new Date())}
+        alerts={alerts}
+        checklistPct={checklistPct}
+        turnover={turnoverRate !== null ? { rate: turnoverRate, goal: turnoverGoal } : null}
+        ncAbertas={gestaoSummary?.ncAbertas ?? null}
+        equipamentosBloqueados={gestaoSummary?.equipamentosBloqueados ?? null}
+        meuChecklist={{ previstos: colaboradorSummary.previstos, realizados: colaboradorSummary.realizados, atrasados: colaboradorSummary.atrasados }}
+        quickLinks={navGroups.flatMap((g) => g.items).filter((i) => i.href !== "/inicio").slice(0, 8).map((i) => ({ href: i.href, label: i.label }))}
+        featured={
+          turnoverRate !== null
+            ? { id: "turnover" as const, label: "Turnover 12 meses", value: String(turnoverRate).replace(".", ","), unit: "%", note: turnoverGoal !== null ? `Meta do ano ${String(turnoverGoal).replace(".", ",")}%. Abrir o PDCA do turnover.` : "Abrir o PDCA do turnover.", href: "/desligamentos/pdca" }
+            : checklistPct !== null
+              ? { id: "checklist" as const, label: "Aderência de checklist", value: String(checklistPct), unit: "%", note: "Último dia fechado. Abrir os indicadores.", href: "/indicadores" }
+              : null
+        }
+      />
+    );
+  }
 
   const briefingContext: DailyBriefingContext = {
     seguranca: {

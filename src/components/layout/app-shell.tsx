@@ -58,6 +58,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { logoutAction } from "@/server/actions/auth.actions";
+import { setUiThemeAction } from "@/server/actions/ui-theme.actions";
 import { CopyrightNotice } from "@/components/domain/copyright-notice";
 import type { NavGroup, NavIconKey } from "@/components/layout/nav-items";
 import { ROLE_LABELS, type RoleKeyValue } from "@/domain/shared/permissions";
@@ -142,6 +143,7 @@ export function AppShell({
   user,
   alerts,
   showRico = true,
+  ui = "classico",
   children,
 }: {
   navGroups: NavGroup[];
@@ -149,8 +151,11 @@ export function AppShell({
   alerts: AlertsSummary;
   /** Falso para usuário com acesso restrito por abas que não recebeu o Rico. */
   showRico?: boolean;
+  /** Visual: "novo" liga a repaginação (opt-in por pessoa); "classico" é o padrão. */
+  ui?: "classico" | "novo";
   children: React.ReactNode;
 }) {
+  const novo = ui === "novo";
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const pathname = usePathname();
   const router = useRouter();
@@ -218,16 +223,24 @@ export function AppShell({
 
       <aside
         className={cn(
-          "fixed z-50 inset-y-0 left-0 w-64 flex-col bg-brand transition-transform lg:static lg:flex lg:translate-x-0 print:hidden",
+          "fixed z-50 inset-y-0 left-0 w-64 flex-col transition-transform lg:static lg:flex lg:translate-x-0 print:hidden",
+          novo ? "bg-surface-muted border-r border-border" : "bg-brand",
           mobileOpen ? "flex translate-x-0" : "hidden -translate-x-full",
         )}
       >
-        <div className="flex items-center justify-between h-16 px-4 border-b border-white/10">
+        <div className={cn("flex items-center justify-between h-16 px-4", novo ? "" : "border-b border-white/10")}>
           <Link href="/inicio" className="flex items-center px-2.5 py-1.5">
-            <Image src="/sigo-logo.png" alt="SIGO" width={112} height={36} priority />
+            {novo ? (
+              <span className="flex items-center gap-2.5 text-[19px] font-bold tracking-tight text-foreground">
+                <span className="grid size-[30px] place-items-center rounded-[9px] bg-brand text-[16px] font-bold text-brand-accent">S</span>
+                SIGO
+              </span>
+            ) : (
+              <Image src="/sigo-logo.png" alt="SIGO" width={112} height={36} priority />
+            )}
           </Link>
           <button
-            className="lg:hidden text-white/70 hover:text-white"
+            className={cn("lg:hidden", novo ? "text-foreground-subtle hover:text-foreground" : "text-white/70 hover:text-white")}
             onClick={() => setMobileOpen(false)}
             aria-label="Fechar menu"
           >
@@ -244,7 +257,10 @@ export function AppShell({
                   <button
                     type="button"
                     onClick={() => toggle(group.key)}
-                    className="flex items-center justify-between px-2.5 mb-1 text-[11px] font-semibold uppercase tracking-wide text-white/40 hover:text-white/70"
+                    className={cn(
+                      "flex items-center justify-between px-2.5 mb-1 text-[11px] font-semibold uppercase tracking-wide",
+                      novo ? "mt-2 text-foreground-subtle hover:text-foreground" : "text-white/40 hover:text-white/70",
+                    )}
                   >
                     {group.title}
                     <ChevronDown className={cn("size-3 transition-transform", collapsed && "-rotate-90")} />
@@ -259,10 +275,15 @@ export function AppShell({
                         key={item.href}
                         href={item.href}
                         className={cn(
-                          "flex items-center gap-2.5 rounded-md border-l-[3px] px-2.5 py-2 text-sm font-medium transition-colors",
-                          active
-                            ? "border-brand-accent bg-white/5 text-brand-accent"
-                            : "border-transparent text-white/70 hover:bg-white/5 hover:text-white",
+                          "flex items-center gap-2.5 px-2.5 py-2 text-sm font-medium transition-colors",
+                          novo ? "rounded-[10px]" : "rounded-md border-l-[3px]",
+                          novo
+                            ? active
+                              ? "bg-[#fbeba0] text-foreground font-semibold"
+                              : "text-foreground-muted hover:bg-surface hover:text-foreground"
+                            : active
+                              ? "border-brand-accent bg-white/5 text-brand-accent"
+                              : "border-transparent text-white/70 hover:bg-white/5 hover:text-white",
                         )}
                       >
                         <Icon className="size-4 shrink-0" />
@@ -277,7 +298,7 @@ export function AppShell({
       </aside>
 
       <div className="flex flex-1 flex-col min-w-0">
-        <header className="sticky top-0 z-30 flex items-center gap-3 h-14 border-b border-border bg-surface px-3 sm:px-4 print:hidden">
+        <header className={cn("sticky top-0 z-30 flex items-center gap-3 h-14 px-3 sm:px-4 print:hidden", novo ? "border-b border-border/70 bg-background/85 backdrop-blur" : "border-b border-border bg-surface")}>
           <button
             className="lg:hidden text-foreground-subtle"
             onClick={() => setMobileOpen(true)}
@@ -314,6 +335,15 @@ export function AppShell({
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuLabel>{user.email}</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onSelect={() => {
+                    void setUiThemeAction(novo ? "classico" : "novo");
+                  }}
+                >
+                  <Sparkles className="size-4" />
+                  {novo ? "Voltar ao visual clássico" : "Experimentar o visual novo"}
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   className="text-danger"

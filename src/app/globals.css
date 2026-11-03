@@ -289,3 +289,67 @@ table {
     page: abnt;
   }
 }
+
+/* ======================================================================================================================
+   Visual novo (opt-in por pessoa, cookie sigo_ui=novo). Só troca valores dos tokens e acrescenta estas regras: o visual
+   clássico (padrão) não é tocado. Linguagem: papel quente, cartões brancos com borda fina, raio grande, tipografia
+   apertada com um acento serifado em itálico, marca-texto pastel nas palavras-chave e um cartão escuro de contraste por tela.
+   ====================================================================================================================== */
+html[data-ui="novo"] {
+  --background: #f4f2ec;
+  --surface: #ffffff;
+  --surface-muted: #faf9f5;
+  --border: #e6e2d8;
+  --border-strong: #d3cec0;
+  --foreground: #0c1a2e;
+  --foreground-muted: #4f5a6b;
+  --foreground-subtle: #7d8696;
+  --accent-soft: #e6effb;
+  --success-soft: #dff5e8;
+  --warning-soft: #fdf0c3;
+  --danger-soft: #ffe3e1;
+  --info-soft: #dfeaff;
+  --neutral-soft: #ece9e0;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+  --font-sans: var(--font-tight), ui-sans-serif, system-ui, sans-serif;
+}
+html[data-ui="novo"] body {
+  font-size: 14.5px;
+  letter-spacing: -0.005em;
+}
+html[data-ui="novo"] .sigo-page-head {
+  background: transparent;
+  border-bottom: 0;
+  padding-top: 26px;
+  padding-bottom: 6px;
+}
+html[data-ui="novo"] .sigo-page-title {
+  font-size: 30px;
+  line-height: 1.1;
+  font-weight: 500;
+  letter-spacing: -0.035em;
+}
+html[data-ui="novo"] .sigo-page-head p {
+  font-size: 14px;
+  max-width: 62ch;
+}
+html[data-ui="novo"] .sigo-serif {
+  font-family: var(--font-serif-accent), Georgia, serif;
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+html[data-ui="novo"] .sigo-mark {
+  background: var(--mark, #c8f0d6);
+  color: inherit;
+  padding: 0 0.18em;
+  border-radius: 0.22em;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+html[data-ui="novo"] .sigo-mono {
+  font-family: ui-monospace, "JetBrains Mono", SFMono-Regular, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+}

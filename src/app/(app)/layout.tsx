@@ -8,6 +8,7 @@ import { AppShell } from "@/components/layout/app-shell";
 import { getAlertsSummary } from "@/server/services/alerts.service";
 import { getUserNavWhitelist } from "@/server/services/nav-access.service";
 import { filterNavGroups, isPathAllowed } from "@/domain/shared/nav-access";
+import { getUiTheme } from "@/lib/ui-theme";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
@@ -34,6 +35,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       user={{ name: user.name, email: user.email, roleKey: user.roleKey }}
       alerts={alerts}
       showRico={showRico}
+      ui={await getUiTheme()}
     >
       {children}
     </AppShell>
