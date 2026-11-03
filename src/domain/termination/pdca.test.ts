@@ -79,6 +79,11 @@ describe("yearMonthInputs", () => {
     expect(r[1]).toMatchObject({ qlp: 54, qlpSource: "oficial" });
     expect(r[0]).toMatchObject({ qlp: 50, qlpSource: "cadastro" });
   });
+  it("mês sem QLP informado repete o último informado antes dele (QLP fixo)", () => {
+    const r = yearMonthInputs({ year: 2026, lastIdx: 3, now: new Date(2026, 4, 15), counted: [], people, headcountBase: new Map([["2026-02", 57]]) });
+    expect(r.map((x) => x.qlp)).toEqual([50, 57, 57, 57]);
+    expect(r.map((x) => x.qlpSource)).toEqual(["cadastro", "oficial", "oficial", "oficial"]);
+  });
   it("sem mês fechado, nada", () => {
     expect(yearMonthInputs({ year: 2026, lastIdx: -1, now: new Date(2026, 0, 10), counted, people, headcountBase: new Map() })).toEqual([]);
   });

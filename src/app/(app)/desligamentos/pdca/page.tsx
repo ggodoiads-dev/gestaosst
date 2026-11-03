@@ -26,7 +26,7 @@ import { MotivosTable, SatisfacaoTable } from "../entrevistas/resumo/survey-tabl
 
 const TONE: Record<GoalStatus, "success" | "warning" | "danger" | "neutral"> = { DENTRO: "success", ATENCAO: "warning", FORA: "danger", SEM_META: "neutral" };
 const pct = (v: number | null) => (v === null ? "—" : `${v.toLocaleString("pt-BR")}%`);
-const SOURCE_LABEL = { cadastro: "estimado pelo cadastro de colaboradores (informe o QLP de cada mês, no fim da página, para bater com o BI)", oficial: "informado por você (QLP de cada mês)", misto: "parte informado por você, parte estimado pelo cadastro (informe os meses que faltam, no fim da página)" } as const;
+const SOURCE_LABEL = { cadastro: "estimado pelo cadastro de colaboradores (informe o QLP no fim da página, para bater com o BI)", oficial: "informado por você", misto: "informado por você a partir de um mês; antes dele, estimado pelo cadastro" } as const;
 
 export default async function PdcaTurnoverPage({ searchParams }: { searchParams: Promise<{ ano?: string }> }) {
   const user = await requireUser();
@@ -210,7 +210,7 @@ export default async function PdcaTurnoverPage({ searchParams }: { searchParams:
                   <TableCell className="text-right tabular-nums">
                     {String(Math.round(r.qlp * 100) / 100).replace(".", ",")}
                     {r.qlpSource === "cadastro" && (
-                      <span className="ml-1 text-[11px] text-foreground-subtle" title="Estimado pelo cadastro: informe o QLP oficial no fim da página">
+                      <span className="ml-1 text-[11px] text-foreground-subtle" title="Estimado pelo cadastro: informe o QLP no fim da página">
                         est.
                       </span>
                     )}

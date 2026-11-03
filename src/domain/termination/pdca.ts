@@ -92,8 +92,8 @@ export function diagnose(i: DiagnosisInput): string[] {
 }
 
 /**
- * Entrada mensal da conta do BI para os meses fechados do ano (janeiro até `lastIdx`). O QLP do mês é o informado pelo RH (base oficial);
- * sem ele, estimativa pelo cadastro: média do efetivo no início e no fim do mês.
+ * Entrada mensal da conta do BI para os meses do ano (janeiro até `lastIdx`). O QLP do mês é o informado pelo RH; mês sem valor repete o último
+ * QLP informado antes dele (o QLP costuma ser fixo). Antes de qualquer valor informado, estimativa pelo cadastro: média do efetivo no início e no fim do mês.
  */
 export function yearMonthInputs(args: {
   year: number;
@@ -104,9 +104,10 @@ export function yearMonthInputs(args: {
   headcountBase: Map<string, number>;
 }): YearMonthInput[] {
   const { year, lastIdx, now, counted, people, headcountBase } = args;
+  const informed = [...headcountBase.entries()].sort((a, b) => a[0].localeCompare(b[0]));
   return Array.from({ length: Math.max(lastIdx + 1, 0) }, (_, m) => {
     const key = `${year}-${String(m + 1).padStart(2, "0")}`;
-    const official = headcountBase.get(key);
+    const official = headcountBase.get(key) ?? informed.filter(([k]) => k < key).pop()?.[1];
     const start = new Date(year, m, 1);
     const end = new Date(year, m + 1, 1);
     const estimated = (presenceAt(people, start) + presenceAt(people, end > now ? now : end)) / 2;
