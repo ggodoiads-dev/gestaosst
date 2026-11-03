@@ -5,7 +5,7 @@ import type { CurrentUser } from "@/server/auth/current-user";
 import { hasPermission, ForbiddenError } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
 import { stepHasDocument } from "@/domain/discipline/document";
-import { freezeChecklistDays, listChecklistNonCompletion } from "@/server/services/checklist-compliance.service";
+import { freezeChecklistDays, listChecklistNonCompletion, recomputeChecklistDaysForCollaborator } from "@/server/services/checklist-compliance.service";
 import {
   DISCIPLINE_START_KEY,
   DISCIPLINE_REASONS,
@@ -227,6 +227,22 @@ export async function freezeHistory(user: CurrentUser) {
   const count = await freezeChecklistDays(DISCIPLINE_START_KEY);
   await recordAudit({ userId: user.id, action: "CREATE", entityType: "ChecklistDayResult", entityId: "freeze", newValue: { days: count } });
   return count;
+}
+
+/** Refaz os dias de checklist das pessoas indicadas com o cadastro de agora (quando o cadastro estava errado). Não mexe em medida já aplicada ou dispensada. */
+export async function recomputeCollaborators(user: CurrentUser, collaboratorIds: string[]) {
+  requireDiscipline(user);
+  const ids = [...new Set(collaboratorIds)].slice(0, 200);
+  if (ids.length === 0) throw new Error("Nenhum dia para refazer.");
+  let before = 0;
+  let after = 0;
+  for (const id of ids) {
+    const result = await recomputeChecklistDaysForCollaborator(id, DISCIPLINE_START_KEY);
+    before += result.before;
+    after += result.after;
+    await recordAudit({ userId: user.id, action: "UPDATE", entityType: "ChecklistDayResult", entityId: id, newValue: { recomputed: true, ...result } });
+  }
+  return { before, after, people: ids.length };
 }
 
 export const applyMeasure = (user: CurrentUser, input: DecideInput) => decide(user, input, "APLICADA");

@@ -49,6 +49,15 @@ export async function dismissManyAction(input: { reason: DisciplineReasonKey; co
   return res.ok ? { ...res, count } : res;
 }
 
+/** Refaz os dias de checklist de uma pessoa com o cadastro de agora. */
+export async function recomputeCollaboratorsAction(collaboratorIds: string[]): Promise<DisciplineResult & { before?: number; after?: number; people?: number }> {
+  let result = { before: 0, after: 0, people: 0 };
+  const res = await run(async () => {
+    result = await service.recomputeCollaborators(await requireUser(), collaboratorIds);
+  });
+  return res.ok ? { ...res, ...result } : res;
+}
+
 /** Trava o histórico de dias de checklist já fechados (o cadastro novo não muda mais dia passado). */
 export async function freezeHistoryAction(): Promise<DisciplineResult & { count?: number }> {
   let count = 0;

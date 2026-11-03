@@ -1069,6 +1069,34 @@ export async function freezeChecklistDays(fromKey: string): Promise<number> {
   return saved.count;
 }
 
+/**
+ * Refaz o resultado travado de UMA pessoa com o cadastro de agora, de `fromKey` até ontem: apaga os dias travados dela e trava de novo o que o cálculo atual
+ * dá. Serve quando o cadastro estava errado (ex.: a função não tinha o checklist obrigatório e a pessoa foi cobrada de todos os equipamentos da área) e os
+ * dias já tinham sido travados com a exigência errada. As decisões já tomadas (medida aplicada ou dispensada) não são mexidas. Devolve quantos dias-pessoa
+ * tinham ocorrência antes e quantos têm agora.
+ */
+export async function recomputeChecklistDaysForCollaborator(collaboratorId: string, fromKey: string): Promise<{ before: number; after: number }> {
+  const countInfractions = (rows: ChecklistDayResultRow[]) => rows.filter((r) => r.collaboratorId === collaboratorId && isChecklistInfraction({ required: r.required, doneOrJustified: r.done })).length;
+  const before = countInfractions(await listChecklistNonCompletion(fromKey));
+  try {
+    await db.checklistDayResult.deleteMany({ where: { collaboratorId, dayKey: { gte: fromKey } } });
+  } catch (error) {
+    console.error("[checklist-compliance] sem a tabela de dias travados:", error);
+  }
+  const live = (await computeChecklistDayResults(fromKey, new Set())).filter((r) => r.collaboratorId === collaboratorId);
+  try {
+    if (live.length > 0) {
+      await db.checklistDayResult.createMany({
+        skipDuplicates: true,
+        data: live.map((r) => ({ collaboratorId: r.collaboratorId, dayKey: r.dayKey, collaboratorName: r.name, areaName: r.areaName, required: r.required, done: r.done })),
+      });
+    }
+  } catch (error) {
+    console.error("[checklist-compliance] não foi possível travar de novo:", error);
+  }
+  return { before, after: countInfractions(live) };
+}
+
 /** Ontem (calendário de Brasília), AAAA-MM-DD: o dia que a rotina diária trava. */
 export function yesterdayKey(): string {
   return localDateKey(lastClosedDay());

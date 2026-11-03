@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { FormField } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter, DialogClose } from "@/components/ui/dialog";
-import { applyMeasureAction, dismissManyAction, dismissOccurrenceAction, freezeHistoryAction, undoDecisionAction } from "@/server/actions/discipline.actions";
+import { applyMeasureAction, dismissManyAction, dismissOccurrenceAction, freezeHistoryAction, recomputeCollaboratorsAction, undoDecisionAction } from "@/server/actions/discipline.actions";
 import { stepHasDocument } from "@/domain/discipline/document";
 import {
   DISCIPLINE_STEPS,
@@ -160,6 +160,7 @@ export function DisciplineSection({ items, history }: { items: DisciplineEntry[]
           </p>
         </div>
         <div className="flex items-center gap-1">
+          {checklist.length > 0 && <RecomputeDialog name="" collaboratorIds={[...groups.keys()]} label="Refazer todos com o cadastro atual" />}
           <FreezeHistoryButton />
           <Button size="sm" variant="ghost" onClick={() => setShowHistory((v) => !v)}>
             <History className="size-4" /> {showHistory ? "Ocultar histórico" : "Histórico de medidas"}
@@ -181,7 +182,8 @@ export function DisciplineSection({ items, history }: { items: DisciplineEntry[]
                   {formatPersonName(g.name)}
                 </Link>
                 <span className="text-xs text-foreground-subtle">{g.items.length} dia(s) abaixo de 80%</span>
-                <span className="ml-auto">
+                <span className="ml-auto flex items-center gap-2">
+                  <RecomputeDialog name={g.name} collaboratorIds={[g.id]} />
                   <DismissAllDialog name={g.name} collaboratorId={g.id} dayKeys={g.items.map((i) => i.dayKey)} />
                 </span>
               </div>
@@ -238,6 +240,55 @@ export function DisciplineSection({ items, history }: { items: DisciplineEntry[]
         </div>
       )}
     </section>
+  );
+}
+
+/** Refaz os dias do colaborador com o cadastro de agora: para quando o cadastro (função/checklist obrigatório) estava errado e os dias já tinham sido travados com a exigência errada. */
+function RecomputeDialog({ name, collaboratorIds, label = "Refazer com o cadastro atual" }: { name: string; collaboratorIds: string[]; label?: string }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  function confirm() {
+    setError(null);
+    startTransition(async () => {
+      const res = await recomputeCollaboratorsAction(collaboratorIds);
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      toast.success(`Dias refeitos: ${res.before ?? 0} ocorrência(s) antes, ${res.after ?? 0} agora.`);
+      setOpen(false);
+      router.refresh();
+    });
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <Button size="sm" variant="ghost" onClick={() => setOpen(true)} title="Refaz os dias com o cadastro de agora">
+        {label}
+      </Button>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Refazer os dias {collaboratorIds.length > 1 ? `de ${collaboratorIds.length} pessoas` : `de ${formatPersonName(name)}`}</DialogTitle>
+        </DialogHeader>
+        <DialogBody className="flex flex-col gap-3 text-sm text-foreground-subtle">
+          <p>
+            Os dias (desde 20/10) são calculados de novo com o cadastro de hoje: equipamentos da área, checklist obrigatório da função, folgas e equipamentos bloqueados.
+            Use depois de corrigir o cadastro, por exemplo quando a função não tinha o checklist obrigatório e a pessoa foi cobrada de todos os equipamentos da área.
+          </p>
+          <p>Medidas já aplicadas ou dispensadas não são mexidas. O que sobrar abaixo de 80% continua na lista.</p>
+          {error && <p className="text-sm text-danger">{error}</p>}
+        </DialogBody>
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button type="button" variant="secondary">Cancelar</Button>
+          </DialogClose>
+          <Button onClick={confirm} loading={pending}>Refazer os dias</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
