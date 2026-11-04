@@ -1973,6 +1973,55 @@ model ExitSurveySummary {
   updatedAt   DateTime @updatedAt
 }
 
+/// Plano de sucessão (Pipeline de Gente): cargo crítico, quem ocupa, sucessores, prontidão, potencial e a ação para fechar o gap.
+model SuccessionPosition {
+  id          String    @id @default(uuid())
+  cargo       String
+  area        String?
+  criticality String    @default("MEDIA") // ALTA | MEDIA | BAIXA
+  occupant    String?
+  successor1  String?
+  successor2  String?
+  origin      String? // INTERNO | EXTERNO
+  readiness   String? // AGORA | ATE_6M | ATE_1A | MAIS_1A
+  potential   String? // ALTO | MEDIO | BAIXO
+  gap         String?
+  action      String?
+  dueDate     DateTime?
+  dueNote     String?
+  status      String? // ANDAMENTO | AGENDADO | CONCLUIDO
+  sortOrder   Int       @default(0)
+  updatedById String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([sortOrder])
+}
+
+/// Ciclo de Gente: o resultado de cultura e desempenho de cada pessoa no ano. Alimenta as faixas do Pipeline e a lista de risco de turnover.
+model PeopleCycleEntry {
+  id             String   @id @default(uuid())
+  cycleYear      Int
+  collaboratorId String?
+  name           String
+  leader         String?
+  cycleType      String?
+  icc            Float?
+  iccResult      String? // MUITO_POSITIVA | POSITIVA | SATISFATORIA | NEGATIVA | MUITO_NEGATIVA | NAO_INFORMADO
+  ir             Float?
+  irResult       String?
+  selfEval       String?
+  perfEval       String?
+  finalClass     String?
+  situation      String?
+  follow         String?
+  updatedById    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([cycleYear])
+}
+
 /// Resultado travado de cada dia FECHADO de checklist por colaborador (quantos equipamentos eram exigidos e quantos foram feitos). Depois de travado, o
 /// dia não muda mais quando o cadastro muda (equipamento de área, checklist da função...): é daqui que saem as medidas disciplinares.
 model ChecklistDayResult {
