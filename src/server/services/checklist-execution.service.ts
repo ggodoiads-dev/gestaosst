@@ -101,9 +101,13 @@ export async function listChecklistBoardForUser(
   const areaGroups = new Map<string, ChecklistBoardAreaItem>();
 
   for (const equipment of equipments) {
-    const assignment = equipment.assignments[0];
-    const version = assignment?.template.versions[0];
+    // Um equipamento pode estar em mais de um checklist de área (ex.: Carga e Descarga e Amarração na mesma área): cada um conta no seu grupo.
+    // O checklist por equipamento continua sendo o primeiro vínculo que não é de área.
+    let equipmentItemDone = false;
+    for (const assignment of equipment.assignments) {
+    const version = assignment.template.versions[0];
     if (!version) continue;
+    if (assignment.template.scope !== "AREA" && equipmentItemDone) continue;
 
     const schedule = equipment.schedules.find((s) => s.templateId === assignment.templateId);
     const scheduledFor = schedule ? getScheduledTimeForDate(schedule, now) : null;
@@ -172,6 +176,8 @@ export async function listChecklistBoardForUser(
       completedAt: completedToday?.finishedAt ?? null,
       inProgressExecutionId: inProgress?.id ?? null,
     });
+    equipmentItemDone = true;
+    }
   }
 
   const allItems = [...equipmentItems, ...areaGroups.values()];
@@ -185,13 +191,14 @@ export async function listChecklistBoardForUser(
  * só que orquestradas juntas numa tela só). O template de área tem sempre uma única
  * pergunta — é ela que vira a linha "Conforme/Não conforme/N-A" de cada equipamento.
  */
-export async function getAreaChecklistContext(user: CurrentUser, areaId: string) {
+export async function getAreaChecklistContext(user: CurrentUser, areaId: string, templateId?: string) {
   requirePermission(user, PERMISSIONS.CHECKLIST_EXECUTE);
   requireAreaAccess(user, areaId, PERMISSIONS.EQUIPMENT_VIEW_ALL_AREAS);
 
   const area = await db.area.findUniqueOrThrow({ where: { id: areaId } });
   const template = await db.checklistTemplate.findFirst({
-    where: { areaId, scope: "AREA", status: "PUBLICADO" },
+    where: { areaId, scope: "AREA", status: "PUBLICADO", ...(templateId ? { id: templateId } : {}) },
+    orderBy: { name: "asc" },
     include: {
       versions: {
         where: { status: "ATIVA" },
@@ -240,7 +247,7 @@ export async function getAreaChecklistContext(user: CurrentUser, areaId: string)
           };
         }
       }
-      const ctx = await getExecutionContext(user, equipment.id);
+      const ctx = await getExecutionContext(user, equipment.id, template.id);
       if (ctx.blocked) {
         return { equipment, executionId: null, blocked: true as const, finished: false, existingAnswer: null };
       }
@@ -260,7 +267,7 @@ export async function getAreaChecklistContext(user: CurrentUser, areaId: string)
   return { area, template, question, items };
 }
 
-export async function getExecutionContext(user: CurrentUser, equipmentId: string) {
+export async function getExecutionContext(user: CurrentUser, equipmentId: string, templateId?: string) {
   requirePermission(user, PERMISSIONS.CHECKLIST_EXECUTE);
 
   const equipment = await db.equipment.findUniqueOrThrow({
@@ -270,7 +277,7 @@ export async function getExecutionContext(user: CurrentUser, equipmentId: string
   requireAreaAccess(user, equipment.areaId, PERMISSIONS.EQUIPMENT_VIEW_ALL_AREAS);
 
   const assignment = await db.equipmentChecklistAssignment.findFirst({
-    where: { equipmentId, active: true },
+    where: { equipmentId, active: true, ...(templateId ? { templateId } : {}) },
     include: {
       template: {
         include: {

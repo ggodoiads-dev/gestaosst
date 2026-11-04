@@ -31,7 +31,8 @@ type AreaGroup = {
   id: string;
   name: string;
   items: ChecklistBoardEquipmentItem[];
-  areaChecklist: ChecklistBoardAreaItem | null;
+  /** Um por modelo de área: a mesma área pode ter mais de um (ex.: Carga e Descarga e Amarração). */
+  areaChecklists: ChecklistBoardAreaItem[];
 };
 
 export default async function RealizarChecklistPage({
@@ -51,14 +52,14 @@ export default async function RealizarChecklistPage({
   const areaMap = new Map<string, AreaGroup>();
   for (const item of equipmentItems) {
     const area = item.equipment.area;
-    if (!areaMap.has(area.id)) areaMap.set(area.id, { id: area.id, name: area.name, items: [], areaChecklist: null });
+    if (!areaMap.has(area.id)) areaMap.set(area.id, { id: area.id, name: area.name, items: [], areaChecklists: [] });
     areaMap.get(area.id)!.items.push(item);
   }
   for (const areaItem of areaChecklistItems) {
     if (!areaMap.has(areaItem.areaId)) {
-      areaMap.set(areaItem.areaId, { id: areaItem.areaId, name: areaItem.areaName, items: [], areaChecklist: null });
+      areaMap.set(areaItem.areaId, { id: areaItem.areaId, name: areaItem.areaName, items: [], areaChecklists: [] });
     }
-    areaMap.get(areaItem.areaId)!.areaChecklist = areaItem;
+    areaMap.get(areaItem.areaId)!.areaChecklists.push(areaItem);
   }
   const areas = [...areaMap.values()].sort((a, b) => a.name.localeCompare(b.name));
 
@@ -93,9 +94,7 @@ export default async function RealizarChecklistPage({
                 (i) => i.situation === "PENDENTE" || i.situation === "ATRASADO",
               ).length;
               const atrasados = area.items.filter((i) => i.situation === "ATRASADO").length;
-              const pendenteArea = area.areaChecklist
-                ? area.areaChecklist.totalCount - area.areaChecklist.completedTodayCount
-                : 0;
+              const pendenteArea = area.areaChecklists.reduce((sum, a) => sum + (a.totalCount - a.completedTodayCount), 0);
               const pendentes = pendentesEquip + pendenteArea;
               return (
                 <Link
@@ -110,8 +109,8 @@ export default async function RealizarChecklistPage({
                   <div className="flex items-center gap-2 text-xs text-foreground-subtle">
                     <span>
                       {area.items.length > 0 && `${area.items.length} equipamento${area.items.length === 1 ? "" : "s"}`}
-                      {area.items.length > 0 && area.areaChecklist && " · "}
-                      {area.areaChecklist && "checklist de área"}
+                      {area.items.length > 0 && area.areaChecklists.length > 0 && " · "}
+                      {area.areaChecklists.length > 0 && (area.areaChecklists.length === 1 ? "checklist de área" : `${area.areaChecklists.length} checklists de área`)}
                     </span>
                     {pendentes > 0 && (
                       <Badge tone={atrasados > 0 ? "danger" : "warning"} dot>
@@ -148,38 +147,32 @@ export default async function RealizarChecklistPage({
       />
       <PageBody>
         <div className="flex flex-col divide-y divide-border rounded-lg border border-border bg-surface">
-          {currentArea.areaChecklist && (
-            <Link
-              href={`/checklist/realizar/area/${currentArea.id}`}
-              className="flex items-center justify-between gap-3 px-4 py-3.5 hover:bg-surface-muted transition-colors"
-            >
-              <div className="flex flex-col gap-0.5">
-                <span className="text-sm font-medium text-foreground flex items-center gap-1.5">
-                  <ClipboardList className="size-4 text-accent" />
-                  {currentArea.areaChecklist.templateName}
-                </span>
-                <span className="text-xs text-foreground-subtle">
-                  {currentArea.areaChecklist.completedTodayCount} de {currentArea.areaChecklist.totalCount} equipamentos
-                  concluídos hoje
-                </span>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <Badge
-                  tone={
-                    currentArea.areaChecklist.completedTodayCount >= currentArea.areaChecklist.totalCount
-                      ? "success"
-                      : "neutral"
-                  }
-                  dot
-                >
-                  {currentArea.areaChecklist.completedTodayCount >= currentArea.areaChecklist.totalCount
-                    ? "Realizado"
-                    : "Pendente"}
-                </Badge>
-                <ChevronRight className="size-4 text-foreground-subtle" />
-              </div>
-            </Link>
-          )}
+          {currentArea.areaChecklists.map((areaChecklist) => {
+            const done = areaChecklist.completedTodayCount >= areaChecklist.totalCount;
+            return (
+              <Link
+                key={areaChecklist.templateId}
+                href={`/checklist/realizar/area/${currentArea.id}?template=${areaChecklist.templateId}`}
+                className="flex items-center justify-between gap-3 px-4 py-3.5 hover:bg-surface-muted transition-colors"
+              >
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-sm font-medium text-foreground flex items-center gap-1.5">
+                    <ClipboardList className="size-4 text-accent" />
+                    {areaChecklist.templateName}
+                  </span>
+                  <span className="text-xs text-foreground-subtle">
+                    {areaChecklist.completedTodayCount} de {areaChecklist.totalCount} equipamentos concluídos hoje
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Badge tone={done ? "success" : "neutral"} dot>
+                    {done ? "Realizado" : "Pendente"}
+                  </Badge>
+                  <ChevronRight className="size-4 text-foreground-subtle" />
+                </div>
+              </Link>
+            );
+          })}
           {currentArea.items.map((item) => {
             const cfg = SITUATION_CONFIG[item.situation];
             const blocked = item.situation === "BLOQUEADO";

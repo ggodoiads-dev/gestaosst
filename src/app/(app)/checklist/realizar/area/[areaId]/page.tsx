@@ -5,12 +5,15 @@ import { AreaChecklistForm, type AreaChecklistItemData } from "./area-checklist-
 
 export default async function RealizarChecklistAreaPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ areaId: string }>;
+  searchParams: Promise<{ template?: string }>;
 }) {
   const { areaId } = await params;
+  const { template: templateId } = await searchParams;
   const user = await requireUser();
-  const { area, template, question, items } = await getAreaChecklistContext(user, areaId);
+  const { area, template, question, items } = await getAreaChecklistContext(user, areaId, templateId);
 
   if (!template || !question) notFound();
 
