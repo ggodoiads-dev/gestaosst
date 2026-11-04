@@ -158,37 +158,42 @@ function Branch({ node }: { node: TreeNode }) {
 }
 
 function positionNode(p: PositionRow): TreeNode {
-  const children: TreeNode[] = [];
-  children.push({ key: `${p.id}-occ`, children: [], box: <Box title="Ocupante atual" lines={<p className="text-[13px] font-medium text-foreground">{p.occupant ?? "—"}</p>} /> });
+  // Os sucessores saem ao lado de quem vão substituir: cargo → ocupante → sucessores. O plano de ação fica ao lado do ocupante, também ligado ao cargo.
   const successors = [
     { n: "1ª", name: p.successor1 },
     { n: "2ª", name: p.successor2 },
   ].filter((s) => s.name);
-  if (successors.length === 0) {
-    children.push({
-      key: `${p.id}-none`,
-      children: [],
-      box: <Box title="Sucessor" className={cn("border-dashed", p.criticality !== "BAIXA" && "border-danger")} lines={<p className={cn("text-[13px]", p.criticality === "BAIXA" ? "text-foreground-subtle" : "font-medium text-danger")}>Sem sucessor definido</p>} />,
-    });
-  } else {
-    successors.forEach((s) =>
-      children.push({
-        key: `${p.id}-s${s.n}`,
-        children: [],
-        box: (
-          <Box
-            title={`Sucessor ${s.n}`}
-            lines={
-              <>
-                <p className="text-[13px] font-medium text-foreground">{s.name}</p>
-                <p className="mt-0.5 text-[11px] text-foreground-subtle">{[label(READINESS, p.readiness), label(POTENTIAL, p.potential)].filter(Boolean).join(" · ") || "Sem avaliação"}</p>
-              </>
-            }
-          />
-        ),
-      }),
-    );
-  }
+  const successorNodes: TreeNode[] =
+    successors.length === 0
+      ? [
+          {
+            key: `${p.id}-none`,
+            children: [],
+            box: <Box title="Sucessor" className={cn("border-dashed", p.criticality !== "BAIXA" && "border-danger")} lines={<p className={cn("text-[13px]", p.criticality === "BAIXA" ? "text-foreground-subtle" : "font-medium text-danger")}>Sem sucessor definido</p>} />,
+          },
+        ]
+      : successors.map((s) => ({
+          key: `${p.id}-s${s.n}`,
+          children: [],
+          box: (
+            <Box
+              title={`Sucessor ${s.n}`}
+              lines={
+                <>
+                  <p className="text-[13px] font-medium text-foreground">{s.name}</p>
+                  <p className="mt-0.5 text-[11px] text-foreground-subtle">{[label(READINESS, p.readiness), label(POTENTIAL, p.potential)].filter(Boolean).join(" · ") || "Sem avaliação"}</p>
+                </>
+              }
+            />
+          ),
+        }));
+  const children: TreeNode[] = [
+    {
+      key: `${p.id}-occ`,
+      children: successorNodes,
+      box: <Box title="Ocupante atual" lines={<p className="text-[13px] font-medium text-foreground">{p.occupant ?? "—"}</p>} />,
+    },
+  ];
   if (p.gap || p.action) {
     children.push({
       key: `${p.id}-plan`,
@@ -262,7 +267,7 @@ export function SuccessionTree({ positions }: { positions: PositionRow[] }) {
   };
   return (
     <div className="overflow-x-auto rounded-md border border-border bg-surface p-4">
-      <p className="mb-3 text-xs text-foreground-subtle">Leia da esquerda para a direita: plano → área → cargo → ocupante, sucessores e plano de ação. A cor do topo do cargo é o risco da posição. Para editar, use a visão em Cartões.</p>
+      <p className="mb-3 text-xs text-foreground-subtle">Leia da esquerda para a direita: plano → área → cargo → ocupante → sucessores (ao lado de quem vão substituir), mais o plano de ação. A cor do topo do cargo é o risco da posição. Para editar, use a visão em Cartões.</p>
       <div className="min-w-max">
         <Branch node={root} />
       </div>
