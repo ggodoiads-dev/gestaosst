@@ -10,7 +10,9 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter }
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { CRITICALITY, READINESS, POTENTIAL, POSITION_STATUS, iccLabel } from "@/domain/pipeline/rules";
 import { readPipelineWorkbookAction, commitPipelineImportAction } from "@/server/actions/pipeline.actions";
+import { readMatrixWorkbookAction, commitMatrixImportAction } from "@/server/actions/pipeline-matrix.actions";
 import type { PipelineWorkbook } from "@/server/services/pipeline.service";
+import type { MatrixWorkbook } from "@/server/services/pipeline-matrix.service";
 
 const label = (list: readonly { key: string; label: string }[], key: string | null | undefined) => list.find((i) => i.key === key)?.label ?? "—";
 
@@ -19,9 +21,11 @@ export function PipelineImportWizard() {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<PipelineWorkbook | null>(null);
+  const [matrixData, setMatrixData] = useState<MatrixWorkbook | null>(null);
+  const [replaceMatrices, setReplaceMatrices] = useState<"replace" | "append">("replace");
   const [replace, setReplace] = useState<"replace" | "append">("replace");
   const [cycleYear, setCycleYear] = useState(String(new Date().getFullYear()));
-  const [result, setResult] = useState<{ positionsSaved: number; cyclesSaved: number } | null>(null);
+  const [result, setResult] = useState<{ positionsSaved: number; cyclesSaved: number; matricesSaved: number; specialistsSaved: number } | null>(null);
 
   function read() {
     const file = fileInputRef.current?.files?.[0];
@@ -39,6 +43,8 @@ export function PipelineImportWizard() {
         return;
       }
       setData({ positions: res.positions, cycles: res.cycles, notes: res.notes });
+      const matrix = await readMatrixWorkbookAction(formData);
+      setMatrixData(matrix.ok ? { matrices: matrix.matrices, specialists: matrix.specialists, notes: matrix.notes } : null);
     });
   }
 
@@ -56,8 +62,20 @@ export function PipelineImportWizard() {
         setError(res.error);
         return;
       }
-      setResult({ positionsSaved: res.positionsSaved, cyclesSaved: res.cyclesSaved });
+      let matricesSaved = 0;
+      let specialistsSaved = 0;
+      if (matrixData && (matrixData.matrices.length > 0 || matrixData.specialists.length > 0)) {
+        const m = await commitMatrixImportAction({ matrices: matrixData.matrices, specialists: matrixData.specialists, replaceMatrices: replaceMatrices === "replace" });
+        if (!m.ok) {
+          setError(m.error);
+          return;
+        }
+        matricesSaved = m.matricesSaved;
+        specialistsSaved = m.specialistsSaved;
+      }
+      setResult({ positionsSaved: res.positionsSaved, cyclesSaved: res.cyclesSaved, matricesSaved, specialistsSaved });
       setData(null);
+      setMatrixData(null);
     });
   }
 
@@ -70,7 +88,7 @@ export function PipelineImportWizard() {
           </CardTitle>
         </CardHeader>
         <CardContent className="text-sm text-foreground-subtle">
-          {result.positionsSaved} cargo(s) no plano de sucessão e {result.cyclesSaved} resultado(s) de Ciclo de Gente.
+          {result.positionsSaved} cargo(s) no plano de sucessão, {result.cyclesSaved} resultado(s) de Ciclo de Gente, {result.matricesSaved} matriz(es) de função e {result.specialistsSaved} especialista(s).
         </CardContent>
         <CardFooter>
           <Button asChild>
@@ -212,9 +230,43 @@ export function PipelineImportWizard() {
             </CardContent>
           </Card>
 
+          {matrixData && (
+            <Card>
+              <CardHeader>
+                <CardTitle>4. Matriz de função: {matrixData.matrices.length} matriz(es) e especialistas: {matrixData.specialists.length}</CardTitle>
+                <CardDescription>As atividades, as pessoas e os níveis da aba Matriz função, e o plano da aba Especialistas de função (quando tem gente lançada).</CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-3">
+                {matrixData.notes.map((n) => (
+                  <p key={n} className="text-sm text-warning">
+                    {n}
+                  </p>
+                ))}
+                {matrixData.matrices.map((m) => (
+                  <div key={m.name} className="rounded-md border border-border px-3 py-2 text-sm">
+                    <p className="font-semibold text-foreground">{m.name}</p>
+                    <p className="text-xs text-foreground-subtle">
+                      {m.skills.length} atividade(s): {m.skills.join(", ") || "—"} · {m.members.length} pessoa(s)
+                    </p>
+                  </div>
+                ))}
+                {matrixData.matrices.length > 0 && (
+                  <RadioGroup value={replaceMatrices} onValueChange={(v) => setReplaceMatrices(v as "replace" | "append")} className="gap-2">
+                    <label className="flex items-center gap-2 text-sm">
+                      <RadioGroupItem value="replace" /> Substituir as matrizes atuais por estas
+                    </label>
+                    <label className="flex items-center gap-2 text-sm">
+                      <RadioGroupItem value="append" /> Acrescentar estas matrizes às atuais
+                    </label>
+                  </RadioGroup>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           {error && <p className="text-sm text-danger">{error}</p>}
           <div>
-            <Button onClick={commit} loading={pending} disabled={data.positions.length + data.cycles.length === 0}>
+            <Button onClick={commit} loading={pending} disabled={data.positions.length + data.cycles.length + (matrixData?.matrices.length ?? 0) + (matrixData?.specialists.length ?? 0) === 0}>
               Confirmar importação
             </Button>
           </div>

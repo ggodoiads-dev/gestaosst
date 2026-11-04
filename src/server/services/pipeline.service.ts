@@ -75,6 +75,8 @@ export type PipelineView = {
   positions: PositionRow[];
   summary: ReturnType<typeof summarizePositions>;
   collaboratorNames: string[];
+  /** Colaboradores ativos com a função, para sugerir nomes nos formulários. */
+  people: { name: string; functionName: string | null }[];
 };
 
 const str = (v: unknown, max = 300): string | null => (typeof v === "string" && v.trim() !== "" ? v.trim().slice(0, max) : null);
@@ -105,7 +107,7 @@ const toPosition = (r: {
 export async function getPipelineView(user: CurrentUser, year: number): Promise<PipelineView> {
   requirePermission(user, RH);
   const now = new Date();
-  const collaborators = await db.collaborator.findMany({ where: { active: true }, select: { name: true, admissionDate: true }, orderBy: { name: "asc" } });
+  const collaborators = await db.collaborator.findMany({ where: { active: true }, select: { name: true, admissionDate: true, function: { select: { name: true } } }, orderBy: { name: "asc" } });
   const tenure = tenureSummary(collaborators.filter((c) => c.admissionDate).map((c) => monthsBetween(c.admissionDate as Date, now)));
 
   let ready = true;
@@ -135,6 +137,7 @@ export async function getPipelineView(user: CurrentUser, year: number): Promise<
     positions,
     summary: summarizePositions(positions),
     collaboratorNames: collaborators.map((c) => c.name),
+    people: collaborators.map((c) => ({ name: c.name, functionName: c.function?.name ?? null })),
   };
 }
 

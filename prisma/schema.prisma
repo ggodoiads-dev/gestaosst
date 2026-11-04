@@ -2022,6 +2022,78 @@ model PeopleCycleEntry {
   @@index([cycleYear])
 }
 
+/// Matriz de função / multiskill (Pipeline de Gente): uma matriz por função ou grupo, com as atividades (colunas) e as pessoas (linhas).
+model SkillMatrix {
+  id        String   @id @default(uuid())
+  name      String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  skills  SkillMatrixSkill[]
+  members SkillMatrixMember[]
+}
+
+model SkillMatrixSkill {
+  id        String @id @default(uuid())
+  matrixId  String
+  name      String
+  sortOrder Int    @default(0)
+
+  matrix SkillMatrix        @relation(fields: [matrixId], references: [id], onDelete: Cascade)
+  levels SkillMatrixLevel[]
+
+  @@index([matrixId])
+}
+
+model SkillMatrixMember {
+  id             String  @id @default(uuid())
+  matrixId       String
+  collaboratorId String?
+  name           String
+  role           String?
+  grp            String?
+  sortOrder      Int     @default(0)
+
+  matrix SkillMatrix        @relation(fields: [matrixId], references: [id], onDelete: Cascade)
+  levels SkillMatrixLevel[]
+
+  @@index([matrixId])
+}
+
+/// Nível de uma pessoa em uma atividade: 0 não conhece, 1 em desenvolvimento, 2 executa com apoio, 3 executa sozinho, 4 pode ensinar. Sem linha = não avaliado.
+model SkillMatrixLevel {
+  memberId String
+  skillId  String
+  level    Int
+
+  member SkillMatrixMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  skill  SkillMatrixSkill  @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@id([memberId, skillId])
+}
+
+/// Plano de desenvolvimento dos especialistas de função (operador educador, campeão de segurança, padrinho...).
+model FunctionSpecialist {
+  id             String    @id @default(uuid())
+  collaboratorId String?
+  name           String
+  functionName   String?
+  grp            String
+  skill          String?
+  action         String?
+  dueDate        DateTime?
+  dueNote        String?
+  follow         String?
+  status         String? // ANDAMENTO | AGENDADO | CONCLUIDO
+  sortOrder      Int       @default(0)
+  updatedById    String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([grp])
+}
+
 /// Resultado travado de cada dia FECHADO de checklist por colaborador (quantos equipamentos eram exigidos e quantos foram feitos). Depois de travado, o
 /// dia não muda mais quando o cadastro muda (equipamento de área, checklist da função...): é daqui que saem as medidas disciplinares.
 model ChecklistDayResult {
