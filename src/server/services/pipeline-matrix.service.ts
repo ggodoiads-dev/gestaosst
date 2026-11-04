@@ -106,6 +106,41 @@ export async function addMember(user: CurrentUser, matrixId: string, input: { co
   await db.skillMatrixMember.create({ data: { matrixId, collaboratorId: input.collaboratorId || null, name, role: str(input.role, 120), grp: str(input.grp, 80), sortOrder: order + 1 } });
 }
 
+/**
+ * Coloca na matriz todos os colaboradores ativos de uma função (os que ainda não estão nela). O grupo vem do cadastro: quem tem a trilha de Padrinho
+ * entra como "Padrinho"; os demais, como "Operacional". Os níveis ficam em branco para serem avaliados.
+ */
+export async function addMembersByFunction(user: CurrentUser, matrixId: string, functionName: string) {
+  requirePermission(user, RH);
+  const wanted = fold(functionName);
+  if (!wanted) throw new Error("Escolha a função.");
+  const [people, existing] = await Promise.all([
+    db.collaborator.findMany({ where: { active: true, functionId: { not: null } }, select: { id: true, name: true, function: { select: { name: true } } }, orderBy: { name: "asc" } }),
+    db.skillMatrixMember.findMany({ where: { matrixId }, select: { collaboratorId: true } }),
+  ]);
+  const already = new Set(existing.map((m) => m.collaboratorId).filter((x): x is string => !!x));
+  const chosen = people.filter((p) => p.function && fold(p.function.name) === wanted && !already.has(p.id));
+  if (chosen.length === 0) return 0;
+  const padrinhos = await db.qualificationRecord.findMany({ where: { collaboratorId: { in: chosen.map((p) => p.id) }, qualificationType: { name: { contains: "padrinho", mode: "insensitive" } } }, select: { collaboratorId: true } });
+  const isPadrinho = new Set(padrinhos.map((r) => r.collaboratorId));
+  let order = await db.skillMatrixMember.count({ where: { matrixId } });
+  await db.skillMatrixMember.createMany({
+    data: chosen.map((p) => ({ matrixId, collaboratorId: p.id, name: p.name, role: p.function!.name, grp: isPadrinho.has(p.id) ? "Padrinho" : "Operacional", sortOrder: ++order })),
+  });
+  await recordAudit({ userId: user.id, action: "UPDATE", entityType: "SkillMatrix", entityId: matrixId, newValue: { addedByFunction: functionName, count: chosen.length } });
+  return chosen.length;
+}
+
+/** Aplica o mesmo nível a todas as atividades da pessoa (atalho para preencher a linha; depois se ajusta célula a célula). */
+export async function setRowLevel(user: CurrentUser, memberId: string, level: number) {
+  requirePermission(user, RH);
+  if (!Number.isInteger(level) || level < 0 || level > 4) throw new Error("Nível inválido.");
+  const member = await db.skillMatrixMember.findUniqueOrThrow({ where: { id: memberId }, select: { matrix: { select: { skills: { select: { id: true } } } } } });
+  await db.$transaction(
+    member.matrix.skills.map((s) => db.skillMatrixLevel.upsert({ where: { memberId_skillId: { memberId, skillId: s.id } }, update: { level }, create: { memberId, skillId: s.id, level } })),
+  );
+}
+
 export async function updateMember(user: CurrentUser, memberId: string, input: { role?: string | null; grp?: string | null }) {
   requirePermission(user, RH);
   await db.skillMatrixMember.update({ where: { id: memberId }, data: { role: str(input.role, 120), grp: str(input.grp, 80) } });

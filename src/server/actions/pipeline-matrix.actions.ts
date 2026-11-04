@@ -7,7 +7,7 @@ import type { MatrixWorkbook, ParsedMatrix, SpecialistInput } from "@/server/ser
 
 export type MatrixResult = { ok: true; id?: string } | { ok: false; error: string };
 
-const KNOWN = /Informe o|Escolha o|Nível inválido/;
+const KNOWN = /Informe o|Escolha a|Escolha o|Nível inválido/;
 
 async function run(fn: () => Promise<string | void>): Promise<MatrixResult> {
   try {
@@ -42,6 +42,16 @@ export async function addMemberAction(matrixId: string, input: { collaboratorId?
 }
 export async function updateMemberAction(memberId: string, input: { role?: string | null; grp?: string | null }): Promise<MatrixResult> {
   return run(async () => service.updateMember(await requireUser(), memberId, input));
+}
+export async function addMembersByFunctionAction(matrixId: string, functionName: string): Promise<MatrixResult & { count?: number }> {
+  let count = 0;
+  const res = await run(async () => {
+    count = await service.addMembersByFunction(await requireUser(), matrixId, functionName);
+  });
+  return res.ok ? { ...res, count } : res;
+}
+export async function setRowLevelAction(memberId: string, level: number): Promise<MatrixResult> {
+  return run(async () => service.setRowLevel(await requireUser(), memberId, level));
 }
 export async function deleteMemberAction(memberId: string): Promise<MatrixResult> {
   return run(async () => service.deleteMember(await requireUser(), memberId));

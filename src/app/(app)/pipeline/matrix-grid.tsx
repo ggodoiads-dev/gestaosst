@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ADHERENCE_LABEL, SKILL_LEVELS, levelEmoji, levelLabel, matrixStats } from "@/domain/pipeline/matrix";
-import { addMemberAction, addSkillAction, createMatrixAction, deleteMatrixAction, deleteMemberAction, deleteSkillAction, renameMatrixAction, setLevelAction } from "@/server/actions/pipeline-matrix.actions";
+import { addMemberAction, addMembersByFunctionAction, addSkillAction, createMatrixAction, deleteMatrixAction, deleteMemberAction, deleteSkillAction, renameMatrixAction, setLevelAction, setRowLevelAction } from "@/server/actions/pipeline-matrix.actions";
 import type { MatrixView } from "@/server/services/pipeline-matrix.service";
 import { cn } from "@/lib/utils";
 
@@ -173,6 +173,77 @@ function AddMemberDialog({ matrixId, collaborators, existing }: { matrixId: stri
   );
 }
 
+const fold = (t: string) =>
+  Array.from(t.normalize("NFD"))
+    .filter((ch) => ch.codePointAt(0)! < 0x300)
+    .join("")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+
+/** Coloca de uma vez todos os colaboradores ativos de uma função na matriz (quem tem a trilha de Padrinho entra no grupo Padrinho). */
+function AddByFunctionDialog({ matrixId, matrixName, collaborators }: { matrixId: string; matrixName: string; collaborators: MatrixView["collaborators"] }) {
+  const router = useRouter();
+  const functions = [...new Set(collaborators.map((c) => c.functionName).filter((f): f is string => !!f))].sort((a, b) => a.localeCompare(b));
+  const guess = functions.find((f) => fold(f).includes(fold(matrixName)) || fold(matrixName).includes(fold(f))) ?? "none";
+  const [open, setOpen] = useState(false);
+  const [fn, setFn] = useState(guess);
+  const [pending, start] = useTransition();
+  const count = collaborators.filter((c) => c.functionName === fn).length;
+
+  function save() {
+    start(async () => {
+      const res = await addMembersByFunctionAction(matrixId, fn);
+      if (!res.ok) return void toast.error(res.error);
+      toast.success(res.count ? `${res.count} pessoa(s) adicionada(s).` : "Todos dessa função já estavam na matriz.");
+      setOpen(false);
+      router.refresh();
+    });
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <Button variant="secondary" onClick={() => setOpen(true)}>
+        <Plus className="size-4" /> Toda uma função
+      </Button>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Adicionar todos de uma função</DialogTitle>
+        </DialogHeader>
+        <DialogBody className="flex flex-col gap-3">
+          <FormField label="Função">
+            <Select value={fn} onValueChange={setFn}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="max-h-72">
+                <SelectItem value="none">Escolha a função</SelectItem>
+                {functions.map((f) => (
+                  <SelectItem key={f} value={f}>
+                    {f}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FormField>
+          <p className="text-xs text-foreground-subtle">
+            {fn === "none" ? "Entram os colaboradores ativos da função escolhida que ainda não estão na matriz." : `${count} colaborador(es) ativo(s) com essa função.`} O grupo vem do cadastro: quem tem a trilha de Padrinho entra como Padrinho, os demais como Operacional. Os níveis ficam em branco para você avaliar.
+          </p>
+        </DialogBody>
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button type="button" variant="secondary">
+              Cancelar
+            </Button>
+          </DialogClose>
+          <Button onClick={save} loading={pending} disabled={fn === "none"}>
+            Adicionar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function RenameDeleteMatrix({ matrix }: { matrix: Current }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -233,6 +304,7 @@ export function MatrixGrid({ matrix, matrices, collaborators }: { matrix: Curren
   const router = useRouter();
   const [levels, setLevels] = useState<Record<string, Record<string, number>>>(() => Object.fromEntries((matrix?.members ?? []).map((m) => [m.id, m.levels])));
   const [newSkill, setNewSkill] = useState("");
+  const [clean, setClean] = useState(false);
   const [, start] = useTransition();
 
   const stats = useMemo(() => (matrix ? matrixStats(matrix.skills.map((s) => s.id), matrix.members.map((m) => ({ id: m.id, levels: levels[m.id] ?? {} }))) : null), [matrix, levels]);
@@ -255,6 +327,18 @@ export function MatrixGrid({ matrix, matrices, collaborators }: { matrix: Curren
           else mine[skillId] = previous;
           return { ...cur, [memberId]: mine };
         });
+      }
+    });
+  }
+
+  function fillRow(memberId: string, level: number) {
+    if (!matrix) return;
+    setLevels((cur) => ({ ...cur, [memberId]: Object.fromEntries(matrix.skills.map((s) => [s.id, level])) }));
+    start(async () => {
+      const res = await setRowLevelAction(memberId, level);
+      if (!res.ok) {
+        toast.error(res.error);
+        router.refresh();
       }
     });
   }
@@ -305,14 +389,18 @@ export function MatrixGrid({ matrix, matrices, collaborators }: { matrix: Curren
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-1">
               <h3 className="text-base font-semibold text-foreground">{matrix.name}</h3>
-              <RenameDeleteMatrix matrix={matrix} />
+              {!clean && <RenameDeleteMatrix matrix={matrix} />}
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            <label className="flex items-center gap-2 text-xs text-foreground-subtle">
+              <input type="checkbox" checked={clean} onChange={(e) => setClean(e.target.checked)} /> Tela limpa (para tirar print)
+            </label>
+            <div className={cn("flex flex-wrap items-center gap-2", clean && "hidden")}>
               <Input value={newSkill} onChange={(e) => setNewSkill(e.target.value)} placeholder="Nova atividade" maxLength={120} className="h-9 w-48" onKeyDown={(e) => e.key === "Enter" && newSkill.trim() && addSkill()} />
               <Button variant="secondary" onClick={addSkill} disabled={!newSkill.trim()}>
                 <Plus className="size-4" /> Atividade
               </Button>
               <AddMemberDialog matrixId={matrix.id} collaborators={collaborators} existing={new Set(matrix.members.map((m) => m.collaboratorId).filter((x): x is string => !!x))} />
+              <AddByFunctionDialog matrixId={matrix.id} matrixName={matrix.name} collaborators={collaborators} />
             </div>
           </div>
 
@@ -339,7 +427,7 @@ export function MatrixGrid({ matrix, matrices, collaborators }: { matrix: Curren
                       <th key={s.id} className="group min-w-24 px-1.5 py-2 text-center align-bottom text-[11px] font-medium leading-tight text-foreground-muted">
                         <div className="flex items-start justify-center gap-0.5">
                           <span>{s.name}</span>
-                          <button type="button" onClick={() => removeSkill(s.id, s.name)} className="invisible text-foreground-subtle hover:text-danger group-hover:visible" aria-label={`Remover ${s.name}`}>
+                          <button type="button" onClick={() => removeSkill(s.id, s.name)} className={cn("invisible text-foreground-subtle hover:text-danger group-hover:visible", clean && "hidden")} aria-label={`Remover ${s.name}`}>
                             ×
                           </button>
                         </div>
@@ -360,9 +448,27 @@ export function MatrixGrid({ matrix, matrices, collaborators }: { matrix: Curren
                               <p className="truncate font-medium text-foreground">{m.name}</p>
                               <p className="truncate text-[11px] text-foreground-subtle">{[m.role, m.grp].filter(Boolean).join(" · ") || "—"}</p>
                             </div>
-                            <button type="button" onClick={() => removeMember(m.id, m.name)} className="text-foreground-subtle hover:text-danger" aria-label={`Tirar ${m.name}`}>
-                              <Trash2 className="size-3.5" />
-                            </button>
+                            {!clean && (
+                              <div className="flex shrink-0 items-center gap-1.5">
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <button type="button" className="text-xs text-foreground-subtle hover:text-foreground" title="Preencher a linha toda com um nível" aria-label={`Preencher a linha de ${m.name}`}>
+                                      ⚡
+                                    </button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="start">
+                                    {SKILL_LEVELS.map((l) => (
+                                      <DropdownMenuItem key={l.level} onSelect={() => fillRow(m.id, l.level)}>
+                                        Toda a linha: {l.emoji} {l.label}
+                                      </DropdownMenuItem>
+                                    ))}
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                                <button type="button" onClick={() => removeMember(m.id, m.name)} className="text-foreground-subtle hover:text-danger" aria-label={`Tirar ${m.name}`}>
+                                  <Trash2 className="size-3.5" />
+                                </button>
+                              </div>
+                            )}
                           </div>
                         </td>
                         {matrix.skills.map((s) => {
