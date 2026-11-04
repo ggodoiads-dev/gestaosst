@@ -3,9 +3,9 @@ import { db } from "@/server/db";
 import type { CurrentUser } from "@/server/auth/current-user";
 import { hasPermission, ForbiddenError } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
-import { getGuardianAdherence } from "@/server/services/guardian.service";
+import { getGuardianAdherence, getGuardianPercentUntilDay } from "@/server/services/guardian.service";
 import { listDtoOfMonth } from "@/server/services/dto.service";
-import { compliancePercent, getChecklistComplianceDashboard } from "@/server/services/checklist-compliance.service";
+import { compliancePercent, getChecklistComplianceDashboard, getChecklistPercentBetween } from "@/server/services/checklist-compliance.service";
 import { getProductionView } from "@/server/services/production.service";
 import { getTmaView } from "@/server/services/tma.service";
 import { getProductivityDashboard } from "@/server/services/productivity.service";
@@ -14,12 +14,14 @@ import { isWarehouseHelper } from "@/domain/production/helpers";
 import {
   accidentFindings,
   checklistFindings,
+  dayLabel,
   deltaText,
   dtoFindings,
   guardianFindings,
   kpi,
   nonconformityFindings,
   productionFindings,
+  sameDayCompare,
   sortFindings,
   tmaFindings,
   trendTone,
@@ -45,6 +47,15 @@ export const daysBetween = (a: Date, b: Date) => Math.max(0, Math.floor((b.getTi
 
 type Built = { section: ReportSection; findings: Finding[]; exec: Kpi[] };
 type Ctx = { user: CurrentUser; month: string; prev: string; internal: boolean; nowKey: string };
+
+/** Dia do mês em Brasília (1 a 31), hoje ou ontem. */
+const brasiliaDay = (offsetDays = 0) => Number(formatInTimeZone(new Date(Date.now() + offsetDays * 86400000), APP_TIMEZONE, "d"));
+
+/** Mês em andamento: Adesão e Aderência comparadas com o MESMO PONTO do mês passado ("até 04/out"), não com o mês passado inteiro. */
+function withSameDay(k: Kpi, cur: number | null, prevSameDay: number | null, cutMonth: string, cutDay: number): Kpi {
+  const cmp = sameDayCompare(cur, prevSameDay, dayLabel(cutMonth, cutDay));
+  return cmp ? { ...k, delta: cmp.delta, sameDay: cmp.sameDay } : k;
+}
 
 /** Executa um módulo; sem permissão ou com falha, o módulo sai do relatório (e é listado como indisponível) em vez de derrubar tudo. */
 async function safe(name: string, unavailable: string[], fn: () => Promise<Built | null>): Promise<Built | null> {
@@ -131,12 +142,17 @@ async function guardianSection(c: Ctx): Promise<Built | null> {
     internal: c.internal,
   });
   const typeLabel: Record<string, string> = { COMPORTAMENTO_RISCO: "Comportamento de risco", CONDICAO_INSEGURA: "Condição insegura", INCIDENTE: "Incidente", RECONHECIMENTO: "Reconhecimento" };
+  // Mês em andamento: compara com o mesmo ponto do mês passado (até o dia de hoje), não com o mês passado inteiro.
+  const guardianToday = brasiliaDay();
+  const prevGuardianSameDay = c.month === c.nowKey ? await getGuardianPercentUntilDay(c.user, c.prev, guardianToday).catch(() => null) : null;
   const section: ReportSection = {
     key: "guardian",
     title: "Guardian — adesão e relatos de segurança",
     scope: `Dos colaboradores que estavam na casa no mês, quantos relataram ao menos uma vez.${selected.frozen ? " Mês fechado: valores travados." : " Mês em andamento: recomeça do zero a cada mês."}`,
     kpis: [
-      kpi("gd-adh", "Adesão", pct(selected.adherencePercent), selected.adherencePercent >= 90 ? "good" : selected.adherencePercent >= 70 ? "warn" : "bad", deltaText(selected.adherencePercent, prev?.adherencePercent, "pts")),
+      c.month === c.nowKey
+        ? withSameDay(kpi("gd-adh", "Adesão", pct(selected.adherencePercent), selected.adherencePercent >= 90 ? "good" : selected.adherencePercent >= 70 ? "warn" : "bad", deltaText(selected.adherencePercent, prev?.adherencePercent, "pts")), selected.adherencePercent, prevGuardianSameDay, c.prev, guardianToday)
+        : kpi("gd-adh", "Adesão", pct(selected.adherencePercent), selected.adherencePercent >= 90 ? "good" : selected.adherencePercent >= 70 ? "warn" : "bad", deltaText(selected.adherencePercent, prev?.adherencePercent, "pts")),
       kpi("gd-rep", "Relataram", `${selected.reportedCount} de ${selected.activeCollaboratorsCount}`, "neutral"),
       kpi("gd-rel", "Relatos no mês", String(selected.reportsCount), trendTone(selected.reportsCount, prev?.reportsCount, true), deltaText(selected.reportsCount, prev?.reportsCount, "pct")),
     ],
@@ -204,12 +220,22 @@ async function checklistSection(c: Ctx): Promise<Built | null> {
   const pending = cur.month.shiftsRequired - cur.month.shiftsComplete;
   const findings = checklistFindings({ percent: p, prevPercent: pp, pendingShifts: pending, isCurrentMonth: isCurrent });
   const worst = [...cur.month.people].filter((x) => x.shiftsRequired > x.shiftsComplete).sort((a, b) => b.shiftsRequired - b.shiftsComplete - (a.shiftsRequired - a.shiftsComplete)).slice(0, 8);
+  // A aderência do mês em andamento vai até ontem; compara com os mesmos dias do mês passado (do dia 1 até o mesmo dia).
+  const yesterdayDay = brasiliaDay(-1);
+  let prevChecklistSameDay: number | null = null;
+  if (isCurrent && yesterdayDay >= 1) {
+    const [py, pm] = c.prev.split("-").map(Number);
+    const lastDay = new Date(py, pm, 0).getDate();
+    prevChecklistSameDay = await getChecklistPercentBetween(c.user, new Date(py, pm - 1, 1), new Date(py, pm - 1, Math.min(yesterdayDay, lastDay))).catch(() => null);
+  }
   const section: ReportSection = {
     key: "checklists",
     title: "Checklists — aderência por colaborador",
     scope: `Turnos em que alguém era cobrado por checklist e quantos foram cumpridos${isCurrent ? " (mês em andamento, até ontem)" : ""}. Usa a lista de colaboradores e as exigências de hoje.`,
     kpis: [
-      kpi("ck-adh", "Aderência", p === null ? "—" : pct(p), p === null ? "neutral" : p >= 95 ? "good" : p >= 85 ? "warn" : "bad", deltaText(p, pp, "pts")),
+      isCurrent
+        ? withSameDay(kpi("ck-adh", "Aderência", p === null ? "—" : pct(p), p === null ? "neutral" : p >= 95 ? "good" : p >= 85 ? "warn" : "bad", deltaText(p, pp, "pts")), p, prevChecklistSameDay, c.prev, Math.max(yesterdayDay, 1))
+        : kpi("ck-adh", "Aderência", p === null ? "—" : pct(p), p === null ? "neutral" : p >= 95 ? "good" : p >= 85 ? "warn" : "bad", deltaText(p, pp, "pts")),
       kpi("ck-done", "Turnos cumpridos", `${cur.month.shiftsComplete} de ${cur.month.shiftsRequired}`, "neutral"),
       kpi("ck-pend", "Turnos pendentes", String(pending), pending > 0 ? "warn" : "good"),
     ],

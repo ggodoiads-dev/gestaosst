@@ -30,6 +30,7 @@ export function joinList(items: string[]): string {
 /** "−23 pts vs. mês anterior" → "variação de −23 pts em relação ao mês anterior". */
 export function deltaSentence(delta: string): string {
   if (delta.startsWith("= ")) return "valor estável em relação ao mês anterior";
+  if (delta.startsWith("até ")) return `no mesmo ponto do mês passado (${delta})`;
   return `variação de ${delta.replace(" vs. mês anterior", "")} em relação ao mês anterior`;
 }
 

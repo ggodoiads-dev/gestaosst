@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { accidentFindings, checklistFindings, deltaText, guardianFindings, nonconformityFindings, pctDelta, sortFindings, tmaFindings, trendTone } from "./analysis";
+import { accidentFindings, checklistFindings, dayLabel, deltaText, guardianFindings, nonconformityFindings, pctDelta, sameDayCompare, sortFindings, tmaFindings, trendTone } from "./analysis";
 
 describe("comparação com o mês anterior", () => {
   it("variação percentual e texto", () => {
@@ -42,5 +42,23 @@ describe("pontos críticos", () => {
   it("TMA acima da meta", () => {
     expect(tmaFindings({ avgMin: 250, prevAvgMin: 200, within3h: 40, targetMin: 180 }).map((x) => x.severity)).toEqual(["CRITICO", "ATENCAO", "ATENCAO"]);
     expect(tmaFindings({ avgMin: 170, prevAvgMin: 170, within3h: 70, targetMin: 180 })).toEqual([]);
+  });
+});
+
+describe("comparação no mesmo ponto do mês passado", () => {
+  it("dayLabel escreve o dia e o mês abreviado", () => {
+    expect(dayLabel("2026-10", 4)).toBe("04/out");
+    expect(dayLabel("2026-01", 31)).toBe("31/jan");
+  });
+  it("texto: até o dia, valor de lá e a diferença em pontos", () => {
+    const r = sameDayCompare(30, 100, "04/out");
+    expect(r?.delta).toBe("até 04/out: 100% · −70 pts");
+    expect(r?.sameDay).toEqual({ cut: "04/out", cur: 30, prev: 100 });
+    expect(sameDayCompare(72, 27, "03/out")?.delta).toBe("até 03/out: 27% · +45 pts");
+    expect(sameDayCompare(50, 50, "03/out")?.delta).toBe("até 03/out: 50% · igual");
+  });
+  it("sem um dos valores, não compara", () => {
+    expect(sameDayCompare(null, 50, "04/out")).toBeUndefined();
+    expect(sameDayCompare(50, null, "04/out")).toBeUndefined();
   });
 });

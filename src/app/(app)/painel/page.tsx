@@ -19,7 +19,7 @@ import { SeriesBars } from "../relatorios/report-charts";
 import { HomeNovo } from "../inicio/home-novo";
 import { HomeTabs } from "../inicio/home-tabs";
 import { loadHomeNovoProps, loadQuickLinks } from "../inicio/load-home-data";
-import { buildHeadline, type MarkTone } from "@/domain/home/headline";
+import { buildPainelBriefing, buildPainelHeadline, type MarkTone } from "@/domain/home/headline";
 import { formatLongDate } from "@/lib/dates";
 import { LineChart, Ring, Sparkline } from "./charts";
 
@@ -164,8 +164,14 @@ export default async function PainelPage({ searchParams }: { searchParams: Promi
   const turnoverNow = pdca?.current ?? null;
   const goal = pdca?.data.annualGoal ?? null;
   const executive = report?.executive ?? [];
-  const checklistK = executive.find((k) => /checklist/i.test(k.label));
-  const checklistPct = checklistK ? Number.parseInt(checklistK.value, 10) : null;
+  const metricOf = (key: string) => {
+    const k = executive.find((x) => x.key === key);
+    const pct = k ? Number.parseFloat(k.value.replace(",", ".")) : NaN;
+    return k && Number.isFinite(pct) ? { pct, sameDay: month === nowKey && k.sameDay ? { cut: k.sameDay.cut, prev: k.sameDay.prev } : null } : null;
+  };
+  const checklistMetric = metricOf("ck-adh");
+  const guardianMetric = metricOf("gd-adh");
+  const checklistPct = checklistMetric ? checklistMetric.pct : null;
 
   return (
     <div className="mx-auto flex w-full max-w-[1280px] flex-col gap-6 px-4 py-6 sm:px-8 sm:py-8">
@@ -197,18 +203,28 @@ export default async function PainelPage({ searchParams }: { searchParams: Promi
           )}
         </p>
         <h1 className="mt-2 max-w-[900px] text-[34px] font-medium leading-[1.1] tracking-[-0.035em] text-foreground sm:text-[46px]">
-          {buildHeadline({
+          {buildPainelHeadline({
             alertCount: alerts.length + (month === nowKey ? 0 : (report?.findings.length ?? 0)),
             criticalCount: month === nowKey ? alerts.filter((a) => a.severity === "CRITICO").length : (report?.findings.filter((f) => f.severity === "CRITICO").length ?? 0),
-            checklistPct: checklistPct !== null && Number.isFinite(checklistPct) ? checklistPct : null,
-            turnover: turnoverNow && turnoverNow.ytdRate !== null ? { rate: turnoverNow.ytdRate, goal } : null,
           }).map((part, i) => (
             <span key={i} className={cn(part.serif && "sigo-serif text-[1.08em]", part.mark && "sigo-mark")} style={part.mark ? ({ ["--mark" as string]: MARK[part.mark] } as React.CSSProperties) : undefined}>
               {part.text}
             </span>
           ))}
         </h1>
-        {month === nowKey && <p className="mt-2 text-[13.5px] text-foreground-muted">Mês em andamento: os números são parciais e mudam a cada lançamento e importação.</p>}
+        {(() => {
+          const briefing = buildPainelBriefing({ checklist: checklistMetric, guardian: guardianMetric, turnover: turnoverNow && turnoverNow.ytdRate !== null ? { rate: turnoverNow.ytdRate, goal } : null });
+          return briefing.length > 0 ? (
+            <p className="mt-4 max-w-[860px] text-[18px] leading-[1.5] text-foreground-muted sm:text-[20px]">
+              {briefing.map((part, i) => (
+                <span key={i} className={cn(part.mark && "sigo-mark font-medium text-foreground")} style={part.mark ? ({ ["--mark" as string]: MARK[part.mark] } as React.CSSProperties) : undefined}>
+                  {part.text}
+                </span>
+              ))}
+            </p>
+          ) : null;
+        })()}
+        {month === nowKey && <p className="mt-2 text-[13.5px] text-foreground-muted">Mês em andamento: os números são parciais e mudam a cada lançamento e importação. Checklist e Guardian são comparados com o mesmo ponto do mês passado.</p>}
       </div>
 
       {executive.length > 0 && (

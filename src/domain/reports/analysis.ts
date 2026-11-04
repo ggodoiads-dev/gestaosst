@@ -25,6 +25,25 @@ export function deltaText(cur: number | null | undefined, prev: number | null | 
   return d === 0 ? "= mês anterior" : `${sign(d)}${abs(d)}% vs. mês anterior`;
 }
 
+const MONTH_SHORT = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+
+/** "04/out": o dia (1 a 31) de um mês (AAAA-MM), para dizer "até 04/out". */
+export function dayLabel(month: string, day: number): string {
+  const m = Number(month.slice(5, 7));
+  return `${String(day).padStart(2, "0")}/${MONTH_SHORT[m - 1] ?? ""}`;
+}
+
+/**
+ * Comparação justa no mês em andamento: em vez de pôr o mês parcial contra o mês anterior inteiro, compara com o mesmo ponto do mês passado.
+ * Ex.: "até 04/out: 72% · +45 pts". Valores em %. `undefined` se faltar algum dos dois.
+ */
+export function sameDayCompare(cur: number | null | undefined, prev: number | null | undefined, cut: string): { delta: string; sameDay: NonNullable<Kpi["sameDay"]> } | undefined {
+  if (cur === null || cur === undefined || prev === null || prev === undefined) return undefined;
+  const d = Math.round((cur - prev) * 10) / 10;
+  const change = d === 0 ? "igual" : `${sign(d)}${abs(d)} pts`;
+  return { delta: `até ${cut}: ${abs(prev)}% · ${change}`, sameDay: { cut, cur, prev } };
+}
+
 /** Tom da variação: `higherIsBetter` diz se subir é bom. Variação pequena (<3%) é neutra. */
 export function trendTone(cur: number | null | undefined, prev: number | null | undefined, higherIsBetter: boolean, minRelative = 3): Tone {
   const d = pctDelta(cur, prev);

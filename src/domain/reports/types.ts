@@ -14,6 +14,8 @@ export type Kpi = {
   value: string;
   /** Comparação com o mês anterior, já escrita ("+3 pts", "−12%"), e se isso é bom ou ruim. */
   delta?: string;
+  /** Mês em andamento: o mesmo indicador no mesmo ponto do mês passado (até o dia X), para comparar período com período. Valores em %. */
+  sameDay?: { cut: string; cur: number; prev: number };
   tone: Tone;
   note?: string;
 };

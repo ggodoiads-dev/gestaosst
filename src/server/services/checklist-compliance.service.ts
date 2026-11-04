@@ -617,6 +617,12 @@ export async function reopenChecklistComplianceMonth(user: CurrentUser, month: s
  * cumpriram tudo vs. ficaram com pendência — base do dashboard de conformidade de checklist. O bloco
  * `today` guarda o ÚLTIMO DIA FECHADO (ontem); `date` é esse dia. Mês passado: depois da carência da virada o resultado
  * é TRAVADO (`frozen`) e não muda mais com justificativa, cadastro ou escala editados depois; para recalcular, `reopenChecklistComplianceMonth`. */
+/** Aderência (%) de checklist entre duas datas (inclusive), para comparar o mês em andamento com o mesmo ponto do mês passado. `null` se ninguém era cobrado. */
+export async function getChecklistPercentBetween(user: CurrentUser, from: Date, toInclusive: Date): Promise<number | null> {
+  requirePermission(user, PERMISSIONS.CHECKLIST_COMPLIANCE_VIEW);
+  return compliancePercent(await computeCompliancePeriodStats(from, toInclusive));
+}
+
 export async function getChecklistComplianceDashboard(user: CurrentUser, params: { date?: Date; month?: string } = {}) {
   requirePermission(user, PERMISSIONS.CHECKLIST_COMPLIANCE_VIEW);
   // `month` ("AAAA-MM") pede um mês JÁ FECHADO: o bloco "último dia" passa a ser o último dia daquele mês e o bloco do mês cobre ele inteiro.

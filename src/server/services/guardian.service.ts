@@ -224,6 +224,28 @@ export async function getGuardianAdherence(
   return { selected, history };
 }
 
+/**
+ * Adesão (%) de um mês contando só os relatos até o dia informado: serve para comparar o mês em andamento com o MESMO PONTO do mês passado, em vez de
+ * comparar um mês parcial com um mês inteiro. O denominador é o do mês (quem estava na casa nele). `null` se não há ninguém.
+ */
+export async function getGuardianPercentUntilDay(user: CurrentUser, month: string, day: number): Promise<number | null> {
+  requireGuardianView(user);
+  const [y, m] = month.split("-").map(Number);
+  const cutoff = new Date(Date.UTC(y, m - 1, day + 1));
+  const [collaborators, rawReports] = await Promise.all([
+    db.collaborator
+      .findMany({ select: { id: true, name: true, active: true, admissionDate: true, createdAt: true, inactivatedAt: true, turno: { select: { name: true } } } })
+      .then((rows) => rows.map(({ turno, ...c }) => ({ ...c, turnoName: turno?.name ?? null }))),
+    db.guardianReport.findMany({ where: { reporterCollaboratorId: { not: null } }, select: { type: true, reporterCollaboratorId: true, occurredAt: true, reportedAt: true } }),
+  ]);
+  const reports: ReportForAdherence[] = rawReports.flatMap((r) => {
+    const at = r.occurredAt ?? r.reportedAt;
+    return at && at < cutoff ? [{ type: r.type, reporterCollaboratorId: r.reporterCollaboratorId, at }] : [];
+  });
+  const s = summarizeMonth(month, collaborators, reports);
+  return s.inMonth.length > 0 ? Math.round((s.countByCollaborator.size / s.inMonth.length) * 100) : null;
+}
+
 /** Reabre um mês congelado (apaga o fechamento): na próxima consulta ele é recalculado e congelado de novo. Usar depois de corrigir/importar relatos que faltavam. */
 export async function reopenGuardianMonth(user: CurrentUser, month: string) {
   if (!hasPermission(user, PERMISSIONS.GUARDIAN_MANAGE)) throw new ForbiddenError();
