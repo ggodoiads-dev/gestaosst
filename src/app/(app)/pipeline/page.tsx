@@ -20,6 +20,7 @@ import { PositionDialog } from "./position-dialog";
 import { CycleDialog, RiskFollowEditor } from "./cycle-dialog";
 import { MatrixGrid } from "./matrix-grid";
 import { SpecialistDialog } from "./specialist-dialog";
+import { LinkNamesButton } from "./link-names-button";
 import { SuccessionCards, SuccessionTable, SuccessionTree, ViewSwitch, type SuccessionView } from "./succession-views";
 
 const TABS = [
@@ -305,9 +306,12 @@ export default async function PipelinePage({ searchParams }: { searchParams: Pro
                     Quem fez a Trilha de Treinamento para Padrinhos (cadastro de qualificações), com o que a planilha de gestão pede: tempo de casa, Ciclo de Gente, ocorrência de segurança e falta nos últimos 12 meses. A aderência na matriz e o plano de desenvolvimento vêm das outras abas.
                   </CardDescription>
                 </div>
-                <Button variant="secondary" asChild>
-                  <Link href="/pipeline?aba=especialistas">Plano de desenvolvimento</Link>
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <LinkNamesButton />
+                  <Button variant="secondary" asChild>
+                    <Link href="/pipeline?aba=especialistas">Plano de desenvolvimento</Link>
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent className="flex flex-col gap-5">
@@ -387,7 +391,7 @@ export default async function PipelinePage({ searchParams }: { searchParams: Pro
                       </li>
                     ))}
                   </ul>
-                  <p className="mt-1 text-xs text-foreground-subtle">Para defender, cadastre a qualificação &quot;Padrinho&quot; (com o certificado) na ficha deles, ou tire do grupo Padrinho.</p>
+                  <p className="mt-1 text-xs text-foreground-subtle">Se o nome está só abreviado na planilha, clique em &quot;Correlacionar nomes com o cadastro&quot;. Se a pessoa realmente não tem a trilha, cadastre a qualificação &quot;Padrinho&quot; (com o certificado) na ficha dela ou tire do grupo Padrinho.</p>
                 </div>
               )}
             </CardContent>

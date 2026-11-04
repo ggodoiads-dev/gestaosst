@@ -7,6 +7,7 @@ import { PERMISSIONS } from "@/domain/shared/permissions";
 import { isPadrinhoQualification } from "@/domain/qualification/padrinho";
 import { monthsBetween, iccLabel } from "@/domain/pipeline/rules";
 import { ADHERENCE_LABEL, adherence, adherenceLevel } from "@/domain/pipeline/matrix";
+import { namesMatch } from "@/domain/pipeline/names";
 
 const fold = (s: string) =>
   Array.from(s.normalize("NFD"))
@@ -83,7 +84,8 @@ export async function getMentorsView(user: CurrentUser, year: number): Promise<M
     ready = false;
   }
 
-  const sameperson = (a: { collaboratorId: string | null; name: string }, id: string, name: string) => (a.collaboratorId ? a.collaboratorId === id : fold(a.name) === fold(name));
+  // Vínculo pelo cadastro quando existe; senão, pelo nome (a planilha traz nome curto, o cadastro o completo).
+  const sameperson = (a: { collaboratorId: string | null; name: string }, id: string, name: string) => (a.collaboratorId ? a.collaboratorId === id : namesMatch(a.name, name));
 
   const mentors: MentorRow[] = [...certified.values()]
     .map((r) => {
@@ -125,13 +127,12 @@ export async function getMentorsView(user: CurrentUser, year: number): Promise<M
     .sort((a, b) => a.name.localeCompare(b.name));
 
   // Indicados como Padrinho no Pipeline que não têm a trilha cadastrada.
-  const certifiedNames = new Set(mentors.map((m) => fold(m.name)));
   const certifiedIds = new Set(ids);
   const withoutCertificate: MentorsView["withoutCertificate"] = [];
   const seen = new Set<string>();
   const consider = (name: string, collaboratorId: string | null, where: string) => {
     const key = fold(name);
-    if (seen.has(key) || (collaboratorId && certifiedIds.has(collaboratorId)) || certifiedNames.has(key)) return;
+    if (seen.has(key) || (collaboratorId && certifiedIds.has(collaboratorId)) || mentors.some((m) => namesMatch(m.name, name))) return;
     seen.add(key);
     withoutCertificate.push({ name, where });
   };

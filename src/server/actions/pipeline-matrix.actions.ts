@@ -53,6 +53,17 @@ export async function addMembersByFunctionAction(matrixId: string, functionName:
 export async function setRowLevelAction(memberId: string, level: number): Promise<MatrixResult> {
   return run(async () => service.setRowLevel(await requireUser(), memberId, level));
 }
+export async function linkNamesAction(): Promise<{ ok: true; linked: number; unmatched: string[] } | { ok: false; error: string }> {
+  try {
+    const result = await service.linkNamesToRegistry(await requireUser());
+    revalidatePath("/pipeline");
+    return { ok: true, ...result };
+  } catch (error) {
+    if (error instanceof ForbiddenError) return { ok: false, error: error.message };
+    console.error("[pipeline-matriz] falha ao ligar os nomes:", error);
+    return { ok: false, error: "Não foi possível correlacionar os nomes." };
+  }
+}
 export async function deleteMemberAction(memberId: string): Promise<MatrixResult> {
   return run(async () => service.deleteMember(await requireUser(), memberId));
 }

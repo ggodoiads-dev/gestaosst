@@ -7,6 +7,7 @@ import { requirePermission } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
 import { matrixStats, parseLevel, SPECIALIST_GROUPS } from "@/domain/pipeline/matrix";
 import { POSITION_STATUS, parseDue, parsePositionStatus } from "@/domain/pipeline/rules";
+import { uniqueMatch } from "@/domain/pipeline/names";
 
 const RH = PERMISSIONS.HR_MANAGE;
 
@@ -233,6 +234,41 @@ export async function deleteSpecialist(user: CurrentUser, id: string) {
   await recordAudit({ userId: user.id, action: "DELETE", entityType: "FunctionSpecialist", entityId: id, previousValue: { name: before.name } });
 }
 
+/**
+ * Liga ao cadastro de colaboradores as pessoas da matriz e dos especialistas que ainda não têm vínculo (a planilha traz o nome curto, o cadastro o nome
+ * completo). Só vincula quando há um único colaborador ativo que combine; o resto volta na lista para ajustar na mão. Preenche a função se estava vazia.
+ */
+export async function linkNamesToRegistry(user: CurrentUser) {
+  requirePermission(user, RH);
+  const people = await db.collaborator.findMany({ where: { active: true }, select: { id: true, name: true, function: { select: { name: true } } } });
+  const [members, specialists] = await Promise.all([
+    db.skillMatrixMember.findMany({ where: { collaboratorId: null }, select: { id: true, name: true, role: true } }),
+    db.functionSpecialist.findMany({ where: { collaboratorId: null }, select: { id: true, name: true, functionName: true } }),
+  ]);
+  let linked = 0;
+  const unmatched = new Set<string>();
+  for (const m of members) {
+    const hit = uniqueMatch(m.name, people);
+    if (!hit) {
+      unmatched.add(m.name);
+      continue;
+    }
+    await db.skillMatrixMember.update({ where: { id: m.id }, data: { collaboratorId: hit.id, role: m.role ?? hit.function?.name ?? null } });
+    linked += 1;
+  }
+  for (const sp of specialists) {
+    const hit = uniqueMatch(sp.name, people);
+    if (!hit) {
+      unmatched.add(sp.name);
+      continue;
+    }
+    await db.functionSpecialist.update({ where: { id: sp.id }, data: { collaboratorId: hit.id, functionName: sp.functionName ?? hit.function?.name ?? null } });
+    linked += 1;
+  }
+  await recordAudit({ userId: user.id, action: "UPDATE", entityType: "SkillMatrix", entityId: "link-names", newValue: { linked, unmatched: unmatched.size } });
+  return { linked, unmatched: [...unmatched] };
+}
+
 // ── Importação da planilha ──
 
 export type ParsedMatrix = { name: string; skills: string[]; members: { name: string; role: string | null; grp: string | null; levels: (number | null)[] }[] };
@@ -373,5 +409,7 @@ export async function commitMatrixImport(user: CurrentUser, input: { matrices: P
     specialistsSaved += 1;
   }
   await recordAudit({ userId: user.id, action: "CREATE", entityType: "SkillMatrix", entityId: "import", newValue: { matrices: matricesSaved, members: membersSaved, specialists: specialistsSaved, replace: input.replaceMatrices } });
+  // Já liga as pessoas importadas ao cadastro (nome curto da planilha → colaborador).
+  await linkNamesToRegistry(user).catch((error) => console.error("[pipeline-matriz] não foi possível ligar os nomes ao cadastro:", error));
   return { matricesSaved, membersSaved, specialistsSaved };
 }
