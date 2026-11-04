@@ -315,11 +315,10 @@ export default async function PipelinePage({ searchParams }: { searchParams: Pro
               </div>
             </CardHeader>
             <CardContent className="flex flex-col gap-5">
-              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+              <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
                 <StatCard label="Padrinhos com a trilha" value={mentorsView.mentors.length} />
                 <StatCard label="Sem ponto de atenção" value={mentorsView.mentors.filter((m) => m.flags.length === 0).length} tone="success" hint="sem ocorrência de segurança nem falta em 12 meses" />
                 <StatCard label="Com ponto de atenção" value={mentorsView.mentors.filter((m) => m.flags.length > 0).length} tone={mentorsView.mentors.some((m) => m.flags.length > 0) ? "warning" : "neutral"} />
-                <StatCard label="Indicados sem a trilha" value={mentorsView.withoutCertificate.length} tone={mentorsView.withoutCertificate.length > 0 ? "warning" : "neutral"} hint="marcados como Padrinho no Pipeline" />
               </div>
 
               {mentorsView.mentors.length === 0 ? (
@@ -380,20 +379,6 @@ export default async function PipelinePage({ searchParams }: { searchParams: Pro
                 </div>
               )}
               <p className="text-xs text-foreground-subtle">Ocorrência de segurança: acidente em que a pessoa foi vítima, nos últimos 12 meses (cancelados não contam). Falta: falta lançada na escala nos últimos 12 meses (atestado não conta). &quot;Apto a apadrinhar&quot; é a função dele: um padrinho acompanha novatos da mesma função.</p>
-
-              {mentorsView.withoutCertificate.length > 0 && (
-                <div className="rounded-md border border-warning/40 bg-warning-soft/40 p-3">
-                  <p className="text-sm font-semibold text-foreground">Indicados como Padrinho no Pipeline, mas sem a trilha cadastrada</p>
-                  <ul className="mt-1 list-disc pl-5 text-sm text-foreground-muted">
-                    {mentorsView.withoutCertificate.map((w) => (
-                      <li key={w.name}>
-                        {w.name} <span className="text-foreground-subtle">({w.where})</span>
-                      </li>
-                    ))}
-                  </ul>
-                  <p className="mt-1 text-xs text-foreground-subtle">Se o nome está só abreviado na planilha, clique em &quot;Correlacionar nomes com o cadastro&quot;. Se a pessoa realmente não tem a trilha, cadastre a qualificação &quot;Padrinho&quot; (com o certificado) na ficha dela ou tire do grupo Padrinho.</p>
-                </div>
-              )}
             </CardContent>
           </Card>
         )}
