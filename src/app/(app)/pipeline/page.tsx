@@ -5,6 +5,7 @@ import { requireUser, hasPermission } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
 import { getPipelineView } from "@/server/services/pipeline.service";
 import { getMatrixView, listSpecialists } from "@/server/services/pipeline-matrix.service";
+import { getMentorsView } from "@/server/services/pipeline-mentors.service";
 import { POSITION_STATUS, iccLabel } from "@/domain/pipeline/rules";
 import { SPECIALIST_GROUPS } from "@/domain/pipeline/matrix";
 import { PageHeader, PageBody } from "@/components/domain/page-header";
@@ -25,6 +26,7 @@ const TABS = [
   { key: "visao", label: "Visão geral" },
   { key: "ciclo", label: "Ciclo de Gente" },
   { key: "sucessao", label: "Plano de sucessão" },
+  { key: "mentores", label: "Mentores" },
   { key: "matriz", label: "Matriz de função" },
   { key: "especialistas", label: "Especialistas de função" },
 ] as const;
@@ -63,7 +65,8 @@ export default async function PipelinePage({ searchParams }: { searchParams: Pro
 
   const v = await getPipelineView(user, year);
   const names = v.collaboratorNames;
-  const [matrixView, specialists] = await Promise.all([
+  const [mentorsView, matrixView, specialists] = await Promise.all([
+    tab === "mentores" || tab === "visao" ? getMentorsView(user, year) : Promise.resolve(null),
     tab === "matriz" || tab === "visao" ? getMatrixView(user, sp.m) : Promise.resolve(null),
     tab === "especialistas" || tab === "visao" ? listSpecialists(user) : Promise.resolve(null),
   ]);
@@ -107,9 +110,10 @@ export default async function PipelinePage({ searchParams }: { searchParams: Pro
               </CardContent>
             </Card>
 
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
               <StatCard label="Cargos no plano de sucessão" value={v.positions.length} hint={riskHigh > 0 ? `${riskHigh} com risco alto` : "nenhum com risco alto"} tone={riskHigh > 0 ? "danger" : "neutral"} href="/pipeline?aba=sucessao" />
               <StatCard label={`Risco de turnover (ciclo ${year})`} value={v.cycle.risk.length} hint={v.cycle.entries.length === 0 ? "sem ciclo lançado" : `de ${v.cycle.entries.length} avaliados`} tone={v.cycle.risk.length > 0 ? "warning" : "neutral"} href="/pipeline?aba=ciclo" />
+              <StatCard label="Mentores (padrinhos)" value={mentorsView?.mentors.length ?? 0} hint={mentorsView ? `${mentorsView.mentors.filter((m) => m.flags.length === 0).length} aptos` : undefined} href="/pipeline?aba=mentores" />
               <StatCard label="Matrizes de função" value={matrixView?.matrices.length ?? 0} hint={matrixView?.current ? `${matrixView.current.name}: ${matrixView.current.stats.average === null ? "sem avaliação" : `${Math.round(matrixView.current.stats.average * 100)}% de aderência`}` : undefined} href="/pipeline?aba=matriz" />
               <StatCard label="Especialistas de função" value={specialists?.rows.length ?? 0} hint={specialists && specialists.rows.length > 0 ? `${specialists.rows.filter((r) => r.status === "CONCLUIDO").length} ação(ões) concluída(s)` : undefined} href="/pipeline?aba=especialistas" />
             </div>
@@ -289,6 +293,106 @@ export default async function PipelinePage({ searchParams }: { searchParams: Pro
               </CardContent>
             </Card>
           ))}
+
+        {/* ── Mentores (padrinhos) ── */}
+        {tab === "mentores" && mentorsView && (
+          <Card>
+            <CardHeader>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="max-w-3xl">
+                  <CardTitle>Mentores (padrinhos)</CardTitle>
+                  <CardDescription>
+                    Quem fez a Trilha de Treinamento para Padrinhos (cadastro de qualificações), com o que a planilha de gestão pede: tempo de casa, Ciclo de Gente, ocorrência de segurança e falta nos últimos 12 meses. A aderência na matriz e o plano de desenvolvimento vêm das outras abas.
+                  </CardDescription>
+                </div>
+                <Button variant="secondary" asChild>
+                  <Link href="/pipeline?aba=especialistas">Plano de desenvolvimento</Link>
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-5">
+              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                <StatCard label="Padrinhos com a trilha" value={mentorsView.mentors.length} />
+                <StatCard label="Sem ponto de atenção" value={mentorsView.mentors.filter((m) => m.flags.length === 0).length} tone="success" hint="sem ocorrência de segurança nem falta em 12 meses" />
+                <StatCard label="Com ponto de atenção" value={mentorsView.mentors.filter((m) => m.flags.length > 0).length} tone={mentorsView.mentors.some((m) => m.flags.length > 0) ? "warning" : "neutral"} />
+                <StatCard label="Indicados sem a trilha" value={mentorsView.withoutCertificate.length} tone={mentorsView.withoutCertificate.length > 0 ? "warning" : "neutral"} hint="marcados como Padrinho no Pipeline" />
+              </div>
+
+              {mentorsView.mentors.length === 0 ? (
+                <p className="rounded-md bg-surface-muted px-3 py-3 text-sm text-foreground-subtle">Nenhum colaborador ativo com a Trilha de Treinamento para Padrinhos cadastrada. Cadastre a qualificação &quot;Padrinho&quot; na ficha de cada um em Qualificações.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Padrinho</TableHead>
+                        <TableHead>Certificado</TableHead>
+                        <TableHead>Apto a apadrinhar</TableHead>
+                        <TableHead>Admissão</TableHead>
+                        <TableHead className="text-right">Tempo de casa</TableHead>
+                        <TableHead>Ciclo de Gente {year}</TableHead>
+                        <TableHead>Ocorrência de segurança?</TableHead>
+                        <TableHead>Falta?</TableHead>
+                        <TableHead>Matriz</TableHead>
+                        <TableHead>Desenvolvimento</TableHead>
+                        <TableHead>Situação</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {mentorsView.mentors.map((m) => (
+                        <TableRow key={m.collaboratorId}>
+                          <TableCell className="font-medium">
+                            <Link href={`/colaboradores/${m.collaboratorId}`} className="hover:underline">
+                              {m.name}
+                            </Link>
+                            <p className="text-xs font-normal text-foreground-subtle">{m.functionName ?? "—"}</p>
+                          </TableCell>
+                          <TableCell>
+                            <Badge tone="success">Trilha concluída</Badge>
+                            <p className="text-[11px] text-foreground-subtle">{formatDate(m.certifiedAt)}</p>
+                          </TableCell>
+                          <TableCell className="text-foreground-subtle">{m.functionName ?? "—"}</TableCell>
+                          <TableCell className="whitespace-nowrap text-foreground-subtle">{m.admissionDate ? formatDate(m.admissionDate) : "—"}</TableCell>
+                          <TableCell className="text-right tabular-nums">{m.tenureMonths === null ? "—" : `${m.tenureMonths} meses`}</TableCell>
+                          <TableCell className="text-foreground-subtle">{m.cycle ?? "—"}</TableCell>
+                          <TableCell>{m.safetyOccurrences > 0 ? <Badge tone="danger">Sim ({m.safetyOccurrences})</Badge> : <span className="text-foreground-subtle">Não</span>}</TableCell>
+                          <TableCell>{m.absences > 0 ? <Badge tone="warning">Sim ({m.absences})</Badge> : <span className="text-foreground-subtle">Não</span>}</TableCell>
+                          <TableCell className="whitespace-nowrap">{m.matrix ? `${m.matrix.pct}% · ${m.matrix.level}` : <span className="text-foreground-subtle">—</span>}</TableCell>
+                          <TableCell className="max-w-56 text-xs text-foreground-muted">
+                            {m.plan ? (
+                              <>
+                                {[m.plan.skill, m.plan.action].filter(Boolean).join(": ") || "Plano cadastrado"}
+                                <span className="block text-foreground-subtle">{[statusLabel(m.plan.status), m.plan.dueDate ? formatDate(m.plan.dueDate) : m.plan.dueNote].filter(Boolean).join(" · ")}</span>
+                              </>
+                            ) : (
+                              <span className="text-foreground-subtle">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell>{m.flags.length === 0 ? <Badge tone="success">Apto</Badge> : <Badge tone="warning">Atenção</Badge>}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+              <p className="text-xs text-foreground-subtle">Ocorrência de segurança: acidente em que a pessoa foi vítima, nos últimos 12 meses (cancelados não contam). Falta: falta lançada na escala nos últimos 12 meses (atestado não conta). &quot;Apto a apadrinhar&quot; é a função dele: um padrinho acompanha novatos da mesma função.</p>
+
+              {mentorsView.withoutCertificate.length > 0 && (
+                <div className="rounded-md border border-warning/40 bg-warning-soft/40 p-3">
+                  <p className="text-sm font-semibold text-foreground">Indicados como Padrinho no Pipeline, mas sem a trilha cadastrada</p>
+                  <ul className="mt-1 list-disc pl-5 text-sm text-foreground-muted">
+                    {mentorsView.withoutCertificate.map((w) => (
+                      <li key={w.name}>
+                        {w.name} <span className="text-foreground-subtle">({w.where})</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-1 text-xs text-foreground-subtle">Para defender, cadastre a qualificação &quot;Padrinho&quot; (com o certificado) na ficha deles, ou tire do grupo Padrinho.</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* ── Matriz de função ── */}
         {tab === "matriz" && matrixView && (
