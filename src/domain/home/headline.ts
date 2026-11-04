@@ -27,7 +27,7 @@ export function buildHeadline(i: HeadlineInput): HeadlinePart[] {
   if (i.turnover && i.turnover.rate !== null) {
     const within = i.turnover.goal === null ? null : i.turnover.rate <= i.turnover.goal;
     parts.push({ text: i.checklistPct !== null ? " e o turnover está " : " O turnover está " });
-    parts.push(within === null ? { text: `em ${i.turnover.rate}%`, mark: "sky" } : { text: within ? "dentro da meta" : "acima da meta", mark: within ? "mint" : "rose" }, { text: "." });
+    parts.push(within === null ? { text: `em ${String(i.turnover.rate).replace(".", ",")}%`, mark: "sky" } : { text: within ? "dentro da meta" : "acima da meta", mark: within ? "mint" : "rose" }, { text: "." });
   }
   return parts;
 }

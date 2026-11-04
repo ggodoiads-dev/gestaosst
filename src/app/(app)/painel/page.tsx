@@ -201,7 +201,7 @@ export default async function PainelPage({ searchParams }: { searchParams: Promi
             alertCount: alerts.length + (month === nowKey ? 0 : (report?.findings.length ?? 0)),
             criticalCount: month === nowKey ? alerts.filter((a) => a.severity === "CRITICO").length : (report?.findings.filter((f) => f.severity === "CRITICO").length ?? 0),
             checklistPct: checklistPct !== null && Number.isFinite(checklistPct) ? checklistPct : null,
-            turnover: turnoverNow && turnoverNow.rate !== null ? { rate: turnoverNow.rate, goal } : null,
+            turnover: turnoverNow && turnoverNow.ytdRate !== null ? { rate: turnoverNow.ytdRate, goal } : null,
           }).map((part, i) => (
             <span key={i} className={cn(part.serif && "sigo-serif text-[1.08em]", part.mark && "sigo-mark")} style={part.mark ? ({ ["--mark" as string]: MARK[part.mark] } as React.CSSProperties) : undefined}>
               {part.text}

@@ -24,6 +24,6 @@ describe("buildHeadline", () => {
     expect(p.filter((x) => x.mark === "rose").map((x) => x.text)).toEqual(["70%", "acima da meta"]);
   });
   it("turnover sem meta mostra o valor", () => {
-    expect(text(buildHeadline({ alertCount: 0, criticalCount: 0, checklistPct: null, turnover: { rate: 13.1, goal: null } }))).toContain("em 13.1%");
+    expect(text(buildHeadline({ alertCount: 0, criticalCount: 0, checklistPct: null, turnover: { rate: 13.1, goal: null } }))).toContain("em 13,1%");
   });
 });
