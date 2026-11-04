@@ -22,11 +22,25 @@ async function run(fn: () => Promise<void>): Promise<PipelineResult> {
   }
 }
 
-export const savePositionAction = (id: string | null, input: PositionInput) => run(async () => void (await service.savePosition(await requireUser(), id, input)));
-export const deletePositionAction = (id: string) => run(async () => service.deletePosition(await requireUser(), id));
-export const saveCycleEntryAction = (id: string | null, input: CycleInput) => run(async () => void (await service.saveCycleEntry(await requireUser(), id, input)));
-export const saveRiskFollowAction = (id: string, input: { situation?: string | null; follow?: string | null }) => run(async () => service.saveRiskFollow(await requireUser(), id, input));
-export const deleteCycleEntryAction = (id: string) => run(async () => service.deleteCycleEntry(await requireUser(), id));
+export async function savePositionAction(id: string | null, input: PositionInput): Promise<PipelineResult> {
+  return run(async () => void (await service.savePosition(await requireUser(), id, input)));
+}
+
+export async function deletePositionAction(id: string): Promise<PipelineResult> {
+  return run(async () => service.deletePosition(await requireUser(), id));
+}
+
+export async function saveCycleEntryAction(id: string | null, input: CycleInput): Promise<PipelineResult> {
+  return run(async () => void (await service.saveCycleEntry(await requireUser(), id, input)));
+}
+
+export async function saveRiskFollowAction(id: string, input: { situation?: string | null; follow?: string | null }): Promise<PipelineResult> {
+  return run(async () => service.saveRiskFollow(await requireUser(), id, input));
+}
+
+export async function deleteCycleEntryAction(id: string): Promise<PipelineResult> {
+  return run(async () => service.deleteCycleEntry(await requireUser(), id));
+}
 
 export type ReadWorkbookResult = ({ ok: true } & PipelineWorkbook) | { ok: false; error: string };
 
