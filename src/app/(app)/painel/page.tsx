@@ -1,12 +1,10 @@
 import { Greeting } from "@/components/domain/greeting";
 import { greetingNow } from "@/lib/greeting";
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { ChevronLeft, ChevronRight, ArrowUpRight } from "lucide-react";
 import { formatInTimeZone } from "date-fns-tz";
 import { requireUser, hasPermission } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
-import { getUiTheme } from "@/lib/ui-theme";
 import { buildMonthlyReport, monthLabelOf, shiftMonth } from "@/server/services/report.service";
 import { buildDetailedReport } from "@/server/services/report-detail.service";
 import { getPdcaView } from "@/server/services/pdca.service";
@@ -131,7 +129,6 @@ function Findings({ report, alerts }: { report: MonthlyReport | null; alerts: Sy
 
 export default async function PainelPage({ searchParams }: { searchParams: Promise<{ mes?: string }> }) {
   const user = await requireUser();
-  if ((await getUiTheme()) !== "novo") redirect("/inicio");
   const { mes } = await searchParams;
 
   // Sem a visão consolidada, o painel é a versão simples (números da própria pessoa).

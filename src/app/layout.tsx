@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Sans, Inter_Tight, Instrument_Serif } from "next/font/google";
-import { getUiTheme } from "@/lib/ui-theme";
 import { Toaster } from "sonner";
 import { GlobalActivityIndicator } from "@/components/layout/global-activity-indicator";
 import "./globals.css";
@@ -25,9 +24,8 @@ export const metadata: Metadata = {
 };
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
-  const ui = await getUiTheme();
   return (
-    <html lang="pt-BR" data-ui={ui} className={`${plexSans.variable} ${interTight.variable} ${instrumentSerif.variable} h-full antialiased`}>
+    <html lang="pt-BR" data-ui="novo" className={`${plexSans.variable} ${interTight.variable} ${instrumentSerif.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col bg-background text-foreground">
         {children}
         <GlobalActivityIndicator />

@@ -291,8 +291,8 @@ table {
 }
 
 /* ======================================================================================================================
-   Visual novo (opt-in por pessoa, cookie sigo_ui=novo). Só troca valores dos tokens e acrescenta estas regras: o visual
-   clássico (padrão) não é tocado. Linguagem: papel quente, cartões brancos com borda fina, raio grande, tipografia
+   Visual do SIGO (o único: o <html> leva data-ui="novo"). Troca valores dos tokens e acrescenta estas regras.
+   Linguagem: papel quente, cartões brancos com borda fina, raio grande, tipografia
    apertada com um acento serifado em itálico, marca-texto pastel nas palavras-chave e um cartão escuro de contraste por tela.
    ====================================================================================================================== */
 html[data-ui="novo"] {

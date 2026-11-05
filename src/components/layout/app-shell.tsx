@@ -58,7 +58,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { logoutAction } from "@/server/actions/auth.actions";
-import { setUiThemeAction } from "@/server/actions/ui-theme.actions";
 import { HomeTabs } from "@/app/(app)/inicio/home-tabs";
 import { CopyrightNotice } from "@/components/domain/copyright-notice";
 import type { NavGroup, NavIconKey } from "@/components/layout/nav-items";
@@ -144,7 +143,6 @@ export function AppShell({
   user,
   alerts,
   showRico = true,
-  ui = "classico",
   children,
 }: {
   navGroups: NavGroup[];
@@ -152,11 +150,8 @@ export function AppShell({
   alerts: AlertsSummary;
   /** Falso para usuário com acesso restrito por abas que não recebeu o Rico. */
   showRico?: boolean;
-  /** Visual: "novo" liga a repaginação (opt-in por pessoa); "classico" é o padrão. */
-  ui?: "classico" | "novo";
   children: React.ReactNode;
 }) {
-  const novo = ui === "novo";
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const pathname = usePathname();
   const router = useRouter();
@@ -210,8 +205,8 @@ export function AppShell({
     }
   }, [pathname, router]);
   const roleLabel = ROLE_LABELS[user.roleKey as RoleKeyValue] ?? user.roleKey;
-  // Início do visual novo: tela cheia, sem menu fixo nem barra; o menu abre por cima e os controles flutuam.
-  const immersive = (novo && pathname === "/inicio") || pathname === "/apresentacao";
+  // Início: tela cheia, sem menu fixo nem barra; o menu abre por cima e os controles flutuam.
+  const immersive = pathname === "/inicio" || pathname === "/apresentacao";
 
   return (
     <RicoProvider userFirstName={user.name.split(" ")[0]}>
@@ -228,12 +223,12 @@ export function AppShell({
         className={cn(
           "fixed z-50 inset-y-0 left-0 w-64 flex-col transition-transform print:hidden",
           !immersive && "lg:static lg:flex lg:translate-x-0",
-          novo ? "bg-surface-muted border-r border-border" : "bg-brand",
+          "bg-surface-muted border-r border-border",
           mobileOpen ? "flex translate-x-0" : "hidden -translate-x-full",
         )}
       >
-        {/* A logo é a mesma imagem nos dois visuais; no novo ela fica sobre a faixa azul-marinho da marca, em cima do menu claro. */}
-        <div className={cn("flex items-center justify-between h-16 px-4", novo ? "bg-brand" : "border-b border-white/10")}>
+        {/* A logo fica sobre a faixa azul-marinho da marca, em cima do menu claro. */}
+        <div className="flex items-center justify-between h-16 px-4 bg-brand">
           <Link href="/inicio" className="flex items-center px-2.5 py-1.5">
             <Image src="/sigo-logo.png" alt="SIGO" width={112} height={36} priority />
           </Link>
@@ -255,10 +250,7 @@ export function AppShell({
                   <button
                     type="button"
                     onClick={() => toggle(group.key)}
-                    className={cn(
-                      "flex items-center justify-between px-2.5 mb-1 text-[11px] font-semibold uppercase tracking-wide",
-                      novo ? "mt-2 text-foreground-subtle hover:text-foreground" : "text-white/40 hover:text-white/70",
-                    )}
+                    className="mt-2 flex items-center justify-between px-2.5 mb-1 text-[11px] font-semibold uppercase tracking-wide text-foreground-subtle hover:text-foreground"
                   >
                     {group.title}
                     <ChevronDown className={cn("size-3 transition-transform", collapsed && "-rotate-90")} />
@@ -273,15 +265,8 @@ export function AppShell({
                         key={item.href}
                         href={item.href}
                         className={cn(
-                          "flex items-center gap-2.5 px-2.5 py-2 text-sm font-medium transition-colors",
-                          novo ? "rounded-[10px]" : "rounded-md border-l-[3px]",
-                          novo
-                            ? active
-                              ? "bg-[#fbeba0] text-foreground font-semibold"
-                              : "text-foreground-muted hover:bg-surface hover:text-foreground"
-                            : active
-                              ? "border-brand-accent bg-white/5 text-brand-accent"
-                              : "border-transparent text-white/70 hover:bg-white/5 hover:text-white",
+                          "flex items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-sm font-medium transition-colors",
+                          active ? "bg-[#fbeba0] text-foreground font-semibold" : "text-foreground-muted hover:bg-surface hover:text-foreground",
                         )}
                       >
                         <Icon className="size-4 shrink-0" />
@@ -301,7 +286,7 @@ export function AppShell({
           className={cn(
             "z-30 flex items-center gap-3 h-14 px-3 sm:px-4 print:hidden",
             immersive ? "fixed inset-x-0 top-0 h-16 bg-gradient-to-b from-[#010a1f]/70 to-transparent px-4 sm:px-8" : "sticky top-0",
-            !immersive && (novo ? "border-b border-border/70 bg-background/85 backdrop-blur" : "border-b border-border bg-surface"),
+            !immersive && "border-b border-border/70 bg-background/85 backdrop-blur",
           )}
         >
           <button
@@ -350,14 +335,6 @@ export function AppShell({
               <DropdownMenuContent align="end">
                 <DropdownMenuLabel>{user.email}</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onSelect={() => {
-                    void setUiThemeAction(novo ? "classico" : "novo");
-                  }}
-                >
-                  <Sparkles className="size-4" />
-                  {novo ? "Voltar ao visual clássico" : "Experimentar o visual novo"}
-                </DropdownMenuItem>
                 <DropdownMenuItem asChild>
                   <Link href="/apresentacao">
                     <Sparkles className="size-4" />
