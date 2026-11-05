@@ -206,7 +206,7 @@ export function AppShell({
   }, [pathname, router]);
   const roleLabel = ROLE_LABELS[user.roleKey as RoleKeyValue] ?? user.roleKey;
   // Início: tela cheia, sem menu fixo nem barra; o menu abre por cima e os controles flutuam.
-  const immersive = pathname === "/inicio" || pathname === "/apresentacao";
+  const immersive = pathname === "/inicio";
 
   return (
     <RicoProvider userFirstName={user.name.split(" ")[0]}>
@@ -334,13 +334,6 @@ export function AppShell({
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuLabel>{user.email}</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem asChild>
-                  <Link href="/apresentacao">
-                    <Sparkles className="size-4" />
-                    Ver a apresentação (teste)
-                  </Link>
-                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   className="text-danger"
