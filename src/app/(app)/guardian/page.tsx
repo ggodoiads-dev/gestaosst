@@ -5,7 +5,6 @@ import { PERMISSIONS } from "@/domain/shared/permissions";
 import {
   currentMonthKey,
   getGuardianAdherence,
-  GUARDIAN_TYPE_LABELS,
   isValidMonthKey,
   listGuardianReportsOfMonth,
 } from "@/server/services/guardian.service";
@@ -17,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { GuardianReportTableRow } from "./guardian-report-table-row";
 import { GuardianChampions } from "./guardian-champions";
 import { ReopenMonthButton } from "./reopen-month-button";
+import { TypeShareChart } from "./type-share-chart";
 
 function monthLabel(month: string): string {
   const [y, m] = month.split("-").map(Number);
@@ -145,13 +145,7 @@ export default async function GuardianPage({ searchParams }: { searchParams: Pro
               </div>
             </div>
 
-            {adherence.byType.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {adherence.byType.map((t) => (
-                  <Badge key={t.type} tone="info">{GUARDIAN_TYPE_LABELS[t.type]}: {t.count}</Badge>
-                ))}
-              </div>
-            )}
+            {adherence.byType.length > 0 && <TypeShareChart byType={adherence.byType} frozen={adherence.frozen} monthLabel={monthLabel(month)} />}
 
             <GuardianChampions ranking={adherence.ranking} canOpenProfiles={canOpenProfiles} monthLabel={monthLabel(month)} />
 

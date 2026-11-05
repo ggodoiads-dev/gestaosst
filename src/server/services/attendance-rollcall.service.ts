@@ -51,6 +51,8 @@ export type RollCallEntry = {
   /** Escolhido pessoalmente pro usuário, mas de folga hoje pela escala — aparece mesmo assim. */
   offToday: boolean;
   collaborator: { id: string; name: string; functionName: string | null };
+  /** Turno do colaborador (id nulo = sem turno): a chamada é feita por turno. */
+  turno: { id: string | null; name: string | null };
   existingNote: { status: ScheduleDayNoteStatus | null; notes: string } | null;
   /** De férias hoje (cadastradas na escala): aparece travado, sem presença nem falta. `untilKey` = último dia de férias, `returnKey` = dia da volta. */
   vacation: { untilKey: string; returnKey: string } | null;
@@ -82,6 +84,7 @@ export async function getTodayRollCall(user: CurrentUser): Promise<RollCallEntry
       const computed = note ? note.overrideStatus : getCollaboratorDayStatus(today, collaborator);
       return {
         collaborator: { id: collaborator.id, name: collaborator.name, functionName: collaborator.function?.name ?? null },
+        turno: { id: collaborator.turnoId, name: collaborator.turno?.name ?? null },
         existingNote: note ? { status: note.status, notes: note.notes } : null,
         vacation: vacations.get(collaborator.id) ?? null,
         computed,
@@ -92,7 +95,7 @@ export async function getTodayRollCall(user: CurrentUser): Promise<RollCallEntry
     // escolheu pessoalmente entra sempre (marcado "folga hoje" se for o caso) — era o que fazia a
     // chamada "não mostrar todo mundo".
     .filter((entry) => entry.vacation !== null || entry.computed === "TRABALHO" || entry.picked)
-    .map(({ collaborator, existingNote, vacation, computed }) => ({ collaborator, existingNote, vacation, offToday: vacation === null && computed !== "TRABALHO" }));
+    .map(({ collaborator, turno, existingNote, vacation, computed }) => ({ collaborator, turno, existingNote, vacation, offToday: vacation === null && computed !== "TRABALHO" }));
 }
 
 /** Quem está de férias hoje (nota "Férias" em qualquer horário do dia) e até quando vai a sequência de férias dele. */
