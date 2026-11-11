@@ -5,7 +5,7 @@ import { hasPermission, ForbiddenError } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
 import type { GuardianReportType } from "@/generated/prisma/enums";
 import { GUARDIAN_TYPE_LABELS } from "@/domain/guardian/labels";
-import { isGoldenRule, looksLikeLeadership, reportedPerson, type GoldenRuleOutcome } from "@/domain/guardian/golden-rule";
+import { isAdmTurno, isGoldenRule, isGuardianLeader, reportedPerson, type GoldenRuleOutcome } from "@/domain/guardian/golden-rule";
 
 export { GUARDIAN_TYPE_LABELS };
 
@@ -181,8 +181,8 @@ function buildAdherenceDetail(month: string, collaborators: CollaboratorForAdher
   };
 }
 
-/** Quais cargos contam como liderança: os escolhidos na tela do Guardian; enquanto ninguém escolheu, uma sugestão pelo nome do cargo.
- * Leitura tolerante: se a tabela ainda não existir no banco, vale a sugestão. */
+/** Liderança no Guardian = todo o time do turno ADM, menos os cargos que a gestão marcou como operação (ex.: ajudante de armazém no ADM). Esses cargos
+ * ficam guardados aqui; enquanto ninguém marcou, a sugestão é pelo nome do cargo. Leitura tolerante: sem a tabela no banco, vale a sugestão. */
 async function loadLeadershipConfig(): Promise<{ configured: boolean; ids: Set<string> }> {
   try {
     const row = await db.guardianLeadershipConfig.findUnique({ where: { id: "default" } });
@@ -203,7 +203,7 @@ async function loadCollaboratorsForAdherence(): Promise<CollaboratorForAdherence
   return rows.map(({ turno, function: fn, functionId, ...c }) => ({
     ...c,
     turnoName: turno?.name ?? null,
-    isLeader: leadership.configured ? !!functionId && leadership.ids.has(functionId) : looksLikeLeadership(fn?.name),
+    isLeader: isGuardianLeader({ turnoName: turno?.name ?? null, functionId, functionName: fn?.name ?? null }, leadership.configured ? leadership.ids : null),
   }));
 }
 
@@ -404,25 +404,29 @@ export async function resolveGoldenRule(user: CurrentUser, guardianId: string, o
   });
 }
 
-/** Cargos e se cada um conta como liderança (pra tela de ajuste). `configured` falso = ainda é a sugestão automática. */
+/** Cargos que existem no turno ADM (hoje, entre os ativos) e se cada um é operação (fora da liderança). `configured` falso = ainda é a sugestão automática. */
 export async function getLeadershipSettings(user: CurrentUser) {
   requireGuardianView(user);
-  const [functions, config] = await Promise.all([
-    db.jobFunction.findMany({ where: { active: true }, select: { id: true, name: true, _count: { select: { collaborators: { where: { active: true } } } } }, orderBy: { name: "asc" } }),
+  const [people, config] = await Promise.all([
+    db.collaborator.findMany({ where: { active: true, functionId: { not: null } }, select: { functionId: true, function: { select: { name: true } }, turno: { select: { name: true } } } }),
     loadLeadershipConfig(),
   ]);
+  const byFunction = new Map<string, { id: string; name: string; people: number }>();
+  for (const p of people) {
+    if (!isAdmTurno(p.turno?.name) || !p.functionId) continue;
+    const f = byFunction.get(p.functionId) ?? { id: p.functionId, name: p.function?.name ?? "?", people: 0 };
+    f.people += 1;
+    byFunction.set(p.functionId, f);
+  }
   return {
     configured: config.configured,
-    functions: functions.map((f) => ({
-      id: f.id,
-      name: f.name,
-      people: f._count.collaborators,
-      leader: config.configured ? config.ids.has(f.id) : looksLikeLeadership(f.name),
-    })),
+    functions: Array.from(byFunction.values())
+      .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"))
+      .map((f) => ({ ...f, operational: config.configured ? config.ids.has(f.id) : !isGuardianLeader({ turnoName: "ADM", functionId: f.id, functionName: f.name }, null) })),
   };
 }
 
-/** Define quais cargos são liderança. Vale para os meses em aberto; mês já fechado só muda se for reaberto. */
+/** Define quais cargos do turno ADM são operação (fora da liderança). Vale para os meses em aberto; mês já fechado só muda se for reaberto. */
 export async function saveLeadershipFunctions(user: CurrentUser, functionIds: string[]) {
   if (!hasPermission(user, PERMISSIONS.GUARDIAN_MANAGE)) throw new ForbiddenError();
   const valid = await db.jobFunction.findMany({ where: { id: { in: functionIds } }, select: { id: true } });

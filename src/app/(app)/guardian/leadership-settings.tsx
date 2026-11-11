@@ -9,14 +9,14 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogBody, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { saveLeadershipFunctionsAction } from "@/server/actions/guardian.actions";
 
-type FunctionOption = { id: string; name: string; people: number; leader: boolean };
+type FunctionOption = { id: string; name: string; people: number; operational: boolean };
 
 /** Escolhe quais cargos contam como liderança na adesão do Guardian (o resto é operação). */
 export function LeadershipSettings({ functions, configured }: { functions: FunctionOption[]; configured: boolean }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
-  const [selected, setSelected] = useState<Set<string>>(() => new Set(functions.filter((f) => f.leader).map((f) => f.id)));
+  const [selected, setSelected] = useState<Set<string>>(() => new Set(functions.filter((f) => f.operational).map((f) => f.id)));
 
   function toggle(id: string, on: boolean) {
     setSelected((prev) => {
@@ -42,18 +42,20 @@ export function LeadershipSettings({ functions, configured }: { functions: Funct
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button size="sm" variant="secondary">
-          <Users className="size-4" /> Quem é liderança
+          <Users className="size-4" /> Liderança do Guardian
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Quem conta como liderança</DialogTitle>
+          <DialogTitle>Liderança do Guardian</DialogTitle>
           <DialogDescription>
-            Marque os cargos de liderança. Quem tem qualquer outro cargo entra na operação.
-            {!configured && " Ainda não foi ajustado: as marcações abaixo são uma sugestão pelo nome do cargo."}
+            Liderança é todo o time do turno ADM. Marque abaixo os cargos do ADM que são <strong>operação</strong> (ex.: ajudante de armazém cadastrado no ADM) —
+            eles não entram na liderança. Quem não é do turno ADM é sempre operação.
+            {!configured && " Ainda não foi ajustado: a marcação é uma sugestão pelo nome do cargo."}
           </DialogDescription>
         </DialogHeader>
         <DialogBody className="max-h-[55vh] overflow-y-auto">
+          {functions.length === 0 && <p className="text-sm text-foreground-subtle">Ninguém ativo no turno ADM.</p>}
           <ul className="flex flex-col gap-1">
             {functions.map((f) => (
               <li key={f.id}>

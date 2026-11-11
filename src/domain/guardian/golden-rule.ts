@@ -46,15 +46,24 @@ export function reportedPerson(raw: string | null | undefined): { name: string |
   return { name: pick(r, "Nome do Reportado"), company: pick(r, "Empresa do Reportado"), cargo: pick(r, "Cargo do Reportado") };
 }
 
-/** Sugestão (usada só enquanto ninguém configurou) de quais cargos são liderança, pelo nome do cargo. */
-export function looksLikeLeadership(functionName: string | null | undefined): boolean {
-  if (!functionName) return false;
-  return /(^|[^a-z])(lider|supervisor|supervisora|coordenador|coordenadora|gerente|encarregad[oa]|gestor|gestora|diretor|diretora|chefe)([^a-z]|$)/.test(
-    functionName
-      .normalize("NFD")
-      .replace(/[̀-ͯ]/g, "")
-      .toLowerCase(),
-  );
+function plain(s: string): string {
+  return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}
+
+/** Turno administrativo ("ADM", "Administrativo"...). */
+export function isAdmTurno(turnoName: string | null | undefined): boolean {
+  return !!turnoName && /(^|[^a-z])adm/.test(plain(turnoName));
+}
+
+/** Sugestão (usada só enquanto ninguém ajustou) de cargos do turno ADM que são operação, não liderança — ex.: ajudante de armazém. */
+export function looksLikeOperationalFunction(functionName: string | null | undefined): boolean {
+  return !!functionName && /(^|[^a-z])ajudante/.test(plain(functionName));
+}
+
+/** Liderança no Guardian = todo o time ADM (turno administrativo), menos os cargos de operação cadastrados nesse turno. */
+export function isGuardianLeader(c: { turnoName: string | null; functionId: string | null; functionName: string | null }, operationalFunctionIds: Set<string> | null): boolean {
+  if (!isAdmTurno(c.turnoName)) return false;
+  return operationalFunctionIds ? !(c.functionId && operationalFunctionIds.has(c.functionId)) : !looksLikeOperationalFunction(c.functionName);
 }
 
 export type GuardianGroupFilter = "geral" | "operacao" | "lideranca";

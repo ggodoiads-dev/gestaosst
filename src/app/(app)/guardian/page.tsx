@@ -328,7 +328,7 @@ export default async function GuardianPage({
                 href={href({ grupo: key })}
                 className={cn("rounded-lg border bg-surface p-4 transition-colors hover:bg-surface-muted", key === group ? "border-accent ring-1 ring-accent" : "border-border")}
               >
-                <p className="text-xs font-medium text-foreground-subtle">{key === "geral" ? "Geral — operação + liderança" : GROUP_LABEL[key]}</p>
+                <p className="text-xs font-medium text-foreground-subtle">{key === "geral" ? "Geral — operação + liderança" : key === "lideranca" ? "Liderança (time ADM)" : "Operação"}</p>
                 <p className="mt-1 text-3xl font-semibold tabular-nums text-foreground">{stats.adherencePercent}%</p>
                 <p className="text-xs text-foreground-subtle">
                   {stats.reportedCount} de {stats.activeCollaboratorsCount} relataram · {stats.reportsCount} relato(s)
