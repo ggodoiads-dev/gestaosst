@@ -356,6 +356,8 @@ type PeriodComplianceStats = {
   shiftsComplete: number;
   /** Por pessoa: turnos cobrados e cumpridos no período (base da lista de Mês/Ano). */
   people: PeriodPerson[];
+  /** Por dia (AAAA-MM-DD, só dias com turno cobrado): turnos cobrados e cumpridos — base do gráfico do período. */
+  byDay: { dayKey: string; required: number; complete: number }[];
 };
 
 export type PeriodPerson = {
@@ -379,7 +381,7 @@ async function computeCompliancePeriodStats(from: Date, toInclusive: Date): Prom
   // Só conta dias já fechados (até ontem): turno de hoje está em andamento e o futuro nem aconteceu.
   const rangeEndExclusive = addDays(startOfDay(toInclusive) < closedDay ? startOfDay(toInclusive) : closedDay, 1);
   if (rangeStart >= rangeEndExclusive) {
-    return { collaboratorsScheduled: 0, collaboratorsComplete: 0, collaboratorsIncomplete: [], shiftsRequired: 0, shiftsComplete: 0, people: [] };
+    return { collaboratorsScheduled: 0, collaboratorsComplete: 0, collaboratorsIncomplete: [], shiftsRequired: 0, shiftsComplete: 0, people: [], byDay: [] };
   }
 
   const [collaborators, notes, requiredByArea] = await Promise.all([
@@ -428,6 +430,7 @@ async function computeCompliancePeriodStats(from: Date, toInclusive: Date): Prom
   let shiftsComplete = 0;
   const incomplete: PeriodComplianceStats["collaboratorsIncomplete"] = [];
   const people: PeriodPerson[] = [];
+  const dayTotals = new Map<string, { required: number; complete: number }>();
 
   for (const c of eligible) {
     const required = requiredByCollaborator.get(c.id)!.items;
@@ -455,10 +458,14 @@ async function computeCompliancePeriodStats(from: Date, toInclusive: Date): Prom
       pendingTotal += pendingToday;
       shiftsRequired++;
       personRequired++;
+      const dayTotal = dayTotals.get(dayKey) ?? { required: 0, complete: 0 };
+      dayTotal.required++;
       if (pendingToday === 0) {
         shiftsComplete++;
         personComplete++;
+        dayTotal.complete++;
       }
+      dayTotals.set(dayKey, dayTotal);
     }
 
     if (!scheduledAnyDay) continue;
@@ -481,6 +488,7 @@ async function computeCompliancePeriodStats(from: Date, toInclusive: Date): Prom
     shiftsRequired,
     shiftsComplete,
     people,
+    byDay: [...dayTotals.entries()].map(([dayKey, t]) => ({ dayKey, ...t })).sort((a, b) => a.dayKey.localeCompare(b.dayKey)),
   };
 }
 

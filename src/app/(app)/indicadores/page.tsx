@@ -34,6 +34,7 @@ import { ChecklistComplianceCollaboratorPicker } from "./checklist-compliance-co
 import { TodayProgressPanel } from "./today-progress-panel";
 import { PeriodToolbar } from "./period-toolbar";
 import { PeriodPeoplePanel } from "./period-people-panel";
+import { PeriodAdherenceChart, type AdherenceBar } from "./period-adherence-chart";
 import { ReopenComplianceButton } from "./reopen-compliance-button";
 
 const MONTH_LABELS = [
@@ -325,13 +326,47 @@ export default async function IndicadoresPage({
                     />
                   </div>
 
-                  {!explorer.isOpenDay && explorer.stats.shiftsRequired > 0 && (
-                    <p className="text-sm text-foreground-subtle">
-                      Aderência no período:{" "}
-                      <span className="font-semibold text-foreground">{compliancePercent(explorer.stats)}%</span> ·{" "}
-                      {explorer.stats.shiftsComplete} de {explorer.stats.shiftsRequired} turnos cumpridos
-                    </p>
-                  )}
+                  {!explorer.isOpenDay && explorer.stats.shiftsRequired > 0 && (() => {
+                    const pct = compliancePercent(explorer.stats);
+                    // Ano: uma barra por mês; os demais períodos: uma por dia.
+                    const grouped = new Map<string, { required: number; complete: number }>();
+                    for (const d of explorer.stats.byDay) {
+                      const key = explorer.period === "ano" ? d.dayKey.slice(0, 7) : d.dayKey;
+                      const t = grouped.get(key) ?? { required: 0, complete: 0 };
+                      t.required += d.required;
+                      t.complete += d.complete;
+                      grouped.set(key, t);
+                    }
+                    const bars: AdherenceBar[] = [...grouped.entries()].map(([key, t]) => ({
+                      label: explorer.period === "ano" ? MONTH_LABELS[Number(key.slice(5, 7)) - 1].slice(0, 3) : `${key.slice(8, 10)}/${key.slice(5, 7)}`,
+                      pct: Math.round((t.complete / t.required) * 100),
+                      complete: t.complete,
+                      required: t.required,
+                    }));
+                    return (
+                      <div className="grid grid-cols-1 gap-6 rounded-lg border border-border p-4 md:grid-cols-[auto_1fr]">
+                        <div className="flex flex-col gap-2">
+                          <DonutStat
+                            centerLabel="aderência"
+                            centerValue={pct === null ? "—" : `${pct}%`}
+                            segments={[
+                              { label: "Turnos cumpridos", value: explorer.stats.shiftsComplete, color: "var(--success)" },
+                              { label: "Turnos pendentes", value: explorer.stats.shiftsRequired - explorer.stats.shiftsComplete, color: "var(--danger)" },
+                            ]}
+                          />
+                          <p className="text-xs text-foreground-subtle">
+                            {explorer.stats.shiftsComplete} de {explorer.stats.shiftsRequired} turnos cumpridos
+                          </p>
+                        </div>
+                        <div className="flex min-w-0 flex-col gap-1">
+                          <p className="text-xs font-medium text-foreground-subtle">
+                            Aderência {explorer.period === "ano" ? "por mês" : "por dia"} (linha tracejada = 90%)
+                          </p>
+                          <PeriodAdherenceChart bars={bars} />
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {explorer.period === "dia" && explorer.dayProgress ? (
                     explorer.dayProgress.concluded.length + explorer.dayProgress.remaining.length === 0 ? (
