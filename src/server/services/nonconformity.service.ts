@@ -242,7 +242,8 @@ export async function validateActionItem(user: CurrentUser, actionItemId: string
       },
     });
 
-    if (otherOpenSevereNc === 0 && nc.equipment.status !== "LIBERADO") {
+    // Em manutenção o equipamento só é liberado ao concluir a manutenção: validar uma correção não pode "pular" isso.
+    if (otherOpenSevereNc === 0 && nc.equipment.status !== "LIBERADO" && nc.equipment.status !== "EM_MANUTENCAO") {
       const previousStatus = nc.equipment.status;
       await tx.equipment.update({ where: { id: nc.equipmentId }, data: { status: "LIBERADO" } });
       await recordEquipmentEvent(

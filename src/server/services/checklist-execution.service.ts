@@ -1,4 +1,5 @@
 import "server-only";
+import { isHeldForRelease, statusAfterChecklist } from "@/domain/checklist/equipment-status-guard";
 import { db } from "@/server/db";
 import { recordAudit } from "@/server/services/audit";
 import { recordEquipmentEvent } from "@/server/services/equipment-events";
@@ -311,7 +312,8 @@ export async function getExecutionContext(user: CurrentUser, equipmentId: string
    * antes desse guard existir) — se checássemos só na ausência de execução, essas ficariam
    * "furando" o bloqueio indefinidamente, já que sempre seriam retomadas em vez de recusadas.
    */
-  if (equipment.status === "BLOQUEADO") {
+  // Em manutenção também não se lança checklist: ele só sai de lá quando a manutenção é concluída no sistema.
+  if (isHeldForRelease(equipment.status)) {
     return { equipment, template: assignment!.template, version, execution: null, blocked: true as const };
   }
 
@@ -417,9 +419,9 @@ export async function finalizeExecution(
   // Segunda barreira, além da que já impede abrir/retomar em `getExecutionContext`: cobre
   // quem já estava com a tela aberta antes do equipamento ser bloqueado (por essa mesma
   // inspeção ou por outra via manutenção) e tenta enviar mesmo assim.
-  if (executionCheck.equipment.status === "BLOQUEADO") {
+  if (isHeldForRelease(executionCheck.equipment.status)) {
     throw new ForbiddenError(
-      "Este equipamento foi bloqueado antes do envio deste checklist. Não é possível registrar novas respostas até a liberação.",
+      "Este equipamento foi bloqueado ou colocado em manutenção antes do envio deste checklist. Não é possível registrar novas respostas até a liberação.",
     );
   }
 
@@ -583,13 +585,15 @@ export async function finalizeExecution(
       }
     }
 
-    if (evaluation.newEquipmentStatus !== previousStatus) {
+    // O checklist só piora o status; quem está bloqueado, em manutenção ou restrito nunca é liberado por ele.
+    const nextStatus = statusAfterChecklist(previousStatus, evaluation.newEquipmentStatus);
+    if (nextStatus !== previousStatus) {
       await tx.equipment.update({
         where: { id: execution.equipmentId },
-        data: { status: evaluation.newEquipmentStatus },
+        data: { status: nextStatus },
       });
 
-      if (evaluation.newEquipmentStatus === "BLOQUEADO") {
+      if (nextStatus === "BLOQUEADO") {
         blockedMessage = "Equipamento bloqueado por item crítico reprovado. Deixe a ferramenta com o técnico de segurança e não utilize até a liberação.";
         await recordEquipmentEvent(
           {
@@ -609,7 +613,7 @@ export async function finalizeExecution(
             message: `${execution.equipment.code} bloqueado após checklist ${execution.code} — item crítico reprovado. Ferramenta deve ficar com o técnico de segurança.`,
           },
         });
-      } else if (evaluation.newEquipmentStatus === "RESTRITO") {
+      } else if (nextStatus === "RESTRITO") {
         await recordEquipmentEvent(
           {
             equipmentId: execution.equipmentId,
@@ -629,7 +633,7 @@ export async function finalizeExecution(
           entityType: "Equipment",
           entityId: execution.equipmentId,
           previousValue: { status: previousStatus },
-          newValue: { status: evaluation.newEquipmentStatus },
+          newValue: { status: nextStatus },
         },
         tx,
       );
