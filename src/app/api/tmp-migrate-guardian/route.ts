@@ -2,9 +2,25 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { db } from "@/server/db";
 
-const TOKEN_SHA256 = "1512bcd298a516157403bde2edadb57a859657df469046bd0656ed05cebede45";
+const TOKEN_SHA256 = "0fc065dc3caf11781a37014810ce5965e4a6fc8914389df2ffd40e87a0662d64";
 
 const STATEMENTS = [
+  `CREATE TABLE IF NOT EXISTS "GuardianGoldenRuleReview" (
+    "guardianId" TEXT NOT NULL,
+    "outcome" TEXT NOT NULL,
+    "note" TEXT,
+    "decidedById" TEXT NOT NULL,
+    "decidedByName" TEXT NOT NULL,
+    "decidedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "GuardianGoldenRuleReview_pkey" PRIMARY KEY ("guardianId")
+);`,
+  `CREATE TABLE IF NOT EXISTS "GuardianLeadershipConfig" (
+    "id" TEXT NOT NULL,
+    "functionIds" JSONB NOT NULL DEFAULT '[]',
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "GuardianLeadershipConfig_pkey" PRIMARY KEY ("id")
+);`,
+  // Mesma tabela da rota anterior (resultado travado de cada dia de checklist), caso ela não tenha sido aplicada: idempotente.
   `CREATE TABLE IF NOT EXISTS "ChecklistDayResult" (
     "collaboratorId" TEXT NOT NULL,
     "dayKey" TEXT NOT NULL,
@@ -18,7 +34,7 @@ const STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS "ChecklistDayResult_dayKey_idx" ON "ChecklistDayResult"("dayKey");`,
 ];
 
-// Escopo fechado: cria a tabela ChecklistDayResult (resultado travado de cada dia de checklist) e o índice, se ainda não existir. Idempotente. Nada mais.
+// Escopo fechado: cria GuardianGoldenRuleReview (conclusão das Regras de Ouro), GuardianLeadershipConfig (cargos de liderança) e, se faltar, ChecklistDayResult. Idempotente. Nada mais.
 export async function GET(request: Request) {
   const token = new URL(request.url).searchParams.get("token") ?? "";
   const given = Buffer.from(createHash("sha256").update(token).digest("hex"));

@@ -1886,6 +1886,24 @@ model UserNavAccess {
 
 /// Adesão ao Guardian de um mês FECHADO, congelada: o que ficou no último dia do mês (denominador, quem relatou, ranking). Sem isso o mês fechado era recalculado a
 /// cada consulta e mudava com cadastro novo, desligamento ou data editada. Apagar a linha reabre o mês para ser recalculado e congelado de novo.
+/// Conclusão de um relato de Regra de Ouro: APLICADO_MDT (medida disciplinar aplicada) ou DESCONSIDERADO. Sem linha = ainda pendente.
+/// Sem chaves estrangeiras de propósito (tabela nova e isolada): guarda o id do relato no Guardian e quem decidiu.
+model GuardianGoldenRuleReview {
+  guardianId    String   @id
+  outcome       String // APLICADO_MDT | DESCONSIDERADO
+  note          String?
+  decidedById   String
+  decidedByName String
+  decidedAt     DateTime @default(now())
+}
+
+/// Quais funções (cargos) contam como liderança na adesão do Guardian. Uma linha só ("default"); sem linha vale a sugestão por nome do cargo.
+model GuardianLeadershipConfig {
+  id          String   @id
+  functionIds Json     @default("[]")
+  updatedAt   DateTime @default(now())
+}
+
 model GuardianMonthSnapshot {
   month     String   @id // AAAA-MM
   data      Json
@@ -1902,8 +1920,8 @@ model ChecklistComplianceSnapshot {
 /// Desligamentos importados do relatório do RH (base do turnover e do PDCA). Sem chaves estrangeiras de propósito: o vínculo com o
 /// colaborador (quando casa por matrícula ou nome) e quem importou ficam só como ids, e a mesma linha reimportada não duplica (dedupKey).
 model Termination {
-  id              String   @id @default(uuid())
-  dedupKey        String   @unique // matrícula (ou nome) + data do desligamento
+  id              String    @id @default(uuid())
+  dedupKey        String    @unique // matrícula (ou nome) + data do desligamento
   collaboratorId  String?
   name            String
   matricula       String?
@@ -1916,7 +1934,7 @@ model Termination {
   reason          String?
   notes           String?
   importedById    String
-  createdAt       DateTime @default(now())
+  createdAt       DateTime  @default(now())
 
   @@index([terminationDate])
   @@index([collaboratorId])
