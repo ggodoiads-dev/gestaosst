@@ -15,6 +15,7 @@ import { clampPeriodToMonth, GOLDEN_RULE_OUTCOME_LABELS, parseDayKey, parseGroup
 import { GUARDIAN_TYPE_LABELS } from "@/domain/guardian/labels";
 import { formatWallClockDateTime } from "@/lib/dates";
 import { cn } from "@/lib/utils";
+import type { GuardianReportType } from "@/generated/prisma/enums";
 import { PageHeader, PageBody } from "@/components/domain/page-header";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, TableEmpty } from "@/components/ui/table";
@@ -51,7 +52,7 @@ const GROUP_LABEL: Record<GuardianGroupFilter, string> = { geral: "Geral (os doi
 export default async function GuardianPage({
   searchParams,
 }: {
-  searchParams: Promise<{ mes?: string; grupo?: string; de?: string; ate?: string; ouro?: string }>;
+  searchParams: Promise<{ mes?: string; grupo?: string; de?: string; ate?: string; ouro?: string; tipo?: string }>;
 }) {
   const user = await requireUser();
   const canImport = hasPermission(user, PERMISSIONS.GUARDIAN_MANAGE);
@@ -59,11 +60,12 @@ export default async function GuardianPage({
   // A ficha do colaborador exige acesso de gestão/RH — pra quem só visualiza (Auditor) o nome vira texto.
   const canOpenProfiles = canImport || hasPermission(user, PERMISSIONS.COLLABORATOR_MANAGE) || hasPermission(user, PERMISSIONS.HR_MANAGE);
 
-  const { mes, grupo, de, ate, ouro } = await searchParams;
+  const { mes, grupo, de, ate, ouro, tipo } = await searchParams;
   const nowMonth = currentMonthKey();
   const month = isValidMonthKey(mes) && mes <= nowMonth ? mes : nowMonth;
   const group = parseGroupFilter(grupo);
   const onlyGolden = ouro === "1";
+  const typeFilter = (Object.keys(GUARDIAN_TYPE_LABELS) as GuardianReportType[]).find((t) => t === tipo) ?? null;
   const period = clampPeriodToMonth(month, parseDayKey(de), parseDayKey(ate));
 
   const [allReports, { selected: adherence, history }, pendingElsewhere, leadership] = await Promise.all([
@@ -75,14 +77,15 @@ export default async function GuardianPage({
 
   const isCurrentMonth = month === nowMonth;
 
-  function href(over: { mes?: string; grupo?: string; de?: string; ate?: string; ouro?: string } = {}): string {
-    const v = { mes: month, grupo: group === "geral" ? undefined : group, de: period?.from, ate: period?.to, ouro: onlyGolden ? "1" : undefined, ...over };
+  function href(over: { mes?: string; grupo?: string; de?: string; ate?: string; ouro?: string; tipo?: string } = {}): string {
+    const v = { mes: month, grupo: group === "geral" ? undefined : group, de: period?.from, ate: period?.to, ouro: onlyGolden ? "1" : undefined, tipo: typeFilter ?? undefined, ...over };
     const q = new URLSearchParams();
     if (v.mes && v.mes !== nowMonth) q.set("mes", v.mes);
     if (v.grupo && v.grupo !== "geral") q.set("grupo", v.grupo);
     if (v.de) q.set("de", v.de);
     if (v.ate) q.set("ate", v.ate);
     if (v.ouro) q.set("ouro", v.ouro);
+    if (v.tipo) q.set("tipo", v.tipo);
     const qs = q.toString();
     return qs ? `/guardian?${qs}` : "/guardian";
   }
@@ -108,6 +111,7 @@ export default async function GuardianPage({
       const d = dayOf(r);
       if (!d || d < period.from || d > period.to) return false;
     }
+    if (typeFilter && r.type !== typeFilter) return false;
     return !onlyGolden || r.goldenRule;
   });
 
@@ -288,10 +292,27 @@ export default async function GuardianPage({
               </Link>
             </div>
 
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-medium text-foreground-subtle">Tipo de relato:</span>
+              {([null, ...(Object.keys(GUARDIAN_TYPE_LABELS) as GuardianReportType[])] as (GuardianReportType | null)[]).map((t) => (
+                <Link
+                  key={t ?? "todos"}
+                  href={href({ tipo: t ?? undefined })}
+                  className={cn(
+                    "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                    t === typeFilter ? "border-accent bg-accent-soft text-accent" : "border-border text-foreground-muted hover:bg-surface-muted",
+                  )}
+                >
+                  {t ? GUARDIAN_TYPE_LABELS[t] : "Todos"}
+                </Link>
+              ))}
+            </div>
+
             <form method="get" action="/guardian" className="flex flex-wrap items-end gap-3">
               {month !== nowMonth && <input type="hidden" name="mes" value={month} />}
               {group !== "geral" && <input type="hidden" name="grupo" value={group} />}
               {onlyGolden && <input type="hidden" name="ouro" value="1" />}
+              {typeFilter && <input type="hidden" name="tipo" value={typeFilter} />}
               <label className="flex flex-col gap-1 text-xs text-foreground-subtle">
                 De
                 <input type="date" name="de" defaultValue={period?.from ?? ""} min={`${month}-01`} max={monthEnd} className="h-9 rounded-md border border-border-strong bg-surface px-2 text-sm text-foreground" />
@@ -469,6 +490,7 @@ export default async function GuardianPage({
               Relatos de {monthLabel(month)}
               {group !== "geral" ? ` — ${GROUP_LABEL[group]}` : ""}
               {period ? ` — ${shortDay(period.from)} a ${shortDay(period.to)}` : ""}
+              {typeFilter ? ` — ${GUARDIAN_TYPE_LABELS[typeFilter]}` : ""}
               {onlyGolden ? " — só Regra de Ouro" : ""} ({reports.length})
             </CardTitle>
           </CardHeader>
