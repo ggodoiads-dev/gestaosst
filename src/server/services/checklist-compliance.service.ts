@@ -131,7 +131,16 @@ async function loadUnavailability(upToDayKey: string): Promise<(equipmentId: str
 const collaboratorWithFunctionInclude = {
   turno: { include: { scheduleType: true } },
   area: true,
-  function: { include: { requiredChecklists: { include: { template: { select: { name: true } } } } } },
+  function: {
+    include: {
+      requiredChecklists: {
+        include: {
+          // Checklist de ÁREA exigido pela função: o que se cobra são os equipamentos cadastrados nessa área (os vinculados ao modelo), não o modelo como um item só.
+          template: { select: { name: true, scope: true, assignments: { where: { active: true, equipment: { active: true } }, select: { equipment: { select: { id: true, code: true, name: true } } } } } },
+        },
+      },
+    },
+  },
 } as const;
 
 /** O que é exigido do colaborador num dia: se a função dele tiver checklist(s) obrigatório(s)
@@ -149,13 +158,30 @@ function getRequiredItemsForCollaborator(
     requiresChecklist: boolean;
     /** "Faz checklist?" — quem tem essa marcação também é cobrado. */
     checklistEnabled?: boolean;
-    function: { requiredChecklists: { templateId: string; template: { name: string } }[] } | null;
+    function: { requiredChecklists: { templateId: string; template: { name: string; scope?: string; assignments?: { equipment: { id: string; code: string; name: string } }[] } }[] } | null;
   },
   requiredByArea: Map<string, RequiredEquipment[]>,
 ): { mode: "function" | "area" | "none"; items: RequiredEquipment[] } {
   const functionTemplates = collaborator.function?.requiredChecklists ?? [];
   if (functionTemplates.length > 0) {
-    return { mode: "function", items: functionTemplates.map((r) => ({ id: r.templateId, code: r.template.name, name: r.template.name })) };
+    const items: RequiredEquipment[] = [];
+    const seen = new Set<string>();
+    const add = (item: RequiredEquipment) => {
+      if (!seen.has(item.id)) {
+        seen.add(item.id);
+        items.push(item);
+      }
+    };
+    for (const r of functionTemplates) {
+      const equipments = r.template.scope === "AREA" ? (r.template.assignments ?? []) : [];
+      // Checklist de área: cada equipamento cadastrado nele é um item (a pessoa só fecha o dia checando todos). Sem nenhum equipamento vinculado, cai no item único do modelo.
+      if (equipments.length > 0) {
+        for (const { equipment } of [...equipments].sort((a, b) => a.equipment.code.localeCompare(b.equipment.code))) add({ id: equipment.id, code: equipment.code, name: equipment.name });
+      } else {
+        add({ id: r.templateId, code: r.template.name, name: r.template.name });
+      }
+    }
+    return { mode: "function", items };
   }
   if (!collaborator.requiresChecklist && !collaborator.checklistEnabled) {
     return { mode: "none", items: [] };
