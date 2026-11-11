@@ -4,7 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type Period = "dia" | "mes" | "ano";
+type Period = "dia" | "mes" | "ano" | "periodo";
 
 function pad(n: number) {
   return String(n).padStart(2, "0");
@@ -23,15 +23,17 @@ function shift(period: Period, refKey: string, delta: number): string {
   return `${y + delta}-01-01`;
 }
 
-/** Filtro de período (Dia / Mês / Ano) do card de aderência: guarda a escolha na URL (?cp=...&cr=...). */
-export function PeriodToolbar({ period, refKey, todayKey }: { period: Period; refKey: string; todayKey: string }) {
+/** Filtro de período (Dia / Mês / Ano / Período de tal dia até tal dia) do card de aderência: guarda a escolha na URL (?cp=...&cr=...&ca=...). */
+export function PeriodToolbar({ period, refKey, toKey, todayKey }: { period: Period; refKey: string; toKey: string; todayKey: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  function go(nextPeriod: Period, nextRef: string) {
+  function go(nextPeriod: Period, nextRef: string, nextTo?: string) {
     const sp = new URLSearchParams(searchParams.toString());
     sp.set("cp", nextPeriod);
     sp.set("cr", nextRef > todayKey ? todayKey : nextRef);
+    if (nextPeriod === "periodo") sp.set("ca", (nextTo ?? nextRef) > todayKey ? todayKey : (nextTo ?? nextRef));
+    else sp.delete("ca");
     router.push(`/indicadores?${sp.toString()}#checklist-por-colaborador`, { scroll: false });
   }
 
@@ -43,20 +45,47 @@ export function PeriodToolbar({ period, refKey, todayKey }: { period: Period; re
   return (
     <div className="flex flex-wrap items-center gap-2">
       <div className="flex overflow-hidden rounded-md border border-border-strong">
-        {(["dia", "mes", "ano"] as Period[]).map((p) => (
+        {(["dia", "mes", "ano", "periodo"] as Period[]).map((p) => (
           <button
             key={p}
             type="button"
-            onClick={() => go(p, refKey)}
+            onClick={() => (p === "periodo" ? go("periodo", shift("dia", refKey, -6), refKey) : go(p, refKey))}
             className={cn(
               "px-3 py-1.5 text-xs font-medium",
               period === p ? "bg-accent text-accent-foreground" : "bg-surface text-foreground-subtle hover:bg-surface-muted",
             )}
           >
-            {p === "mes" ? "Mês" : p === "ano" ? "Ano" : "Dia"}
+            {p === "mes" ? "Mês" : p === "ano" ? "Ano" : p === "periodo" ? "De / até" : "Dia"}
           </button>
         ))}
       </div>
+      {period === "periodo" && (
+        <>
+          <label className="flex items-center gap-1.5 text-xs text-foreground-subtle">
+            De
+            <input
+              type="date"
+              value={refKey}
+              max={todayKey}
+              aria-label="Do dia"
+              onChange={(e) => e.target.value && go("periodo", e.target.value, toKey)}
+              className="h-9 rounded-md border border-border-strong bg-surface px-2 text-sm text-foreground"
+            />
+          </label>
+          <label className="flex items-center gap-1.5 text-xs text-foreground-subtle">
+            até
+            <input
+              type="date"
+              value={toKey}
+              max={todayKey}
+              aria-label="Até o dia"
+              onChange={(e) => e.target.value && go("periodo", refKey, e.target.value)}
+              className="h-9 rounded-md border border-border-strong bg-surface px-2 text-sm text-foreground"
+            />
+          </label>
+        </>
+      )}
+      {period !== "periodo" && (
       <button
         type="button"
         aria-label="Anterior"
@@ -65,6 +94,7 @@ export function PeriodToolbar({ period, refKey, todayKey }: { period: Period; re
       >
         <ChevronLeft className="size-4" />
       </button>
+      )}
       {period === "dia" && (
         <input
           type="date"
@@ -97,6 +127,7 @@ export function PeriodToolbar({ period, refKey, todayKey }: { period: Period; re
           ))}
         </select>
       )}
+      {period !== "periodo" && (
       <button
         type="button"
         aria-label="Próximo"
@@ -106,6 +137,7 @@ export function PeriodToolbar({ period, refKey, todayKey }: { period: Period; re
       >
         <ChevronRight className="size-4" />
       </button>
+      )}
       <button
         type="button"
         onClick={() => go("dia", todayKey)}

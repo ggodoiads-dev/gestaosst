@@ -876,13 +876,13 @@ export async function removeChecklistItemJustifications(
   return rows.length;
 }
 
-export type ComplianceExplorerPeriod = "dia" | "mes" | "ano";
+export type ComplianceExplorerPeriod = "dia" | "mes" | "ano" | "periodo";
 
 /** Consulta livre por período (dia, mês ou ano) — mesma regra de aderência, sempre limitada a ontem (D-1).
- * `dia`: quem concluiu/faltou naquele dia (hoje = andamento). `mes`/`ano`: turnos cumpridos por pessoa. */
+ * `dia`: quem concluiu/faltou naquele dia (hoje = andamento). `mes`/`ano`: turnos cumpridos por pessoa. `periodo`: de um dia até outro (`refKey` = de, `toKey` = até). */
 export async function getChecklistComplianceExplorer(
   user: CurrentUser,
-  params: { period: ComplianceExplorerPeriod; refKey: string },
+  params: { period: ComplianceExplorerPeriod; refKey: string; toKey?: string },
 ) {
   requirePermission(user, PERMISSIONS.CHECKLIST_COMPLIANCE_VIEW);
   const closedDay = lastClosedDay();
@@ -900,6 +900,15 @@ export async function getChecklistComplianceExplorer(
   } else if (params.period === "ano") {
     from = new Date(ref.getFullYear(), 0, 1);
     to = new Date(ref.getFullYear(), 11, 31);
+  } else if (params.period === "periodo") {
+    const [ty, tm, td] = (params.toKey ?? params.refKey).split("-").map(Number);
+    let end = new Date(ty, tm - 1, td);
+    if (Number.isNaN(end.getTime())) end = ref;
+    if (end > today) end = today;
+    // Datas invertidas: troca (o "de" é sempre o mais antigo).
+    from = end < ref ? end : ref;
+    to = end < ref ? ref : end;
+    ref = from;
   }
 
   const isDay = params.period === "dia";

@@ -66,9 +66,9 @@ function riskTone(score: number): "success" | "warning" | "danger" {
 export default async function IndicadoresPage({
   searchParams,
 }: {
-  searchParams: Promise<{ collaboratorId?: string; period?: string; ref?: string; cp?: string; cr?: string; mes?: string }>;
+  searchParams: Promise<{ collaboratorId?: string; period?: string; ref?: string; cp?: string; cr?: string; ca?: string; mes?: string }>;
 }) {
-  const { collaboratorId, period: periodParam, ref: refParam, cp, cr, mes } = await searchParams;
+  const { collaboratorId, period: periodParam, ref: refParam, cp, cr, ca, mes } = await searchParams;
   const now = new Date();
   const period: Period = periodParam === "dia" || periodParam === "semana" ? periodParam : "mes";
   const refDate = refParam ? parseDateOnly(refParam) : now;
@@ -126,8 +126,9 @@ export default async function IndicadoresPage({
     coverageGaps = await getChecklistCoverageGaps(user).catch(() => null);
     const todayKeyBrt = formatInTimeZone(new Date(), APP_TIMEZONE, "yyyy-MM-dd");
     explorer = await getChecklistComplianceExplorer(user, {
-      period: cp === "mes" || cp === "ano" ? cp : "dia",
+      period: cp === "mes" || cp === "ano" || cp === "periodo" ? cp : "dia",
       refKey: cr && /^\d{4}-\d{2}-\d{2}$/.test(cr) ? cr : todayKeyBrt,
+      toKey: ca && /^\d{4}-\d{2}-\d{2}$/.test(ca) ? ca : undefined,
     });
     if (collaboratorId) {
       checklistRangeReport = await getChecklistComplianceRange(user, { collaboratorId, from: rangeFrom, to: rangeTo });
@@ -149,6 +150,7 @@ export default async function IndicadoresPage({
     if (refParam) sp.set("ref", refParam);
     if (cp) sp.set("cp", cp);
     if (cr) sp.set("cr", cr);
+    if (ca) sp.set("ca", ca);
     if (key && key !== complianceNowKey) sp.set("mes", key);
     const q = sp.toString();
     return `/indicadores${q ? `?${q}` : ""}#checklist-por-colaborador`;
@@ -303,7 +305,9 @@ export default async function IndicadoresPage({
                         ? explorer.isOpenDay
                           ? "Hoje — andamento"
                           : `Dia ${formatDate(parseDateOnly(explorer.refKey))}`
-                        : explorer.period === "mes"
+                        : explorer.period === "periodo"
+                          ? `De ${formatDate(parseDateOnly(explorer.fromKey))} até ${formatDate(parseDateOnly(explorer.toKey))}`
+                          : explorer.period === "mes"
                           ? `${MONTH_LABELS[parseDateOnly(explorer.refKey).getMonth()]} de ${parseDateOnly(explorer.refKey).getFullYear()}`
                           : `Ano ${parseDateOnly(explorer.refKey).getFullYear()}`}
                       {explorer.isOpenDay && (
@@ -316,6 +320,7 @@ export default async function IndicadoresPage({
                     <PeriodToolbar
                       period={explorer.period}
                       refKey={explorer.refKey}
+                      toKey={explorer.toKey}
                       todayKey={formatInTimeZone(new Date(), APP_TIMEZONE, "yyyy-MM-dd")}
                     />
                   </div>
@@ -345,7 +350,7 @@ export default async function IndicadoresPage({
                   ) : explorer.stats.people.length === 0 ? (
                     <p className="text-xs text-foreground-subtle">Sem turnos cobrados nesse período.</p>
                   ) : (
-                    <PeriodPeoplePanel key={`${explorer.period}-${explorer.refKey}`} people={explorer.stats.people} refKey={explorer.refKey} />
+                    <PeriodPeoplePanel key={`${explorer.period}-${explorer.refKey}-${explorer.toKey}`} people={explorer.stats.people} refKey={explorer.refKey} />
                   )}
                 </div>
               )}
