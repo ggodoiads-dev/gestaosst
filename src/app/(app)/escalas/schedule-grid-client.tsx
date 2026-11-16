@@ -116,15 +116,16 @@ export function ScheduleGridClient({
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-border bg-surface">
+      {/* Rolagem dentro da própria grade: assim o cabeçalho com os dias (e a coluna do nome) ficam congelados ao descer/rolar. */}
+      <div className="max-h-[calc(100vh-15rem)] overflow-auto rounded-lg border border-border bg-surface">
         <table className="w-full border-collapse text-sm">
           <thead>
             <tr className="border-b border-border bg-surface-muted">
-              <th className="sticky left-0 z-10 bg-surface-muted px-3 py-2 text-left text-xs font-semibold text-foreground-subtle whitespace-nowrap">
+              <th className="sticky left-0 top-0 z-30 bg-surface-muted px-3 py-2 text-left text-xs font-semibold text-foreground-subtle whitespace-nowrap">
                 Colaborador
               </th>
               {(filteredRows[0] ?? rows[0])?.days.map((d) => (
-                <th key={d.date} className="px-1.5 py-1 text-center text-[11px] font-medium text-foreground-subtle">
+                <th key={d.date} className="sticky top-0 z-20 bg-surface-muted px-1.5 py-1 text-center text-[11px] font-medium text-foreground-subtle">
                   <div>{d.day}</div>
                   <div className="font-normal text-foreground-subtle/70">{d.weekday}</div>
                 </th>

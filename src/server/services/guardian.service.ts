@@ -5,6 +5,7 @@ import { hasPermission, ForbiddenError } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
 import type { GuardianReportType } from "@/generated/prisma/enums";
 import { GUARDIAN_TYPE_LABELS } from "@/domain/guardian/labels";
+import { RISK_ACT_GOAL_PER_PERSON, type GoalPerson } from "@/domain/guardian/goal";
 import { isAdmTurno, isGoldenRule, isGuardianLeader, reportedPerson, type GoldenRuleOutcome } from "@/domain/guardian/golden-rule";
 
 export { GUARDIAN_TYPE_LABELS };
@@ -37,6 +38,8 @@ export type GuardianGroupDetail = {
   adherencePercent: number;
   reportsCount: number;
   byType: { type: GuardianReportType; count: number }[];
+  /** Meta de relatos de ato inseguro (comportamento de risco): quantos cada pessoa do grupo fez no mês. Fechamentos antigos não trazem. */
+  riskActGoal?: { target: number; people: GoalPerson[] };
   /** Todos que relataram no mês, do que mais relatou pro que menos (com o turno, pro ranking por turno). */
   ranking: { collaboratorId: string; name: string; count: number; turnoName: string | null }[];
   notReported: { collaboratorId: string; name: string; turnoName: string | null }[];
@@ -130,11 +133,13 @@ function summarizeMonth(month: string, collaborators: CollaboratorForAdherence[]
   const monthReports = reports.filter((r) => r.at >= start && r.at < end && r.reporterCollaboratorId && ids.has(r.reporterCollaboratorId));
   const countByCollaborator = new Map<string, number>();
   const byType = new Map<GuardianReportType, number>();
+  const riskByCollaborator = new Map<string, number>();
   for (const r of monthReports) {
     countByCollaborator.set(r.reporterCollaboratorId!, (countByCollaborator.get(r.reporterCollaboratorId!) ?? 0) + 1);
     byType.set(r.type, (byType.get(r.type) ?? 0) + 1);
+    if (r.type === "COMPORTAMENTO_RISCO") riskByCollaborator.set(r.reporterCollaboratorId!, (riskByCollaborator.get(r.reporterCollaboratorId!) ?? 0) + 1);
   }
-  return { inMonth, countByCollaborator, byType, reportsCount: monthReports.length };
+  return { inMonth, countByCollaborator, byType, riskByCollaborator, reportsCount: monthReports.length };
 }
 
 function buildGroupDetail(month: string, collaborators: CollaboratorForAdherence[], reports: ReportForAdherence[]): GuardianGroupDetail {
@@ -149,6 +154,12 @@ function buildGroupDetail(month: string, collaborators: CollaboratorForAdherence
     adherencePercent: s.inMonth.length > 0 ? Math.round((reportedCount / s.inMonth.length) * 100) : 0,
     reportsCount: s.reportsCount,
     byType: Array.from(s.byType.entries()).map(([type, count]) => ({ type, count })),
+    riskActGoal: {
+      target: RISK_ACT_GOAL_PER_PERSON,
+      people: s.inMonth
+        .map((c) => ({ collaboratorId: c.id, name: c.name, turnoName: c.turnoName, count: s.riskByCollaborator.get(c.id) ?? 0 }))
+        .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "pt-BR")),
+    },
     ranking: Array.from(s.countByCollaborator.entries())
       .map(([collaboratorId, count]) => ({
         collaboratorId,
@@ -269,8 +280,15 @@ export async function getGuardianAdherence(
   const detailOf = (m: string): GuardianAdherence => {
     const snap = snapshots.get(m);
     if (!snap) return buildAdherenceDetail(m, collaborators, reports, null);
-    // Fechamento de antes da divisão liderança/operação: o geral continua travado; a divisão é calculada agora (e avisada).
-    return snap.groups ? snap : { ...snap, groups: buildGroups(m, collaborators, reports), groupsLive: true };
+    // Fechamento de antes da divisão liderança/operação (ou da meta): o geral continua travado; o que faltou nele é calculado agora (e avisado).
+    const groupsOk = !!snap.groups?.operacao.riskActGoal;
+    if (groupsOk && snap.riskActGoal) return snap;
+    return {
+      ...snap,
+      riskActGoal: snap.riskActGoal ?? buildGroupDetail(m, collaborators, reports).riskActGoal,
+      groups: groupsOk ? snap.groups : buildGroups(m, collaborators, reports),
+      groupsLive: groupsOk ? snap.groupsLive : true,
+    };
   };
 
   const history = Array.from(months)

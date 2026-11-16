@@ -25,6 +25,7 @@ import { GuardianReportTableRow } from "./guardian-report-table-row";
 import { GuardianChampions } from "./guardian-champions";
 import { ReopenMonthButton } from "./reopen-month-button";
 import { TypeShareChart } from "./type-share-chart";
+import { RiskActGoalCard } from "./risk-act-goal-card";
 import { GoldenRuleActions } from "./golden-rule-actions";
 import { LeadershipSettings } from "./leadership-settings";
 
@@ -409,6 +410,10 @@ export default async function GuardianPage({
             </div>
 
             {view.byType.length > 0 && <TypeShareChart byType={view.byType} frozen={adherence.frozen && !period} monthLabel={period ? `${shortDay(period.from)} a ${shortDay(period.to)}` : monthLabel(month)} />}
+
+            {view.riskActGoal && (
+              <RiskActGoalCard goal={view.riskActGoal} canOpenProfiles={canOpenProfiles} periodLabel={period ? `${shortDay(period.from)} a ${shortDay(period.to)}` : monthLabel(month)} />
+            )}
 
             <GuardianChampions ranking={view.ranking} canOpenProfiles={canOpenProfiles} monthLabel={monthLabel(month)} />
 
