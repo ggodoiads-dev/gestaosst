@@ -4,22 +4,21 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { creditHolidayWorkAction } from "@/server/actions/bank-hours.actions";
 
-type Person = { collaboratorId: string; name: string; turnoName: string | null; usesTimeClock: boolean; punched: boolean };
+type Person = { collaboratorId: string; name: string; turnoName: string | null };
 type Suggestion = { holiday: { date: string; name: string }; people: Person[] };
 
 const br = (key: string) => `${key.slice(8, 10)}/${key.slice(5, 7)}/${key.slice(0, 4)}`;
 
-/** Quem estava escalado para trabalhar num feriado e ainda não ganhou o dia de folga. Já vem marcado quem bateu ponto; o resto o gestor confere e marca. */
+/** Quem estava escalado para trabalhar num feriado (pela escala salva, sem falta/atestado/férias) e ainda não ganhou o dia de folga. Já vem todo mundo marcado; o gestor desmarca quem não deve ganhar. */
 export function HolidayCreditPanel({ suggestions, disabled }: { suggestions: Suggestion[]; disabled: boolean }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [selected, setSelected] = useState<Record<string, Set<string>>>(() =>
-    Object.fromEntries(suggestions.map((s) => [s.holiday.date, new Set(s.people.filter((p) => p.punched).map((p) => p.collaboratorId))])),
+    Object.fromEntries(suggestions.map((s) => [s.holiday.date, new Set(s.people.map((p) => p.collaboratorId))])),
   );
 
   function toggle(date: string, id: string, on: boolean) {
@@ -51,8 +50,8 @@ export function HolidayCreditPanel({ suggestions, disabled }: { suggestions: Sug
       <CardHeader>
         <CardTitle>Feriados trabalhados a creditar</CardTitle>
         <CardDescription>
-          Pessoas escaladas para trabalhar no feriado que ainda não ganharam o dia de folga. Já vem marcado quem bateu ponto no dia. Quem é de turno que não bate ponto ou ainda
-          não teve o ponto importado você confere e marca. Quem não trabalhou de fato (ex.: o turno ADM folgou no feriado) deixe desmarcado.
+          Vem da escala salva: quem estava escalado para trabalhar no feriado e não tem falta, atestado, férias ou folga lançados naquele dia. Já vem todo mundo marcado; desmarque
+          só quem, mesmo escalado, não trabalhou.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
@@ -83,13 +82,6 @@ export function HolidayCreditPanel({ suggestions, disabled }: { suggestions: Sug
                       <Checkbox checked={sel.has(p.collaboratorId)} onCheckedChange={(v) => toggle(s.holiday.date, p.collaboratorId, v === true)} />
                       <span className="min-w-0 flex-1 truncate text-foreground">{p.name}</span>
                       {p.turnoName && <span className="text-[11px] text-foreground-subtle">T{p.turnoName}</span>}
-                      {p.punched ? (
-                        <Badge tone="success">bateu ponto</Badge>
-                      ) : p.usesTimeClock ? (
-                        <Badge tone="warning">sem batida</Badge>
-                      ) : (
-                        <Badge tone="neutral">não bate ponto</Badge>
-                      )}
                     </label>
                   </li>
                 ))}

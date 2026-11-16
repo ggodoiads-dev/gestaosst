@@ -31,12 +31,13 @@ export type BankHoursOverview = {
   /** Feriados já passados com gente escalada para trabalhar que ainda não foi creditada. */
   suggestions: {
     holiday: Holiday;
-    people: { collaboratorId: string; name: string; turnoName: string | null; usesTimeClock: boolean; punched: boolean }[];
+    people: { collaboratorId: string; name: string; turnoName: string | null }[];
   }[];
   people: ({ collaboratorId: string; name: string; turnoName: string | null; functionName: string | null } & BankBalance & { ledger: BankLedgerLine[] })[];
 };
 
-/** Visão geral do banco de horas: saldo de cada colaborador (feriados creditados + BH+ - BH- da escala + ajustes) e os feriados trabalhados ainda sem crédito. */
+/** Visão geral do banco de horas: saldo de cada colaborador (feriados creditados + BH+ - BH- da escala + ajustes) e os feriados trabalhados ainda sem crédito.
+ * Quem trabalhou no feriado vem SÓ da escala salva: escalado para trabalhar no dia e sem falta, atestado, férias ou folga lançados (a exceção lançada na escala vence). */
 export async function getBankHoursOverview(user: CurrentUser, year: number): Promise<BankHoursOverview> {
   requireBankHours(user);
   const holidays = nationalHolidays(year);
@@ -111,15 +112,6 @@ export async function getBankHoursOverview(user: CurrentUser, year: number): Pro
       select: { collaboratorId: true, date: true, overrideStatus: true, status: true },
     });
     const noteByKey = new Map(noteRows.map((n) => [`${n.collaboratorId}|${localKey(n.date)}`, n]));
-    const punches = await db.timeClockRecord.findMany({
-      where: {
-        collaboratorId: { not: null },
-        OR: pastHolidays.map((h) => ({ timestamp: { gte: new Date(`${h.date}T00:00:00-03:00`), lt: new Date(new Date(`${h.date}T00:00:00-03:00`).getTime() + 24 * 60 * 60 * 1000) } })),
-      },
-      select: { collaboratorId: true, timestamp: true },
-    });
-    const punched = new Set(punches.map((p) => `${p.collaboratorId}|${formatInTimeZone(p.timestamp, APP_TIMEZONE, "yyyy-MM-dd")}`));
-
     for (const h of pastHolidays) {
       const [y, m, d] = h.date.split("-").map(Number);
       const date = new Date(y, m - 1, d);
@@ -131,9 +123,9 @@ export async function getBankHoursOverview(user: CurrentUser, year: number): Pro
         if (effective !== "TRABALHO") continue;
         if (note?.status === "BH_MAIS") continue; // já lançado como BH+ na escala
         if ((entriesBy.get(c.id) ?? []).some((e) => e.kind === "FERIADO" && entryKey(e.date) === h.date)) continue;
-        list.push({ collaboratorId: c.id, name: c.name, turnoName: c.turno?.name ?? null, usesTimeClock: c.turno?.usesTimeClock ?? true, punched: punched.has(`${c.id}|${h.date}`) });
+        list.push({ collaboratorId: c.id, name: c.name, turnoName: c.turno?.name ?? null });
       }
-      if (list.length > 0) suggestions.push({ holiday: h, people: list.sort((a, b) => Number(b.punched) - Number(a.punched) || a.name.localeCompare(b.name, "pt-BR")) });
+      if (list.length > 0) suggestions.push({ holiday: h, people: list.sort((a, b) => a.name.localeCompare(b.name, "pt-BR")) });
     }
   }
 
