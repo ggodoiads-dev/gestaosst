@@ -238,6 +238,7 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
   }
   if (p.has(PERMISSIONS.SCHEDULE_MANAGE)) {
     rh.push({ href: "/escalas", label: "Escalas de Trabalho", icon: "schedules" });
+    rh.push({ href: "/banco-de-horas", label: "Banco de Horas", icon: "schedules" });
   }
   if (p.has(PERMISSIONS.HR_MANAGE)) {
     rh.push({ href: "/beneficios", label: "Benefícios", icon: "benefits" });

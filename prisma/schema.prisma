@@ -1904,6 +1904,25 @@ model GuardianLeadershipConfig {
   updatedAt   DateTime @default(now())
 }
 
+/// Lançamento do banco de horas, em DIAS de folga: +1 por feriado trabalhado (kind FERIADO), ou ajuste manual (kind MANUAL, + ou -, ex.: troca).
+/// A folga de banco de horas continua sendo lançada na escala (BH-) e também abate do saldo. Tabela isolada, sem chaves estrangeiras de propósito.
+model BankHourEntry {
+  id             String   @id @default(uuid())
+  collaboratorId String
+  date           DateTime // dia a que o lançamento se refere (ex.: o feriado trabalhado)
+  days           Float // +1 credita um dia de folga; negativo abate
+  kind           String // FERIADO | MANUAL
+  holidayName    String?
+  note           String?
+  dedupKey       String?  @unique // FERIADO: colaborador + dia (não credita o mesmo feriado duas vezes)
+  createdById    String
+  createdByName  String
+  createdAt      DateTime @default(now())
+
+  @@index([collaboratorId])
+  @@index([date])
+}
+
 model GuardianMonthSnapshot {
   month     String   @id // AAAA-MM
   data      Json

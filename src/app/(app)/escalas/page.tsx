@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { ScheduleGridClient } from "./schedule-grid-client";
+import { nationalHolidays } from "@/domain/bank-hours/holidays";
 import { VacationDialog } from "./vacation-dialog";
 
 const MONTH_LABELS = [
@@ -69,6 +70,9 @@ export default async function EscalasPage({
     })),
   }));
 
+  // Feriados nacionais do ano: aparecem destacados no cabeçalho da grade (quem trabalha neles ganha dia de folga no Banco de Horas).
+  const holidays = Object.fromEntries(nationalHolidays(year).map((h) => [h.date, h.name]));
+
   const functionsMap = new Map<string, string>();
   for (const row of gridRows) {
     if (row.collaborator.functionId && row.functionName) {
@@ -111,7 +115,7 @@ export default async function EscalasPage({
             </CardContent>
           </Card>
         ) : (
-          <ScheduleGridClient rows={gridRows} turnos={turnos} functions={functions} readOnly={readOnly} />
+          <ScheduleGridClient rows={gridRows} turnos={turnos} functions={functions} readOnly={readOnly} holidays={holidays} />
         )}
       </PageBody>
     </>

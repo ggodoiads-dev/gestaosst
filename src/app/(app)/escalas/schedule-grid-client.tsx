@@ -47,8 +47,11 @@ export function ScheduleGridClient({
   turnos,
   functions,
   readOnly = false,
+  holidays = {},
 }: {
   readOnly?: boolean;
+  /** Feriados nacionais do ano (AAAA-MM-DD -> nome), destacados no cabeçalho. */
+  holidays?: Record<string, string>;
   rows: RowData[];
   turnos: (Turno & { scheduleType: ScheduleType })[];
   functions: { id: string; name: string }[];
@@ -125,7 +128,14 @@ export function ScheduleGridClient({
                 Colaborador
               </th>
               {(filteredRows[0] ?? rows[0])?.days.map((d) => (
-                <th key={d.date} className="sticky top-0 z-20 bg-surface-muted px-1.5 py-1 text-center text-[11px] font-medium text-foreground-subtle">
+                <th
+                  key={d.date}
+                  title={holidays[d.date] ? `Feriado: ${holidays[d.date]}` : undefined}
+                  className={cn(
+                    "sticky top-0 z-20 px-1.5 py-1 text-center text-[11px] font-medium text-foreground-subtle",
+                    holidays[d.date] ? "bg-warning-soft text-warning" : "bg-surface-muted",
+                  )}
+                >
                   <div>{d.day}</div>
                   <div className="font-normal text-foreground-subtle/70">{d.weekday}</div>
                 </th>
