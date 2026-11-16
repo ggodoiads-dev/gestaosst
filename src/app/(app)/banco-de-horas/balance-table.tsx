@@ -36,11 +36,11 @@ export function BalanceTable({ people, canEdit }: { people: Person[]; canEdit: b
   const open = people.find((p) => p.collaboratorId === openId) ?? null;
 
   function remove(id: string) {
-    if (!window.confirm("Apagar este lançamento do banco de horas?")) return;
+    if (!window.confirm("Retirar este lançamento do banco de horas? Crédito de feriado retirado não volta sozinho.")) return;
     start(async () => {
       const res = await deleteBankEntryAction(id);
       if (res.ok) {
-        toast.success("Lançamento apagado.");
+        toast.success("Lançamento retirado.");
         router.refresh();
       } else toast.error(res.error);
     });
@@ -158,7 +158,7 @@ export function BalanceTable({ people, canEdit }: { people: Person[]; canEdit: b
                           {fmt(l.days)}
                         </span>
                         {l.removable && l.id && canEdit && (
-                          <Button size="icon" variant="ghost" aria-label="Apagar lançamento" disabled={pending} onClick={() => remove(l.id!)}>
+                          <Button size="icon" variant="ghost" aria-label="Retirar lançamento" disabled={pending} onClick={() => remove(l.id!)}>
                             <Trash2 className="size-4" />
                           </Button>
                         )}

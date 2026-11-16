@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireUser, ForbiddenError } from "@/server/auth/current-user";
-import { addManualBankEntry, creditHolidayWork, deleteBankEntry } from "@/server/services/bank-hours.service";
+import { addManualBankEntry, deleteBankEntry } from "@/server/services/bank-hours.service";
 
 type Result<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 
@@ -19,10 +19,6 @@ async function run<T extends object>(fn: () => Promise<T>): Promise<Result<T>> {
     console.error("[banco-de-horas] falha:", error);
     return { ok: false, error: GENERIC };
   }
-}
-
-export async function creditHolidayWorkAction(dateKey: string, collaboratorIds: string[]): Promise<Result<{ created: number }>> {
-  return run(async () => creditHolidayWork(await requireUser(), { dateKey, collaboratorIds }));
 }
 
 export async function addManualBankEntryAction(input: { collaboratorId: string; dateKey: string; days: number; note: string }): Promise<Result> {

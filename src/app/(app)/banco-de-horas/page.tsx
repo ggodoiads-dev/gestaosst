@@ -1,12 +1,11 @@
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, CalendarHeart } from "lucide-react";
 import { requireUser } from "@/server/auth/current-user";
-import { getBankHoursOverview } from "@/server/services/bank-hours.service";
+import { autoCreditHolidayWork, BANK_HOURS_START, getBankHoursOverview } from "@/server/services/bank-hours.service";
 import { PageHeader, PageBody } from "@/components/domain/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { HolidayCreditPanel } from "./holiday-credit-panel";
 import { BalanceTable } from "./balance-table";
 import { ManualEntryDialog } from "./manual-entry-dialog";
 
@@ -17,11 +16,13 @@ export default async function BancoDeHorasPage({ searchParams }: { searchParams:
   const { ano } = await searchParams;
   const thisYear = new Date().getFullYear();
   const year = Number(ano) >= 2024 && Number(ano) <= thisYear + 1 ? Number(ano) : thisYear;
+  // Quem trabalhou nos feriados (pela escala salva) já ganha o dia sozinho, sem ninguém precisar lançar.
+  await autoCreditHolidayWork({ id: user.id, name: "Automático (escala)" }).catch(() => ({ created: 0 }));
   const overview = await getBankHoursOverview(user, year);
 
   const negative = overview.people.filter((p) => p.balance < 0).length;
   const positive = overview.people.filter((p) => p.balance > 0).length;
-  const pendingTotal = overview.suggestions.reduce((s, x) => s + x.people.length, 0);
+  const creditedTotal = overview.holidays.reduce((s, h) => s + h.creditedCount, 0);
 
   return (
     <>
@@ -54,9 +55,9 @@ export default async function BancoDeHorasPage({ searchParams }: { searchParams:
 
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           <div className="rounded-lg border border-border bg-surface p-4">
-            <p className="text-xs text-foreground-subtle">Feriados a creditar</p>
-            <p className={`text-2xl font-semibold tabular-nums ${pendingTotal > 0 ? "text-warning" : "text-success"}`}>{pendingTotal}</p>
-            <p className="text-xs text-foreground-subtle">pessoa(s) que trabalharam e ainda não ganharam o dia</p>
+            <p className="text-xs text-foreground-subtle">Dias creditados em {year}</p>
+            <p className="text-2xl font-semibold tabular-nums text-foreground">{creditedTotal}</p>
+            <p className="text-xs text-foreground-subtle">por feriado trabalhado, automático</p>
           </div>
           <div className="rounded-lg border border-border bg-surface p-4">
             <p className="text-xs text-foreground-subtle">Com saldo</p>
@@ -77,29 +78,26 @@ export default async function BancoDeHorasPage({ searchParams }: { searchParams:
             <CardTitle className="flex items-center gap-2">
               <CalendarHeart className="size-4" /> Feriados nacionais de {year}
             </CardTitle>
-            <CardDescription>Corpus Christi e Carnaval são ponto facultativo e não entram.</CardDescription>
+            <CardDescription>
+              Vale a partir de 12/10/2026: quem estava escalado para trabalhar no feriado (sem falta, atestado, férias ou folga lançados) ganha 1 dia sozinho. Feriados antes dessa data ficam de fora. Corpus Christi e Carnaval são ponto facultativo e não entram.
+            </CardDescription>
           </CardHeader>
           <CardContent>
+            {overview.holidays.length === 0 && (
+              <p className="text-sm text-foreground-subtle">O controle começa em {BANK_HOURS_START.slice(8, 10)}/{BANK_HOURS_START.slice(5, 7)}/{BANK_HOURS_START.slice(0, 4)}; não há feriados controlados neste ano.</p>
+            )}
             <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {overview.holidays.map((h) => (
                 <li key={h.date} className="flex items-center justify-between gap-2 rounded-md border border-border px-3 py-2 text-sm">
                   <span>
                     <span className="font-medium tabular-nums text-foreground">{br(h.date)}</span> <span className="text-foreground-muted">{h.name}</span>
                   </span>
-                  {!h.past ? (
-                    <Badge tone="neutral">Ainda não chegou</Badge>
-                  ) : h.pendingCount > 0 ? (
-                    <Badge tone="warning">{h.pendingCount} a creditar</Badge>
-                  ) : (
-                    <Badge tone="success">{h.creditedCount} creditado(s)</Badge>
-                  )}
+                  {!h.past ? <Badge tone="neutral">Ainda não chegou</Badge> : <Badge tone="success">{h.creditedCount} creditado(s)</Badge>}
                 </li>
               ))}
             </ul>
           </CardContent>
         </Card>
-
-        {overview.suggestions.length > 0 && <HolidayCreditPanel suggestions={overview.suggestions} disabled={!overview.tableReady} />}
 
         <BalanceTable people={overview.people} canEdit={overview.tableReady} />
       </PageBody>

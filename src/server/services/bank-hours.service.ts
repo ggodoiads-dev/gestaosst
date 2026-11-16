@@ -6,8 +6,11 @@ import { ForbiddenError, hasPermission } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
 import { APP_TIMEZONE } from "@/lib/dates";
 import { getCollaboratorDayStatus } from "@/domain/schedule/schedule-calendar";
-import { holidayOn, nationalHolidays, type Holiday } from "@/domain/bank-hours/holidays";
+import { nationalHolidays, type Holiday } from "@/domain/bank-hours/holidays";
 import { computeBalance, type BankBalance } from "@/domain/bank-hours/balance";
+
+/** O controle de feriado trabalhado começa neste dia (Nossa Senhora Aparecida): feriados anteriores a ele são desconsiderados. */
+export const BANK_HOURS_START = "2026-10-12";
 
 function requireBankHours(user: CurrentUser): void {
   if (!hasPermission(user, PERMISSIONS.SCHEDULE_MANAGE)) throw new ForbiddenError();
@@ -22,31 +25,84 @@ function entryKey(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
+/** Feriados nacionais do controle (a partir de BANK_HOURS_START) que já chegaram, do mais antigo ao mais recente. */
+function trackedHolidaysUntilToday(todayKey: string): Holiday[] {
+  const years: number[] = [];
+  for (let y = Number(BANK_HOURS_START.slice(0, 4)); y <= Number(todayKey.slice(0, 4)); y++) years.push(y);
+  return years.flatMap((y) => nationalHolidays(y)).filter((h) => h.date >= BANK_HOURS_START && h.date <= todayKey);
+}
+
+/**
+ * Credita sozinho 1 dia de folga a quem trabalhou em cada feriado nacional já ocorrido (a partir de 12/10/2026). "Trabalhou" vem só da escala salva:
+ * escalado para trabalhar no dia, sem falta, atestado, férias ou folga lançados (a exceção lançada na escala vence o cálculo do turno). Idempotente:
+ * não credita duas vezes o mesmo feriado para a mesma pessoa, nem repõe um crédito que foi retirado à mão. Chamada pela tela e pela rotina diária.
+ */
+export async function autoCreditHolidayWork(actor: { id: string; name: string }): Promise<{ created: number }> {
+  const todayKey = formatInTimeZone(new Date(), APP_TIMEZONE, "yyyy-MM-dd");
+  const holidays = trackedHolidaysUntilToday(todayKey);
+  if (holidays.length === 0) return { created: 0 };
+
+  const [collaborators, noteRows] = await Promise.all([
+    db.collaborator.findMany({ where: { active: true }, include: { turno: { include: { scheduleType: true } } } }),
+    db.scheduleDayNote.findMany({
+      where: { date: { gte: new Date(`${BANK_HOURS_START}T00:00:00`), lt: new Date(new Date(`${todayKey}T00:00:00`).getTime() + 2 * 24 * 60 * 60 * 1000) } },
+      select: { collaboratorId: true, date: true, overrideStatus: true, status: true },
+    }),
+  ]);
+  const noteByKey = new Map(noteRows.map((n) => [`${n.collaboratorId}|${localKey(n.date)}`, n]));
+
+  const data: { collaboratorId: string; date: Date; days: number; kind: string; holidayName: string; dedupKey: string; createdById: string; createdByName: string }[] = [];
+  for (const h of holidays) {
+    const [y, m, d] = h.date.split("-").map(Number);
+    const date = new Date(y, m - 1, d);
+    for (const c of collaborators) {
+      if (c.admissionDate && c.admissionDate > date) continue;
+      const note = noteByKey.get(`${c.id}|${h.date}`);
+      const effective = note ? note.overrideStatus : getCollaboratorDayStatus(date, c);
+      if (effective !== "TRABALHO") continue;
+      if (note?.status === "BH_MAIS") continue; // já lançado como BH+ na escala
+      data.push({
+        collaboratorId: c.id,
+        date: new Date(`${h.date}T12:00:00Z`),
+        days: 1,
+        kind: "FERIADO",
+        holidayName: h.name,
+        dedupKey: `h:${c.id}:${h.date}`,
+        createdById: actor.id,
+        createdByName: actor.name,
+      });
+    }
+  }
+  if (data.length === 0) return { created: 0 };
+  try {
+    const result = await db.bankHourEntry.createMany({ data, skipDuplicates: true });
+    return { created: result.count };
+  } catch (error) {
+    // Tabela ainda não criada no banco: a tela segue funcionando só com o que vem da escala.
+    console.error("[banco-de-horas] não consegui creditar os feriados:", error);
+    return { created: 0 };
+  }
+}
+
 export type BankLedgerLine = { id: string | null; date: string; days: number; label: string; note: string | null; by: string | null; removable: boolean };
 
 export type BankHoursOverview = {
   year: number;
   tableReady: boolean;
-  holidays: (Holiday & { past: boolean; pendingCount: number; creditedCount: number })[];
-  /** Feriados já passados com gente escalada para trabalhar que ainda não foi creditada. */
-  suggestions: {
-    holiday: Holiday;
-    people: { collaboratorId: string; name: string; turnoName: string | null }[];
-  }[];
+  /** Feriados do ano que entram no controle (a partir de 12/10/2026), com quantos créditos cada um já tem. */
+  holidays: (Holiday & { past: boolean; creditedCount: number })[];
   people: ({ collaboratorId: string; name: string; turnoName: string | null; functionName: string | null } & BankBalance & { ledger: BankLedgerLine[] })[];
 };
 
-/** Visão geral do banco de horas: saldo de cada colaborador (feriados creditados + BH+ - BH- da escala + ajustes) e os feriados trabalhados ainda sem crédito.
- * Quem trabalhou no feriado vem SÓ da escala salva: escalado para trabalhar no dia e sem falta, atestado, férias ou folga lançados (a exceção lançada na escala vence). */
+/** Visão geral do banco de horas: saldo de cada colaborador (feriados creditados + BH+ - BH- da escala + ajustes manuais). */
 export async function getBankHoursOverview(user: CurrentUser, year: number): Promise<BankHoursOverview> {
   requireBankHours(user);
-  const holidays = nationalHolidays(year);
   const todayKey = formatInTimeZone(new Date(), APP_TIMEZONE, "yyyy-MM-dd");
 
   const [collaborators, notes] = await Promise.all([
     db.collaborator.findMany({
       where: { active: true },
-      include: { turno: { include: { scheduleType: true } }, function: { select: { name: true } } },
+      include: { turno: true, function: { select: { name: true } } },
       orderBy: { name: "asc" },
     }),
     db.scheduleDayNote.findMany({
@@ -82,10 +138,18 @@ export async function getBankHoursOverview(user: CurrentUser, year: number): Pro
         id: e.id,
         date: entryKey(e.date),
         days: e.days,
-        label: e.kind === "FERIADO" ? `Feriado trabalhado${e.holidayName ? ` — ${e.holidayName}` : ""}` : e.days >= 0 ? "Ajuste manual (crédito)" : "Ajuste manual (débito)",
+        label:
+          e.kind === "FERIADO"
+            ? e.days === 0
+              ? `Crédito do feriado retirado${e.holidayName ? ` — ${e.holidayName}` : ""}`
+              : `Feriado trabalhado${e.holidayName ? ` — ${e.holidayName}` : ""}`
+            : e.days >= 0
+              ? "Ajuste manual (crédito)"
+              : "Ajuste manual (débito)",
         note: e.note,
         by: e.createdByName,
-        removable: true,
+        // Crédito de feriado é retirado (vira zero e não volta sozinho); o manual é apagado. Um já retirado não tem mais o que fazer.
+        removable: !(e.kind === "FERIADO" && e.days === 0),
       })),
       ...myNotes.map((n) => ({
         id: null,
@@ -100,70 +164,17 @@ export async function getBankHoursOverview(user: CurrentUser, year: number): Pro
     return { collaboratorId: c.id, name: c.name, turnoName: c.turno?.name ?? null, functionName: c.function?.name ?? null, ...balance, ledger };
   });
 
-  // Feriados já passados: quem estava escalado para trabalhar e ainda não ganhou o dia.
-  const pastHolidays = holidays.filter((h) => h.date <= todayKey);
-  const suggestions: BankHoursOverview["suggestions"] = [];
   const creditedBy = new Map<string, number>();
-  for (const e of entries) if (e.kind === "FERIADO") creditedBy.set(entryKey(e.date), (creditedBy.get(entryKey(e.date)) ?? 0) + 1);
-
-  if (pastHolidays.length > 0) {
-    const noteRows = await db.scheduleDayNote.findMany({
-      where: { date: { gte: new Date(year, 0, 1), lt: new Date(year + 1, 0, 1) } },
-      select: { collaboratorId: true, date: true, overrideStatus: true, status: true },
-    });
-    const noteByKey = new Map(noteRows.map((n) => [`${n.collaboratorId}|${localKey(n.date)}`, n]));
-    for (const h of pastHolidays) {
-      const [y, m, d] = h.date.split("-").map(Number);
-      const date = new Date(y, m - 1, d);
-      const list: BankHoursOverview["suggestions"][number]["people"] = [];
-      for (const c of collaborators) {
-        if (c.admissionDate && c.admissionDate > date) continue;
-        const note = noteByKey.get(`${c.id}|${h.date}`);
-        const effective = note ? note.overrideStatus : getCollaboratorDayStatus(date, c);
-        if (effective !== "TRABALHO") continue;
-        if (note?.status === "BH_MAIS") continue; // já lançado como BH+ na escala
-        if ((entriesBy.get(c.id) ?? []).some((e) => e.kind === "FERIADO" && entryKey(e.date) === h.date)) continue;
-        list.push({ collaboratorId: c.id, name: c.name, turnoName: c.turno?.name ?? null });
-      }
-      if (list.length > 0) suggestions.push({ holiday: h, people: list.sort((a, b) => a.name.localeCompare(b.name, "pt-BR")) });
-    }
-  }
+  for (const e of entries) if (e.kind === "FERIADO" && e.days > 0) creditedBy.set(entryKey(e.date), (creditedBy.get(entryKey(e.date)) ?? 0) + 1);
 
   return {
     year,
     tableReady,
-    holidays: holidays.map((h) => ({
-      ...h,
-      past: h.date <= todayKey,
-      pendingCount: suggestions.find((s) => s.holiday.date === h.date)?.people.length ?? 0,
-      creditedCount: creditedBy.get(h.date) ?? 0,
-    })),
-    suggestions,
+    holidays: nationalHolidays(year)
+      .filter((h) => h.date >= BANK_HOURS_START)
+      .map((h) => ({ ...h, past: h.date <= todayKey, creditedCount: creditedBy.get(h.date) ?? 0 })),
     people,
   };
-}
-
-/** Credita 1 dia de folga a cada colaborador que trabalhou num feriado nacional. Não credita o mesmo feriado duas vezes para a mesma pessoa. */
-export async function creditHolidayWork(user: CurrentUser, input: { dateKey: string; collaboratorIds: string[] }): Promise<{ created: number }> {
-  requireBankHours(user);
-  const holiday = holidayOn(input.dateKey);
-  if (!holiday) throw new Error("Essa data não é feriado nacional.");
-  if (input.collaboratorIds.length === 0) return { created: 0 };
-  const valid = await db.collaborator.findMany({ where: { id: { in: input.collaboratorIds } }, select: { id: true } });
-  const result = await db.bankHourEntry.createMany({
-    data: valid.map((c) => ({
-      collaboratorId: c.id,
-      date: new Date(`${input.dateKey}T12:00:00Z`),
-      days: 1,
-      kind: "FERIADO",
-      holidayName: holiday.name,
-      dedupKey: `h:${c.id}:${input.dateKey}`,
-      createdById: user.id,
-      createdByName: user.name,
-    })),
-    skipDuplicates: true,
-  });
-  return { created: result.count };
 }
 
 /** Lançamento manual (troca, acordo, correção): dias positivos creditam, negativos abatem. */
@@ -187,8 +198,14 @@ export async function addManualBankEntry(user: CurrentUser, input: { collaborato
   });
 }
 
-/** Apaga um lançamento do banco (engano). O BH+/BH- da escala se desfaz na própria escala. */
+/** Retira um lançamento do banco. Ajuste manual é apagado. Crédito automático de feriado vira zero (fica no extrato) para a rotina não creditar de novo. */
 export async function deleteBankEntry(user: CurrentUser, id: string) {
   requireBankHours(user);
-  await db.bankHourEntry.deleteMany({ where: { id } });
+  const entry = await db.bankHourEntry.findUnique({ where: { id } });
+  if (!entry) return;
+  if (entry.kind === "FERIADO") {
+    await db.bankHourEntry.update({ where: { id }, data: { days: 0, note: `Crédito retirado por ${user.name}` } });
+    return;
+  }
+  await db.bankHourEntry.delete({ where: { id } });
 }
