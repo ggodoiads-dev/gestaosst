@@ -1,9 +1,9 @@
 import Link from "next/link";
-import { CalendarRange, Clock, Truck } from "lucide-react";
+import { CalendarRange, Clock, Scale, Truck } from "lucide-react";
 import { requireUser } from "@/server/auth/current-user";
 import { currentDayKey } from "@/server/services/guardian.service";
 import { getDpvimDashboard } from "@/server/services/dpvim.service";
-import { DPVIM_KINDS, DPVIM_SITUATION_LABEL, dpvimKindLabel, formatHours, type DpvimKind, type DpvimSituation } from "@/domain/dpvim/rules";
+import { DPVIM_SITUATION_LABEL, dpvimKindLabel, formatHours, type DpvimSituation } from "@/domain/dpvim/rules";
 import { parseDayKey } from "@/domain/guardian/golden-rule";
 import { formatDateTime } from "@/lib/dates";
 import { cn } from "@/lib/utils";
@@ -15,12 +15,15 @@ import { Button } from "@/components/ui/button";
 import { DonutStat } from "@/components/domain/charts/donut-stat";
 import { HorizontalBarChart } from "@/components/domain/charts/horizontal-bar-chart";
 import { DpvimFormDialog } from "./dpvim-form-dialog";
+import { DpvimKindsDialog } from "./kinds-dialog";
 import { StartDpvimDialog } from "./start-dialog";
 import { StopDpvimDialog } from "./stop-dialog";
 import { ArrivalsChart } from "./dpvim-charts";
 import { ProgressBar, SituationBadge } from "./situation-badge";
 
 const SITUATIONS: DpvimSituation[] = ["ATRASADA", "VENCE_LOGO", "NO_PRAZO", "CONCLUIDA_NO_PRAZO", "CONCLUIDA_ATRASADA", "CANCELADA"];
+
+const signed = (n: number) => (n > 0 ? `+${n}` : String(n));
 
 function addDays(key: string, delta: number): string {
   return new Date(new Date(`${key}T00:00:00Z`).getTime() + delta * 86400000).toISOString().slice(0, 10);
@@ -29,13 +32,15 @@ function addDays(key: string, delta: number): string {
 export default async function DpvimPage({ searchParams }: { searchParams: Promise<{ de?: string; ate?: string; tipo?: string; situacao?: string }> }) {
   const user = await requireUser();
   const { de, ate, tipo, situacao } = await searchParams;
-  const kind = (DPVIM_KINDS.find((k) => k.key === tipo)?.key ?? null) as DpvimKind | null;
   const situation = SITUATIONS.find((s) => s === situacao) ?? null;
   const from = parseDayKey(de);
   const to = parseDayKey(ate);
   const hasPeriod = !!(from || to);
 
-  const data = await getDpvimDashboard(user, { from, to, kind, situation });
+  const data = await getDpvimDashboard(user, { from, to, kind: tipo ?? null, situation });
+  // O tipo do filtro só vale se existir (os de fábrica e os cadastrados).
+  const kind = data.kinds.find((k) => k.key === tipo)?.key ?? null;
+  const kindName = (key: string) => dpvimKindLabel(key, data.kinds);
   const todayKey = currentDayKey();
 
   function href(over: { de?: string; ate?: string; tipo?: string; situacao?: string } = {}) {
@@ -46,6 +51,7 @@ export default async function DpvimPage({ searchParams }: { searchParams: Promis
     return qs ? `/dpvim?${qs}` : "/dpvim";
   }
 
+  const dv = data.divergence;
   const late = data.rows.filter((r) => r.situation === "ATRASADA");
   const k = data.kpis;
   const doneTotal = k.doneOnTime + k.doneLate;
@@ -57,12 +63,25 @@ export default async function DpvimPage({ searchParams }: { searchParams: Promis
       <PageHeader
         title="DPVIM"
         description="Cargas de retorno (paletes, chapatex e quadros) para selecionar e separar. O prazo para rebater é de 48h a partir da chegada."
-        actions={data.canManage ? <DpvimFormDialog disabled={!data.ready} /> : undefined}
+        actions={
+          data.canManage ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <DpvimKindsDialog kinds={data.kinds} disabled={!data.kindsReady} />
+              <DpvimFormDialog disabled={!data.ready} kinds={data.kinds} />
+            </div>
+          ) : undefined
+        }
       />
       <PageBody className="flex flex-col gap-6">
         {!data.ready && (
           <div className="rounded-lg border border-warning/40 bg-warning-soft px-4 py-3 text-sm text-warning">
             A atualização do banco de dados da DPVIM ainda não foi aplicada, então ainda não dá para cadastrar nem abrir DPVIM.
+          </div>
+        )}
+
+        {data.canManage && !data.kindsReady && (
+          <div className="rounded-lg border border-warning/40 bg-warning-soft px-4 py-3 text-sm text-warning">
+            A atualização do banco de dados para cadastrar tipos de DPVIM ainda não foi aplicada. Enquanto isso, só os tipos de fábrica (palete, chapatex e quadro) estão disponíveis.
           </div>
         )}
 
@@ -94,13 +113,13 @@ export default async function DpvimPage({ searchParams }: { searchParams: Promis
               <CardContent className="flex flex-col gap-4 pt-5">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-xs font-medium text-foreground-subtle">Tipo:</span>
-                  {[null, ...DPVIM_KINDS.map((x) => x.key)].map((t) => (
+                  {[null, ...data.kinds.filter((x) => x.active || x.key === kind).map((x) => x.key)].map((t) => (
                     <Link
                       key={t ?? "todos"}
                       href={href({ tipo: t ?? undefined })}
                       className={cn("rounded-full border px-3 py-1 text-xs font-medium transition-colors", t === kind ? "border-accent bg-accent-soft text-accent" : "border-border text-foreground-muted hover:bg-surface-muted")}
                     >
-                      {t ? dpvimKindLabel(t) : "Todos"}
+                      {t ? kindName(t) : "Todos"}
                     </Link>
                   ))}
                   <span className="ml-4 text-xs font-medium text-foreground-subtle">Situação:</span>
@@ -200,6 +219,79 @@ export default async function DpvimPage({ searchParams }: { searchParams: Promis
               </Card>
             </div>
 
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Scale className="size-4" /> Divergências de conferência
+                </CardTitle>
+                <CardDescription>
+                  Compara o que a nota dizia com o que foi contado ao finalizar cada DPVIM. Saldo negativo = faltou; positivo = sobrou. Considera as DPVIM concluídas do filtro acima.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-5">
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                  <StatCard label="Concluídas conferidas" value={dv.checked} />
+                  <StatCard label="Com divergência" value={dv.withDivergence} tone={dv.withDivergence > 0 ? "warning" : "success"} hint={dv.checked > 0 ? `${dv.checked - dv.withDivergence} bateram com a nota` : undefined} />
+                  <StatCard label="Faltou no total" value={dv.missing} tone={dv.missing > 0 ? "danger" : "success"} hint={dv.missingRate === null ? undefined : `${String(dv.missingRate).replace(".", ",")}% do que veio nas notas`} />
+                  <StatCard label="Sobrou no total" value={dv.surplus} tone={dv.surplus > 0 ? "warning" : "neutral"} />
+                </div>
+                {dv.checked === 0 ? (
+                  <p className="text-sm text-foreground-subtle">Ainda não há DPVIM concluída nesse filtro para conferir.</p>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                      <div>
+                        <p className="mb-1 text-sm font-semibold text-foreground">Quanto faltou por fornecedor</p>
+                        <HorizontalBarChart data={dv.bySupplier.filter((x) => x.missing > 0).slice(0, 8).map((x) => ({ name: x.origin, value: x.missing, color: "var(--danger)" }))} />
+                      </div>
+                      <div className="overflow-x-auto">
+                        <p className="mb-1 text-sm font-semibold text-foreground">Fornecedor por fornecedor</p>
+                        <table className="w-full border-collapse text-sm">
+                          <thead>
+                            <tr className="border-y border-border bg-surface-muted text-left text-xs text-foreground-subtle">
+                              <th className="px-3 py-2 font-semibold">Fornecedor (de onde veio)</th>
+                              <th className="px-2 py-2 text-right font-semibold">Na nota</th>
+                              <th className="px-2 py-2 text-right font-semibold">Contado</th>
+                              <th className="px-2 py-2 text-right font-semibold">Saldo</th>
+                              <th className="px-3 py-2 text-right font-semibold">Com divergência</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {dv.bySupplier.map((x) => (
+                              <tr key={x.origin} className="border-b border-border last:border-0">
+                                <td className="px-3 py-2 font-medium text-foreground">{x.origin}</td>
+                                <td className="px-2 py-2 text-right tabular-nums">{x.invoiced}</td>
+                                <td className="px-2 py-2 text-right tabular-nums">{x.counted}</td>
+                                <td className={cn("px-2 py-2 text-right font-semibold tabular-nums", x.balance < 0 ? "text-danger" : x.balance > 0 ? "text-warning" : "text-success")}>{signed(x.balance)}</td>
+                                <td className="px-3 py-2 text-right tabular-nums text-foreground-subtle">
+                                  {x.withDivergence} de {x.count}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                    {dv.items.length > 0 && (
+                      <div className="flex flex-col gap-2">
+                        <p className="text-sm font-semibold text-foreground">DPVIM que fecharam com divergência</p>
+                        {dv.items.slice(0, 20).map((i) => (
+                          <Link key={i.id} href={`/dpvim/${i.id}`} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border px-3 py-2 text-sm hover:bg-surface-muted">
+                            <span>
+                              <strong className="text-accent">{i.code}</strong> · {kindName(i.kind)} · {i.origin}
+                            </span>
+                            <span className="text-xs tabular-nums text-foreground-subtle">
+                              nota {i.invoiced} · contado {i.counted} · <strong className={i.balance < 0 ? "text-danger" : "text-warning"}>{signed(i.balance)}</strong>
+                            </span>
+                          </Link>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </CardContent>
+            </Card>
+
             {late.length > 0 && (
               <Card className="border-danger/50">
                 <CardHeader>
@@ -216,7 +308,7 @@ export default async function DpvimPage({ searchParams }: { searchParams: Promis
                         <SituationBadge situation={r.situation} hoursLeft={r.hoursLeft} />
                       </div>
                       <p className="text-xs text-foreground-subtle">
-                        {dpvimKindLabel(r.kind)} · {r.origin} · chegou {formatDateTime(r.arrivedAt)}
+                        {kindName(r.kind)} · {r.origin} · chegou {formatDateTime(r.arrivedAt)}
                       </p>
                       <ProgressBar done={r.doneQty} expected={r.expectedQty} progress={r.progress} />
                     </Link>
@@ -265,7 +357,7 @@ export default async function DpvimPage({ searchParams }: { searchParams: Promis
                           </Link>
                           <p className="text-xs text-foreground-subtle">
                             <Badge tone="info" className="mr-1">
-                              {dpvimKindLabel(r.kind)}
+                              {kindName(r.kind)}
                             </Badge>
                             {r.origin}
                           </p>
@@ -277,6 +369,11 @@ export default async function DpvimPage({ searchParams }: { searchParams: Promis
                         </td>
                         <td className="px-3 py-2.5">
                           <ProgressBar done={r.doneQty} expected={r.expectedQty} progress={r.progress} />
+                          {r.balance !== null && r.balance !== 0 && (
+                            <p className={cn("mt-0.5 text-[11px] font-semibold", r.balance < 0 ? "text-danger" : "text-warning")}>
+                              Divergência: {r.balance < 0 ? `faltou ${-r.balance}` : `sobrou ${r.balance}`}
+                            </p>
+                          )}
                         </td>
                         <td className="px-3 py-2.5 text-xs">
                           {r.openNow.length > 0 ? (

@@ -1958,7 +1958,7 @@ model DisciplineRecordFile {
 model Dpvim {
   id            String    @id @default(uuid())
   code          String    @unique // DPVIM-0001
-  kind          String // PALETE | CHAPATEX
+  kind          String // PALETE | CHAPATEX | QUADRO | c-<tipo cadastrado>
   origin        String // de onde veio
   reference     String? // número da carga / nota / placa
   material      String? // materiais, o que veio
@@ -1975,6 +1975,15 @@ model Dpvim {
 
   @@index([status])
   @@index([arrivedAt])
+}
+
+/// Tipos de DPVIM cadastrados pelo usuário (além de palete, chapatex e quadro, que já vêm de fábrica). Tabela isolada, sem chaves estrangeiras.
+model DpvimKindDef {
+  id        String   @id @default(uuid())
+  key       String   @unique // c-barril
+  label     String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
 }
 
 /// Uma vez que alguém abre a DPVIM e trabalha nela: quem, quando começou (com a foto), quando parou e quanto fez.

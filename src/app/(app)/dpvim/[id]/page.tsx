@@ -36,7 +36,7 @@ export default async function DpvimDetailPage({ params }: { params: Promise<{ id
     <>
       <PageHeader
         title={row.code}
-        description={`${dpvimKindLabel(row.kind)} · de ${row.origin}`}
+        description={`${dpvimKindLabel(row.kind, detail.kinds)} · de ${row.origin}`}
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Button asChild size="sm" variant="ghost">
@@ -70,7 +70,16 @@ export default async function DpvimDetailPage({ params }: { params: Promise<{ id
             <div className="flex flex-col gap-2">
               <p className="text-xs text-foreground-subtle">Andamento</p>
               <ProgressBar done={row.doneQty} expected={row.expectedQty} progress={row.progress} />
-              <p className="text-sm text-foreground">{left > 0 ? `Faltam ${left} itens` : "Carga toda selecionada"}</p>
+              <p className="text-sm text-foreground">{left > 0 ? `Faltam ${left} itens` : "Carga toda contada"}</p>
+              {row.balance !== null && (
+                <p className={row.balance === 0 ? "text-sm font-semibold text-success" : row.balance < 0 ? "text-sm font-semibold text-danger" : "text-sm font-semibold text-warning"}>
+                  {row.balance === 0
+                    ? "Conferência: bateu com a nota"
+                    : row.balance < 0
+                      ? `Divergência: faltou ${-row.balance} (nota ${row.expectedQty}, contado ${row.doneQty})`
+                      : `Divergência: sobrou ${row.balance} (nota ${row.expectedQty}, contado ${row.doneQty})`}
+                </p>
+              )}
             </div>
             <div className="flex flex-col gap-1 text-sm">
               <p className="text-xs text-foreground-subtle">Carga</p>
@@ -84,6 +93,7 @@ export default async function DpvimDetailPage({ params }: { params: Promise<{ id
           {detail.canManage && (
             <CardContent className="flex flex-wrap gap-2 border-t border-border pt-4">
               <DpvimFormDialog
+                kinds={detail.kinds}
                 initial={{
                   id: row.id,
                   kind: row.kind,

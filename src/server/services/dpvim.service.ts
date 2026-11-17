@@ -8,7 +8,7 @@ import type { CurrentUser } from "@/server/auth/current-user";
 import { ForbiddenError, hasPermission } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
 import { APP_TIMEZONE } from "@/lib/dates";
-import { DPVIM_KINDS, dpvimSituation, dueAtFrom, progressPercent, type DpvimKind, type DpvimSituation, type DpvimStatus } from "@/domain/dpvim/rules";
+import { DPVIM_KINDS, dpvimBalance, dpvimSituation, dueAtFrom, kindKeyFromLabel, originGroupKey, progressPercent, type DpvimKind, type DpvimKindOption, type DpvimSituation, type DpvimStatus } from "@/domain/dpvim/rules";
 
 /** Quem cadastra, edita e cancela DPVIM e vê o painel completo: gestão de produtividade, líderes que fazem chamada. */
 export function canManageDpvim(user: CurrentUser): boolean {
@@ -32,6 +32,39 @@ async function requireDpvimAccess(user: CurrentUser) {
   return me;
 }
 
+/** Tipos disponíveis: os de fábrica mais os cadastrados. Se a tabela de tipos ainda não existe, só os de fábrica (nada quebra). */
+export async function listDpvimKinds(): Promise<{ kinds: DpvimKindOption[]; ready: boolean }> {
+  const builtin: DpvimKindOption[] = DPVIM_KINDS.map((k) => ({ key: k.key, label: k.label, builtin: true, active: true, id: null }));
+  try {
+    const custom = await db.dpvimKindDef.findMany({ orderBy: { label: "asc" } });
+    return { kinds: [...builtin, ...custom.map((c) => ({ key: c.key, label: c.label, builtin: false, active: c.active, id: c.id }))], ready: true };
+  } catch (error) {
+    console.error("[dpvim] tabela de tipos indisponível:", error);
+    return { kinds: builtin, ready: false };
+  }
+}
+
+export async function createDpvimKind(user: CurrentUser, label: string) {
+  if (!canManageDpvim(user)) throw new ForbiddenError();
+  const clean = label.trim().replace(/\s+/g, " ").slice(0, 40);
+  if (clean.length < 2) throw new Error("Informe o nome do tipo.");
+  const key = kindKeyFromLabel(clean);
+  if (!key) throw new Error("Informe o nome do tipo com letras ou números.");
+  const { kinds } = await listDpvimKinds();
+  if (kinds.some((k) => k.key === key || k.label.toLowerCase() === clean.toLowerCase())) throw new Error("Já existe um tipo com esse nome.");
+  const created = await db.dpvimKindDef.create({ data: { key, label: clean } });
+  await recordAudit({ userId: user.id, action: "CREATE", entityType: "DpvimKindDef", entityId: created.id, newValue: { key, label: clean } });
+  return created;
+}
+
+/** Tipo cadastrado que não vai mais ser usado some das opções de novo cadastro, mas as DPVIM antigas continuam com o nome dele. */
+export async function setDpvimKindActive(user: CurrentUser, id: string, active: boolean) {
+  if (!canManageDpvim(user)) throw new ForbiddenError();
+  const before = await db.dpvimKindDef.findUniqueOrThrow({ where: { id } });
+  await db.dpvimKindDef.update({ where: { id }, data: { active } });
+  await recordAudit({ userId: user.id, action: "UPDATE", entityType: "DpvimKindDef", entityId: id, previousValue: { active: before.active }, newValue: { active } });
+}
+
 export type DpvimRow = {
   id: string;
   code: string;
@@ -41,6 +74,8 @@ export type DpvimRow = {
   material: string | null;
   expectedQty: number;
   doneQty: number;
+  /** Só para concluída: contado menos o que a nota dizia (negativo = faltou, positivo = sobrou, 0 = bateu). */
+  balance: number | null;
   progress: number;
   arrivedAt: Date;
   dueAt: Date;
@@ -88,6 +123,7 @@ function toRow(d: DpvimDb, sessions: SessionDb[], now: Date): DpvimRow {
     material: d.material,
     expectedQty: d.expectedQty,
     doneQty: d.doneQty,
+    balance: d.status === "CONCLUIDA" ? dpvimBalance(d.doneQty, d.expectedQty) : null,
     progress: progressPercent(d.doneQty, d.expectedQty),
     arrivedAt: d.arrivedAt,
     dueAt: d.dueAt,
@@ -124,6 +160,23 @@ const dayKeyBrt = (d: Date) => formatInTimeZone(d, APP_TIMEZONE, "yyyy-MM-dd");
 
 export type DpvimFilters = { from?: string | null; to?: string | null; kind?: DpvimKind | null; situation?: DpvimSituation | null };
 
+export type DpvimSupplierDivergence = { origin: string; count: number; withDivergence: number; invoiced: number; counted: number; balance: number; missing: number; surplus: number };
+
+export type DpvimDivergenceSummary = {
+  /** Concluídas no período (as que entram na conferência). */
+  checked: number;
+  /** Quantas fecharam com saldo diferente de zero. */
+  withDivergence: number;
+  /** Total que faltou (soma dos saldos negativos, em positivo) e total que sobrou. */
+  missing: number;
+  surplus: number;
+  /** Soma das notas das concluídas, e quanto a falta representa disso (%). */
+  invoiced: number;
+  missingRate: number | null;
+  bySupplier: DpvimSupplierDivergence[];
+  items: { id: string; code: string; origin: string; kind: string; invoiced: number; counted: number; balance: number; finishedAt: Date | null }[];
+};
+
 export type DpvimDashboard = {
   ready: boolean;
   canManage: boolean;
@@ -147,6 +200,9 @@ export type DpvimDashboard = {
   rows: DpvimRow[];
   arrivalsByDay: { dayKey: string; arrived: number; concluded: number }[];
   byOrigin: { origin: string; count: number }[];
+  divergence: DpvimDivergenceSummary;
+  kinds: DpvimKindOption[];
+  kindsReady: boolean;
   byPair: { label: string; qty: number; sessions: number }[];
   recent: DpvimSessionRow[];
   collaborators: { id: string; name: string }[];
@@ -169,6 +225,9 @@ export async function getDpvimDashboard(user: CurrentUser, filters: DpvimFilters
     rows: [],
     arrivalsByDay: [],
     byOrigin: [],
+    divergence: { checked: 0, withDivergence: 0, missing: 0, surplus: 0, invoiced: 0, missingRate: null, bySupplier: [], items: [] },
+    kinds: [],
+    kindsReady: true,
     byPair: [],
     recent: [],
     collaborators: [],
@@ -184,6 +243,8 @@ export async function getDpvimDashboard(user: CurrentUser, filters: DpvimFilters
     return { ...base, ready: false };
   }
 
+  const kindList = await listDpvimKinds();
+  const kindFilter = filters.kind && kindList.kinds.some((k) => k.key === filters.kind) ? filters.kind : null;
   const fromAt = filters.from ? new Date(`${filters.from}T00:00:00-03:00`) : null;
   const toAt = filters.to ? new Date(new Date(`${filters.to}T00:00:00-03:00`).getTime() + 24 * 60 * 60 * 1000) : null;
   const rowsAll = all.map((d) => toRow(d, sessions, now));
@@ -195,7 +256,7 @@ export async function getDpvimDashboard(user: CurrentUser, filters: DpvimFilters
       if (toAt && r.arrivedAt >= toAt) return false;
       return true;
     })
-    .filter((r) => (filters.kind ? r.kind === filters.kind : true))
+    .filter((r) => (kindFilter ? r.kind === kindFilter : true))
     .filter((r) => (filters.situation ? r.situation === filters.situation : true))
     // Pendentes primeiro, pela que vence antes (as atrasadas no topo); depois as concluídas, da mais recente.
     .sort((a, b) => {
@@ -226,6 +287,38 @@ export async function getDpvimDashboard(user: CurrentUser, filters: DpvimFilters
 
   const origins = new Map<string, number>();
   for (const r of active) origins.set(r.origin, (origins.get(r.origin) ?? 0) + 1);
+
+  // Conferência: só as concluídas. Agrupa o fornecedor sem diferenciar maiúsculas/acento, mostrando o nome como foi digitado primeiro.
+  const concluded = active.filter((r) => r.status === "CONCLUIDA" && r.balance !== null);
+  const suppliers = new Map<string, DpvimSupplierDivergence>();
+  for (const r of concluded) {
+    const key = originGroupKey(r.origin);
+    const e = suppliers.get(key) ?? { origin: r.origin, count: 0, withDivergence: 0, invoiced: 0, counted: 0, balance: 0, missing: 0, surplus: 0 };
+    const bal = r.balance ?? 0;
+    e.count += 1;
+    e.invoiced += r.expectedQty;
+    e.counted += r.doneQty;
+    e.balance += bal;
+    if (bal !== 0) e.withDivergence += 1;
+    if (bal < 0) e.missing += -bal;
+    if (bal > 0) e.surplus += bal;
+    suppliers.set(key, e);
+  }
+  const divergentRows = concluded.filter((r) => (r.balance ?? 0) !== 0);
+  const invoicedTotal = concluded.reduce((s, r) => s + r.expectedQty, 0);
+  const missingTotal = divergentRows.reduce((s, r) => s + ((r.balance ?? 0) < 0 ? -(r.balance ?? 0) : 0), 0);
+  const divergence: DpvimDivergenceSummary = {
+    checked: concluded.length,
+    withDivergence: divergentRows.length,
+    missing: missingTotal,
+    surplus: divergentRows.reduce((s, r) => s + ((r.balance ?? 0) > 0 ? (r.balance ?? 0) : 0), 0),
+    invoiced: invoicedTotal,
+    missingRate: invoicedTotal > 0 ? Math.round((missingTotal / invoicedTotal) * 1000) / 10 : null,
+    bySupplier: [...suppliers.values()].sort((a, b) => b.missing - a.missing || a.balance - b.balance || b.count - a.count),
+    items: divergentRows
+      .map((r) => ({ id: r.id, code: r.code, origin: r.origin, kind: r.kind, invoiced: r.expectedQty, counted: r.doneQty, balance: r.balance ?? 0, finishedAt: r.finishedAt }))
+      .sort((a, b) => a.balance - b.balance),
+  };
 
   const ids = new Set(rows.map((r) => r.id));
   const codeById = new Map(all.map((d) => [d.id, d.code]));
@@ -261,6 +354,9 @@ export async function getDpvimDashboard(user: CurrentUser, filters: DpvimFilters
     },
     rows,
     arrivalsByDay: [...arrivals.entries()].map(([dayKey, v]) => ({ dayKey, ...v })).sort((a, b) => a.dayKey.localeCompare(b.dayKey)),
+    divergence,
+    kinds: kindList.kinds,
+    kindsReady: kindList.ready,
     byOrigin: [...origins.entries()].map(([origin, count]) => ({ origin, count })).sort((a, b) => b.count - a.count),
     byPair: [...pairs.entries()].map(([label, v]) => ({ label, ...v })).sort((a, b) => b.qty - a.qty),
     recent: periodSessions.slice(0, 15).map((s) => toSessionRow(s, codeById.get(s.dpvimId) ?? "?")),
@@ -276,6 +372,7 @@ export type DpvimDetail = {
   hasCollaborator: boolean;
   collaborators: { id: string; name: string }[];
   myCollaboratorId: string | null;
+  kinds: DpvimKindOption[];
 };
 
 export async function getDpvimDetail(user: CurrentUser, id: string): Promise<DpvimDetail | null> {
@@ -293,13 +390,17 @@ export async function getDpvimDetail(user: CurrentUser, id: string): Promise<Dpv
     hasCollaborator: !!collab,
     collaborators: await db.collaborator.findMany({ where: { active: true }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
     myCollaboratorId: collab?.id ?? null,
+    kinds: (await listDpvimKinds()).kinds,
   };
 }
 
 export type DpvimInput = { kind: string; origin: string; reference: string; material: string; expectedQty: number; arrivedAtIso: string; notes: string };
 
-function validate(input: DpvimInput) {
-  if (!DPVIM_KINDS.some((k) => k.key === input.kind)) throw new Error("Escolha o tipo: palete, chapatex ou quadro.");
+async function validate(input: DpvimInput, currentKind?: string) {
+  const { kinds } = await listDpvimKinds();
+  const kind = kinds.find((k) => k.key === input.kind);
+  // Tipo desativado só vale para a DPVIM que já era dele; para cadastrar nova, tem que estar ativo.
+  if (!kind || (!kind.active && input.kind !== currentKind)) throw new Error("Escolha o tipo da DPVIM.");
   if (input.origin.trim().length < 2) throw new Error("Informe de onde a DPVIM veio.");
   if (!Number.isInteger(input.expectedQty) || input.expectedQty <= 0 || input.expectedQty > 100000) throw new Error("Informe quantos itens vieram.");
   const arrivedAt = new Date(input.arrivedAtIso);
@@ -310,7 +411,7 @@ function validate(input: DpvimInput) {
 
 export async function createDpvim(user: CurrentUser, input: DpvimInput) {
   if (!canManageDpvim(user)) throw new ForbiddenError();
-  const arrivedAt = validate(input);
+  const arrivedAt = await validate(input);
   const code = await nextFriendlyCode("dpvim", "DPVIM", 4);
   const created = await db.dpvim.create({
     data: {
@@ -333,8 +434,8 @@ export async function createDpvim(user: CurrentUser, input: DpvimInput) {
 
 export async function updateDpvim(user: CurrentUser, id: string, input: DpvimInput) {
   if (!canManageDpvim(user)) throw new ForbiddenError();
-  const arrivedAt = validate(input);
   const before = await db.dpvim.findUniqueOrThrow({ where: { id } });
+  const arrivedAt = await validate(input, before.kind);
   const updated = await db.dpvim.update({
     where: { id },
     data: {

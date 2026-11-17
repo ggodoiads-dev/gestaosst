@@ -10,14 +10,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { FormField } from "@/components/ui/label";
 import { Dialog, DialogBody, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { createDpvimAction, updateDpvimAction } from "@/server/actions/dpvim.actions";
-import { DPVIM_DEADLINE_HOURS, DPVIM_KINDS, parseBrasiliaLocal } from "@/domain/dpvim/rules";
+import { DPVIM_DEADLINE_HOURS, parseBrasiliaLocal, type DpvimKindOption } from "@/domain/dpvim/rules";
 
 const field = "h-9 w-full rounded-md border border-border-strong bg-surface px-2 text-sm text-foreground";
 
 export type DpvimFormInitial = { id: string; kind: string; origin: string; reference: string; material: string; expectedQty: number; arrivedLocal: string; notes: string };
 
 /** Cadastrar (ou editar) uma DPVIM: de onde veio, quando chegou, quantos itens, o que veio e o tipo (palete, chapatex ou quadro). O prazo de 48h conta da chegada. */
-export function DpvimFormDialog({ initial, disabled }: { initial?: DpvimFormInitial; disabled?: boolean }) {
+export function DpvimFormDialog({ initial, disabled, kinds }: { initial?: DpvimFormInitial; disabled?: boolean; kinds: DpvimKindOption[] }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
@@ -69,21 +69,23 @@ export function DpvimFormDialog({ initial, disabled }: { initial?: DpvimFormInit
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>{initial ? "Editar DPVIM" : "Nova DPVIM"}</DialogTitle>
-          <DialogDescription>O prazo para rebater é de {DPVIM_DEADLINE_HOURS}h a partir da chegada.</DialogDescription>
+          <DialogDescription>O prazo para rebater é de {DPVIM_DEADLINE_HOURS}h a partir da chegada. A quantidade é a que veio na nota; ao finalizar, a contagem é comparada com ela.</DialogDescription>
         </DialogHeader>
         <DialogBody className="flex flex-col gap-4">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <FormField label="Tipo" required>
               <select value={kind} onChange={(e) => setKind(e.target.value)} className={field}>
                 <option value="">Escolher…</option>
-                {DPVIM_KINDS.map((k) => (
-                  <option key={k.key} value={k.key}>
-                    {k.label}
-                  </option>
-                ))}
+                {kinds
+                  .filter((k) => k.active || k.key === initial?.kind)
+                  .map((k) => (
+                    <option key={k.key} value={k.key}>
+                      {k.label}
+                    </option>
+                  ))}
               </select>
             </FormField>
-            <FormField label="Quantos itens vieram" required>
+            <FormField label="Quantos itens (na nota)" required hint="O valor que o conferente lançou">
               <Input value={qty} onChange={(e) => setQty(e.target.value)} inputMode="numeric" className="tabular-nums" />
             </FormField>
           </div>

@@ -3,15 +3,40 @@
 export const DPVIM_DEADLINE_HOURS = 48;
 export const DPVIM_SOON_HOURS = 12;
 
+/** Tipos que já vêm de fábrica. Os outros o usuário cadastra (tabela DpvimKindDef) e ficam junto com estes. */
 export const DPVIM_KINDS = [
   { key: "PALETE", label: "Palete" },
   { key: "CHAPATEX", label: "Chapatex" },
   { key: "QUADRO", label: "Quadro" },
 ] as const;
-export type DpvimKind = (typeof DPVIM_KINDS)[number]["key"];
+export type DpvimKind = string;
 
-export function dpvimKindLabel(kind: string): string {
-  return DPVIM_KINDS.find((k) => k.key === kind)?.label ?? kind;
+export type DpvimKindOption = { key: string; label: string; builtin: boolean; active: boolean; id: string | null };
+
+export function dpvimKindLabel(kind: string, kinds: { key: string; label: string }[] = []): string {
+  return kinds.find((k) => k.key === kind)?.label ?? DPVIM_KINDS.find((k) => k.key === kind)?.label ?? kind;
+}
+
+/** Chave de um tipo cadastrado: "c-" + o nome sem acento, em minúsculas e com hífens. */
+export function kindKeyFromLabel(label: string): string {
+  const slug = label
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40);
+  return slug ? `c-${slug}` : "";
+}
+
+/** Saldo da conferência: o que foi contado menos o que a nota dizia. Negativo = faltou, positivo = sobrou, 0 = bateu. Só vale para DPVIM concluída. */
+export function dpvimBalance(doneQty: number, expectedQty: number): number {
+  return doneQty - expectedQty;
+}
+
+/** Nome do fornecedor para agrupar: sem espaços sobrando, sem acento e sem diferença de maiúsculas ("Ambev " = "ambev"). */
+export function originGroupKey(origin: string): string {
+  return origin.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
 }
 
 export type DpvimStatus = "ABERTA" | "EM_ANDAMENTO" | "CONCLUIDA" | "CANCELADA";

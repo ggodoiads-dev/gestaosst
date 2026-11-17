@@ -5,8 +5,10 @@ import { requireUser, ForbiddenError } from "@/server/auth/current-user";
 import { InvalidUploadError, savePhotoUpload } from "@/server/services/storage";
 import {
   createDpvim,
+  createDpvimKind,
   deleteDpvim,
   setDpvimCancelled,
+  setDpvimKindActive,
   startDpvimSession,
   stopDpvimSession,
   updateDpvim,
@@ -25,7 +27,7 @@ async function run<T extends object>(fn: () => Promise<T>): Promise<Result<T>> {
     return { ok: true, ...result };
   } catch (error) {
     if (error instanceof ForbiddenError || error instanceof InvalidUploadError) return { ok: false, error: error.message };
-    if (error instanceof Error && /Escolha|Informe|informe|já está|já foi|Tem gente|chegada|número inteiro|Peça|foto/.test(error.message)) return { ok: false, error: error.message };
+    if (error instanceof Error && /Escolha|Informe|informe|já está|já foi|Já existe|Tem gente|chegada|número inteiro|Peça|foto/.test(error.message)) return { ok: false, error: error.message };
     console.error("[dpvim] falha:", error);
     return { ok: false, error: GENERIC };
   }
@@ -74,6 +76,20 @@ export async function stopDpvimSessionAction(sessionId: string, input: StopInput
 export async function deleteDpvimAction(id: string) {
   return run(async () => {
     await deleteDpvim(await requireUser(), id);
+    return {};
+  });
+}
+
+export async function createDpvimKindAction(label: string) {
+  return run(async () => {
+    await createDpvimKind(await requireUser(), label);
+    return {};
+  });
+}
+
+export async function setDpvimKindActiveAction(id: string, active: boolean) {
+  return run(async () => {
+    await setDpvimKindActive(await requireUser(), id, active);
     return {};
   });
 }

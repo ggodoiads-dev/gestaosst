@@ -33,6 +33,8 @@ export function StopDpvimDialog({ sessionId, code, expectedLeft }: { sessionId: 
 
   const done = toInt(qtyDone);
   const valid = done !== null && Number.isInteger(done) && done >= 0;
+  // Ao finalizar, o que foi contado é comparado com a nota: a diferença vira divergência no painel.
+  const balance = finish && valid && done !== null ? done - expectedLeft : 0;
 
   function submit() {
     if (!valid || done === null) return;
@@ -87,8 +89,16 @@ export function StopDpvimDialog({ sessionId, code, expectedLeft }: { sessionId: 
           </FormField>
           <label className="flex cursor-pointer items-center gap-2 text-sm text-foreground">
             <Checkbox checked={finish} onCheckedChange={(v) => setFinish(v === true)} />
-            Terminamos esta DPVIM (não sobrou mais nada para selecionar)
+            Terminamos esta DPVIM (não sobrou mais nada para contar)
           </label>
+          {finish && balance !== 0 && (
+            <p className="rounded-md border border-warning/40 bg-warning-soft px-3 py-2 text-sm text-warning">
+              {balance < 0
+                ? `Vai fechar com divergência: faltam ${-balance} em relação à nota. Ela entra no painel de divergências, por fornecedor.`
+                : `Vai fechar com divergência: sobraram ${balance} em relação à nota. Ela entra no painel de divergências, por fornecedor.`}{" "}
+              Se quiser, explique na observação.
+            </p>
+          )}
           {error && <p className="text-sm text-danger">{error}</p>}
         </DialogBody>
         <DialogFooter>

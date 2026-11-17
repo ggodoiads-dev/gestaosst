@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { dpvimSituation, dueAtFrom, formatHours, parseBrasiliaLocal, progressPercent } from "./rules";
+import { dpvimBalance, dpvimKindLabel, dpvimSituation, dueAtFrom, formatHours, kindKeyFromLabel, originGroupKey, parseBrasiliaLocal, progressPercent } from "./rules";
 
 const arrived = new Date("2026-11-10T12:00:00Z");
 
@@ -38,5 +38,29 @@ describe("formatos", () => {
     expect(progressPercent(210, 420)).toBe(50);
     expect(progressPercent(500, 420)).toBe(100);
     expect(progressPercent(5, 0)).toBe(0);
+  });
+});
+
+describe("divergência da conferência", () => {
+  it("saldo = contado - nota: negativo faltou, positivo sobrou", () => {
+    expect(dpvimBalance(1900, 2000)).toBe(-100);
+    expect(dpvimBalance(2030, 2000)).toBe(30);
+    expect(dpvimBalance(2000, 2000)).toBe(0);
+  });
+  it("agrupa o fornecedor sem se importar com acento, maiúsculas e espaços", () => {
+    expect(originGroupKey("  Cervejaria   Ambev ")).toBe(originGroupKey("cervejaria ambev"));
+    expect(originGroupKey("Fábrica São José")).toBe("fabrica sao jose");
+  });
+});
+
+describe("tipos de DPVIM", () => {
+  it("chave do tipo cadastrado", () => {
+    expect(kindKeyFromLabel("Barril Térmico!")).toBe("c-barril-termico");
+    expect(kindKeyFromLabel("!!!")).toBe("");
+  });
+  it("nome do tipo: usa o cadastrado, depois o de fábrica, senão a própria chave", () => {
+    expect(dpvimKindLabel("PALETE")).toBe("Palete");
+    expect(dpvimKindLabel("c-barril", [{ key: "c-barril", label: "Barril" }])).toBe("Barril");
+    expect(dpvimKindLabel("x")).toBe("x");
   });
 });
