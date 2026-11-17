@@ -14,6 +14,7 @@ import { DpvimFormDialog } from "../dpvim-form-dialog";
 import { StartDpvimDialog } from "../start-dialog";
 import { StopDpvimDialog } from "../stop-dialog";
 import { CancelDpvimButton } from "../cancel-button";
+import { DeleteDpvimButton } from "../delete-button";
 import { ProgressBar, SituationBadge } from "../situation-badge";
 
 function toLocalInput(d: Date): string {
@@ -95,6 +96,7 @@ export default async function DpvimDetailPage({ params }: { params: Promise<{ id
                 }}
               />
               {row.status !== "CONCLUIDA" && <CancelDpvimButton id={row.id} cancelled={row.status === "CANCELADA"} />}
+              <DeleteDpvimButton id={row.id} code={row.code} />
             </CardContent>
           )}
         </Card>

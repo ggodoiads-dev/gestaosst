@@ -3,6 +3,7 @@ import { formatInTimeZone } from "date-fns-tz";
 import { db } from "@/server/db";
 import { recordAudit } from "@/server/services/audit";
 import { nextFriendlyCode } from "@/server/services/sequence";
+import { deleteStoredFile } from "@/server/services/storage";
 import type { CurrentUser } from "@/server/auth/current-user";
 import { ForbiddenError, hasPermission } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
@@ -432,4 +433,17 @@ export async function stopDpvimSession(user: CurrentUser, sessionId: string, inp
   });
   await recordAudit({ userId: user.id, action: "UPDATE", entityType: "DpvimSession", entityId: sessionId, newValue: { ...input, code: d.code, concluded } });
   return { concluded };
+}
+
+/** Exclui a DPVIM de vez, com as atividades e as fotos (para tirar um cadastro de teste ou errado do histórico). Não dá para desfazer. */
+export async function deleteDpvim(user: CurrentUser, id: string) {
+  if (!canManageDpvim(user)) throw new ForbiddenError();
+  const before = await db.dpvim.findUnique({ where: { id } });
+  if (!before) return;
+  const sessions = await db.dpvimSession.findMany({ where: { dpvimId: id } });
+  if (sessions.some((s) => !s.stoppedAt)) throw new Error("Tem gente com essa DPVIM aberta. Peça para parar antes de excluir.");
+  await db.dpvimSession.deleteMany({ where: { dpvimId: id } });
+  await db.dpvim.delete({ where: { id } });
+  for (const s of sessions) await deleteStoredFile(s.startPhotoPath);
+  await recordAudit({ userId: user.id, action: "CANCEL", entityType: "Dpvim", entityId: id, previousValue: { code: before.code, kind: before.kind, origin: before.origin, expectedQty: before.expectedQty, doneQty: before.doneQty, sessions: sessions.length } });
 }

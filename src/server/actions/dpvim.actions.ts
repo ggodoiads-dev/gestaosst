@@ -5,6 +5,7 @@ import { requireUser, ForbiddenError } from "@/server/auth/current-user";
 import { InvalidUploadError, savePhotoUpload } from "@/server/services/storage";
 import {
   createDpvim,
+  deleteDpvim,
   setDpvimCancelled,
   startDpvimSession,
   stopDpvimSession,
@@ -67,5 +68,12 @@ export async function stopDpvimSessionAction(sessionId: string, input: StopInput
   return run(async () => {
     const result = await stopDpvimSession(await requireUser(), sessionId, input);
     return { concluded: result.concluded };
+  });
+}
+
+export async function deleteDpvimAction(id: string) {
+  return run(async () => {
+    await deleteDpvim(await requireUser(), id);
+    return {};
   });
 }
