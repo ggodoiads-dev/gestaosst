@@ -1953,6 +1953,54 @@ model DisciplineRecordFile {
   @@index([recordId])
 }
 
+/// DPVIM: carga de retorno (paletes ou chapatex) que precisa ser selecionada e separada em até 48h da chegada. Funciona como uma ordem de serviço:
+/// alguém cadastra a carga, o ajudante abre (com foto de confirmação), trabalha e para informando quanto fez. Tabelas isoladas, sem chaves estrangeiras.
+model Dpvim {
+  id            String    @id @default(uuid())
+  code          String    @unique // DPVIM-0001
+  kind          String // PALETE | CHAPATEX
+  origin        String // de onde veio
+  reference     String? // número da carga / nota / placa
+  material      String? // materiais, o que veio
+  expectedQty   Int // quantos produtos vieram
+  arrivedAt     DateTime // quando chegou
+  dueAt         DateTime // chegada + 48h
+  status        String    @default("ABERTA") // ABERTA | EM_ANDAMENTO | CONCLUIDA | CANCELADA
+  doneQty       Int       @default(0) // soma do que as sessões já fizeram
+  notes         String?
+  finishedAt    DateTime?
+  createdById   String
+  createdByName String
+  createdAt     DateTime  @default(now())
+
+  @@index([status])
+  @@index([arrivedAt])
+}
+
+/// Uma vez que alguém abre a DPVIM e trabalha nela: quem, quando começou (com a foto), quando parou e quanto fez.
+model DpvimSession {
+  id             String    @id @default(uuid())
+  dpvimId        String
+  userId         String
+  collaboratorId String?
+  workerName     String
+  partnerId      String? // a dupla
+  partnerName    String?
+  startedAt      DateTime  @default(now())
+  startPhotoPath String
+  startPhotoName String
+  stoppedAt      DateTime?
+  qtyDone        Int?
+  qtyGood        Int?
+  qtyTransfer    Int?
+  qtyDiscard     Int?
+  notes          String?
+
+  @@index([dpvimId])
+  @@index([userId, stoppedAt])
+  @@index([startedAt])
+}
+
 model GuardianMonthSnapshot {
   month     String   @id // AAAA-MM
   data      Json

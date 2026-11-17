@@ -243,6 +243,18 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
   if (p.has(PERMISSIONS.HR_MANAGE)) {
     rh.push({ href: "/beneficios", label: "Benefícios", icon: "benefits" });
   }
+  // DPVIM: quem executa (todo colaborador com login), quem cadastra (gestão/líderes) e quem acompanha.
+  if (
+    p.has(PERMISSIONS.PRODUCTIVITY_SELF_VIEW) ||
+    p.has(PERMISSIONS.PRODUCTIVITY_SELF_LOG) ||
+    p.has(PERMISSIONS.PRODUCTIVITY_VIEW) ||
+    p.has(PERMISSIONS.PRODUCTIVITY_MANAGE) ||
+    p.has(PERMISSIONS.PRODUCTIVITY_MANAGE_TEAM) ||
+    p.has(PERMISSIONS.INDICATORS_VIEW_CONSOLIDATED) ||
+    user.canRollCall
+  ) {
+    rh.push({ href: "/dpvim", label: "DPVIM", icon: "productivity" });
+  }
   if (rh.length > 0) groups.push({ key: "rh", title: "RH", items: rh });
 
   const indicadores: NavItem[] = [];
