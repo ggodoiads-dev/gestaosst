@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CalendarRange, Clock, Scale, Truck } from "lucide-react";
+import { CalendarRange, Clock, Truck } from "lucide-react";
 import { requireUser } from "@/server/auth/current-user";
 import { currentDayKey } from "@/server/services/guardian.service";
 import { getDpvimDashboard } from "@/server/services/dpvim.service";
@@ -16,14 +16,13 @@ import { DonutStat } from "@/components/domain/charts/donut-stat";
 import { HorizontalBarChart } from "@/components/domain/charts/horizontal-bar-chart";
 import { DpvimFormDialog } from "./dpvim-form-dialog";
 import { DpvimKindsDialog } from "./kinds-dialog";
+import { DivergenceSection } from "./divergence-section";
 import { StartDpvimDialog } from "./start-dialog";
 import { StopDpvimDialog } from "./stop-dialog";
 import { ArrivalsChart } from "./dpvim-charts";
 import { ProgressBar, SituationBadge } from "./situation-badge";
 
 const SITUATIONS: DpvimSituation[] = ["ATRASADA", "VENCE_LOGO", "NO_PRAZO", "CONCLUIDA_NO_PRAZO", "CONCLUIDA_ATRASADA", "CANCELADA"];
-
-const signed = (n: number) => (n > 0 ? `+${n}` : String(n));
 
 function addDays(key: string, delta: number): string {
   return new Date(new Date(`${key}T00:00:00Z`).getTime() + delta * 86400000).toISOString().slice(0, 10);
@@ -219,78 +218,7 @@ export default async function DpvimPage({ searchParams }: { searchParams: Promis
               </Card>
             </div>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Scale className="size-4" /> Divergências de conferência
-                </CardTitle>
-                <CardDescription>
-                  Compara o que a nota dizia com o que foi contado ao finalizar cada DPVIM. Saldo negativo = faltou; positivo = sobrou. Considera as DPVIM concluídas do filtro acima.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-5">
-                <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-                  <StatCard label="Concluídas conferidas" value={dv.checked} />
-                  <StatCard label="Com divergência" value={dv.withDivergence} tone={dv.withDivergence > 0 ? "warning" : "success"} hint={dv.checked > 0 ? `${dv.checked - dv.withDivergence} bateram com a nota` : undefined} />
-                  <StatCard label="Faltou no total" value={dv.missing} tone={dv.missing > 0 ? "danger" : "success"} hint={dv.missingRate === null ? undefined : `${String(dv.missingRate).replace(".", ",")}% do que veio nas notas`} />
-                  <StatCard label="Sobrou no total" value={dv.surplus} tone={dv.surplus > 0 ? "warning" : "neutral"} />
-                </div>
-                {dv.checked === 0 ? (
-                  <p className="text-sm text-foreground-subtle">Ainda não há DPVIM concluída nesse filtro para conferir.</p>
-                ) : (
-                  <>
-                    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                      <div>
-                        <p className="mb-1 text-sm font-semibold text-foreground">Quanto faltou por fornecedor</p>
-                        <HorizontalBarChart data={dv.bySupplier.filter((x) => x.missing > 0).slice(0, 8).map((x) => ({ name: x.origin, value: x.missing, color: "var(--danger)" }))} />
-                      </div>
-                      <div className="overflow-x-auto">
-                        <p className="mb-1 text-sm font-semibold text-foreground">Fornecedor por fornecedor</p>
-                        <table className="w-full border-collapse text-sm">
-                          <thead>
-                            <tr className="border-y border-border bg-surface-muted text-left text-xs text-foreground-subtle">
-                              <th className="px-3 py-2 font-semibold">Fornecedor (de onde veio)</th>
-                              <th className="px-2 py-2 text-right font-semibold">Na nota</th>
-                              <th className="px-2 py-2 text-right font-semibold">Contado</th>
-                              <th className="px-2 py-2 text-right font-semibold">Saldo</th>
-                              <th className="px-3 py-2 text-right font-semibold">Com divergência</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {dv.bySupplier.map((x) => (
-                              <tr key={x.origin} className="border-b border-border last:border-0">
-                                <td className="px-3 py-2 font-medium text-foreground">{x.origin}</td>
-                                <td className="px-2 py-2 text-right tabular-nums">{x.invoiced}</td>
-                                <td className="px-2 py-2 text-right tabular-nums">{x.counted}</td>
-                                <td className={cn("px-2 py-2 text-right font-semibold tabular-nums", x.balance < 0 ? "text-danger" : x.balance > 0 ? "text-warning" : "text-success")}>{signed(x.balance)}</td>
-                                <td className="px-3 py-2 text-right tabular-nums text-foreground-subtle">
-                                  {x.withDivergence} de {x.count}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                    {dv.items.length > 0 && (
-                      <div className="flex flex-col gap-2">
-                        <p className="text-sm font-semibold text-foreground">DPVIM que fecharam com divergência</p>
-                        {dv.items.slice(0, 20).map((i) => (
-                          <Link key={i.id} href={`/dpvim/${i.id}`} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border px-3 py-2 text-sm hover:bg-surface-muted">
-                            <span>
-                              <strong className="text-accent">{i.code}</strong> · {kindName(i.kind)} · {i.origin}
-                            </span>
-                            <span className="text-xs tabular-nums text-foreground-subtle">
-                              nota {i.invoiced} · contado {i.counted} · <strong className={i.balance < 0 ? "text-danger" : "text-warning"}>{signed(i.balance)}</strong>
-                            </span>
-                          </Link>
-                        ))}
-                      </div>
-                    )}
-                  </>
-                )}
-              </CardContent>
-            </Card>
+            <DivergenceSection data={dv} kinds={data.kinds} />
 
             {late.length > 0 && (
               <Card className="border-danger/50">
