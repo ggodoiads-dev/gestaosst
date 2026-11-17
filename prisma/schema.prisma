@@ -1923,6 +1923,36 @@ model BankHourEntry {
   @@index([date])
 }
 
+/// Advertência registrada à mão (fora da escada automática): motivo, descrição, data e qual medida foi aplicada (chave da escada: DTO_1 ... COMITE).
+/// Tabelas isoladas, sem chaves estrangeiras de propósito. Os anexos ficam em DisciplineRecordFile (podem ser enviados depois).
+model DisciplineRecord {
+  id             String   @id @default(uuid())
+  collaboratorId String
+  date           DateTime // dia da ocorrência (meio-dia UTC)
+  reason         String // motivo, texto curto
+  description    String
+  step           String // aplicação: DTO_1 | DTO_2 | ADV_VERBAL | ADV_ESCRITA_1 | ADV_ESCRITA_2 | SUSPENSAO_1 | SUSPENSAO_3 | COMITE
+  createdById    String
+  createdByName  String
+  createdAt      DateTime @default(now())
+
+  @@index([collaboratorId, date])
+  @@index([date])
+}
+
+model DisciplineRecordFile {
+  id             String   @id @default(uuid())
+  recordId       String
+  filename       String
+  path           String
+  mimeType       String
+  size           Int
+  uploadedByName String
+  uploadedAt     DateTime @default(now())
+
+  @@index([recordId])
+}
+
 model GuardianMonthSnapshot {
   month     String   @id // AAAA-MM
   data      Json

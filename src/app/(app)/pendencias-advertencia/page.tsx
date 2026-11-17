@@ -7,6 +7,8 @@ import { PageHeader, PageBody } from "@/components/domain/page-header";
 import { formatDate } from "@/lib/dates";
 import { PendingFollowUpList } from "./pending-followup-list";
 import { DisciplineSection } from "./discipline-section";
+import { DisciplineRecordsSection } from "./discipline-records";
+import { listCollaboratorsForDiscipline, listDisciplineRecords } from "@/server/services/discipline-record.service";
 
 const WEEKDAYS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 
@@ -16,16 +18,22 @@ export default async function PendenciasAdvertenciaPage() {
   const notes = await listPendingAbsenceFollowUps(user);
   const interviews = canHr ? await interviewStateByNote(notes.map((n) => n.id)) : new Map();
   const overview = await getDisciplineOverview(user);
+  const [records, disciplineCollaborators] = await Promise.all([listDisciplineRecords(user), listCollaboratorsForDiscipline(user)]);
   const faltaByNote = new Map(overview.items.filter((i) => i.reason === "FALTA" && i.noteId).map((i) => [i.noteId!, i]));
 
   return (
     <>
       <PageHeader
         title="Pendências de Advertência"
-        description="Medidas disciplinares por motivo (checklist não realizado e falta injustificada, cada um com a sua escada) e, para o RH, a entrevista de ABS. Atestado médico não gera advertência."
+        description="Registre uma advertência manualmente (motivo, descrição, data e aplicação, com anexo opcional) e acompanhe as medidas disciplinares por motivo (checklist não realizado e falta injustificada, cada um com a sua escada) e, para o RH, a entrevista de ABS. Atestado médico não gera advertência."
       />
       <PageBody>
         <div className="flex flex-col gap-8">
+          <DisciplineRecordsSection
+            ready={records.ready}
+            collaborators={disciplineCollaborators}
+            records={records.items.map((r) => ({ id: r.id, collaboratorId: r.collaboratorId, collaboratorName: r.collaboratorName, dayKey: r.dayKey, reason: r.reason, description: r.description, step: r.step, createdByName: r.createdByName, files: r.files.map((f) => ({ id: f.id, filename: f.filename, path: f.path, uploadedByName: f.uploadedByName })) }))}
+          />
           <DisciplineSection items={overview.items.filter((i) => i.reason === "CHECKLIST")} />
           <section className="flex flex-col gap-3">
             <h2 className="text-sm font-semibold text-foreground">Faltas e atestados</h2>
