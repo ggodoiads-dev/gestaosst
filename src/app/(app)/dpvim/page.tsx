@@ -56,7 +56,7 @@ export default async function DpvimPage({ searchParams }: { searchParams: Promis
     <>
       <PageHeader
         title="DPVIM"
-        description="Cargas de retorno (paletes e chapatex) para selecionar e separar. O prazo para rebater é de 48h a partir da chegada."
+        description="Cargas de retorno (paletes, chapatex e quadros) para selecionar e separar. O prazo para rebater é de 48h a partir da chegada."
         actions={data.canManage ? <DpvimFormDialog disabled={!data.ready} /> : undefined}
       />
       <PageBody className="flex flex-col gap-6">

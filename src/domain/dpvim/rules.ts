@@ -6,6 +6,7 @@ export const DPVIM_SOON_HOURS = 12;
 export const DPVIM_KINDS = [
   { key: "PALETE", label: "Palete" },
   { key: "CHAPATEX", label: "Chapatex" },
+  { key: "QUADRO", label: "Quadro" },
 ] as const;
 export type DpvimKind = (typeof DPVIM_KINDS)[number]["key"];
 

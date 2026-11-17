@@ -68,7 +68,7 @@ export function StopDpvimDialog({ sessionId, code, expectedLeft }: { sessionId: 
           <DialogDescription>Informe quanto vocês fizeram. Ainda faltam {expectedLeft} itens para a carga fechar.</DialogDescription>
         </DialogHeader>
         <DialogBody className="flex flex-col gap-4">
-          <FormField label="Quantos itens foram feitos" required hint="Paletes ou chapatex selecionados nesta atividade">
+          <FormField label="Quantos itens foram feitos" required hint="Paletes, chapatex ou quadros selecionados nesta atividade">
             <Input value={qtyDone} onChange={(e) => setQtyDone(e.target.value)} inputMode="numeric" placeholder="0" className="tabular-nums" />
           </FormField>
           <div className="grid grid-cols-3 gap-3">

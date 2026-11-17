@@ -298,7 +298,7 @@ export async function getDpvimDetail(user: CurrentUser, id: string): Promise<Dpv
 export type DpvimInput = { kind: string; origin: string; reference: string; material: string; expectedQty: number; arrivedAtIso: string; notes: string };
 
 function validate(input: DpvimInput) {
-  if (!DPVIM_KINDS.some((k) => k.key === input.kind)) throw new Error("Escolha se é de palete ou de chapatex.");
+  if (!DPVIM_KINDS.some((k) => k.key === input.kind)) throw new Error("Escolha o tipo: palete, chapatex ou quadro.");
   if (input.origin.trim().length < 2) throw new Error("Informe de onde a DPVIM veio.");
   if (!Number.isInteger(input.expectedQty) || input.expectedQty <= 0 || input.expectedQty > 100000) throw new Error("Informe quantos itens vieram.");
   const arrivedAt = new Date(input.arrivedAtIso);

@@ -16,7 +16,7 @@ const field = "h-9 w-full rounded-md border border-border-strong bg-surface px-2
 
 export type DpvimFormInitial = { id: string; kind: string; origin: string; reference: string; material: string; expectedQty: number; arrivedLocal: string; notes: string };
 
-/** Cadastrar (ou editar) uma DPVIM: de onde veio, quando chegou, quantos itens, o que veio e se é de palete ou de chapatex. O prazo de 48h conta da chegada. */
+/** Cadastrar (ou editar) uma DPVIM: de onde veio, quando chegou, quantos itens, o que veio e o tipo (palete, chapatex ou quadro). O prazo de 48h conta da chegada. */
 export function DpvimFormDialog({ initial, disabled }: { initial?: DpvimFormInitial; disabled?: boolean }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
