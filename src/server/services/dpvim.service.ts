@@ -344,7 +344,7 @@ export async function getDpvimDashboard(user: CurrentUser, filters: DpvimFilters
   const manage = canManageDpvim(user);
   const launch = await canLaunchDpvim(user);
   const showInvoice = await canSeeDpvimInvoice(user);
-  const seeDash = canViewDpvimDashboard(user) || launch;
+  const seeDash = canViewDpvimDashboard(user) || launch || showInvoice;
   const now = new Date();
   const base: DpvimDashboard = {
     ready: true,
