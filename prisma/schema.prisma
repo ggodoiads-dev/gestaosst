@@ -2000,6 +2000,16 @@ model DpvimInvoiceAccess {
   createdAt DateTime @default(now())
 }
 
+/// Quantidade da NOTA de cada DPVIM, lançada por quem tem acesso à nota. Fica fora da tabela Dpvim de propósito: quem recebe e conta não pode ver esse número.
+/// Tabela isolada, sem chaves estrangeiras.
+model DpvimInvoiceQty {
+  dpvimId       String   @id
+  qty           Int
+  updatedById   String
+  updatedByName String
+  updatedAt     DateTime @default(now())
+}
+
 /// Uma vez que alguém abre a DPVIM e trabalha nela: quem, quando começou (com a foto), quando parou e quanto fez.
 model DpvimSession {
   id             String    @id @default(uuid())

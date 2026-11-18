@@ -66,7 +66,7 @@ export default async function DpvimPage({ searchParams }: { searchParams: Promis
           data.canLaunch ? (
             <div className="flex flex-wrap items-center gap-2">
               {data.canManage && <DpvimKindsDialog kinds={data.kinds} disabled={!data.kindsReady} />}
-              <DpvimFormDialog disabled={!data.ready} kinds={data.kinds} canSeeInvoice={data.canSeeInvoice} />
+              <DpvimFormDialog disabled={!data.ready} kinds={data.kinds} />
             </div>
           ) : undefined
         }
@@ -102,7 +102,7 @@ export default async function DpvimPage({ searchParams }: { searchParams: Promis
                 code={data.mySession.dpvimCode}
                 expectedLeft={(() => {
                   const r = data.rows.find((x) => x.id === data.mySession!.dpvimId);
-                  return r && r.expectedQty !== null ? Math.max(0, r.expectedQty - r.doneQty) : null;
+                  return r ? Math.max(0, r.expectedQty - r.doneQty) : 0;
                 })()}
               />
             </div>
@@ -174,7 +174,7 @@ export default async function DpvimPage({ searchParams }: { searchParams: Promis
               <StatCard label="Em andamento" value={k.inProgress} tone="accent" />
               <StatCard label="Rebatidas no prazo" value={k.onTimeRate === null ? "—" : `${k.onTimeRate}%`} tone={k.onTimeRate === null ? "neutral" : k.onTimeRate >= 90 ? "success" : k.onTimeRate >= 70 ? "warning" : "danger"} hint={doneTotal > 0 ? `${k.doneOnTime} de ${doneTotal} concluídas` : "nenhuma concluída ainda"} />
               <StatCard label="Tempo médio para rebater" value={k.avgLeadHours === null ? "—" : formatHours(k.avgLeadHours)} hint="da chegada à conclusão" />
-              <StatCard label="Itens contados" value={k.totalDone} hint={k.totalExpected ? `de ${k.totalExpected} nas notas` : undefined} />
+              <StatCard label="Itens feitos" value={k.totalDone} hint={`de ${k.totalExpected} que chegaram`} />
               <StatCard label="DPVIM no painel" value={data.rows.filter((r) => r.status !== "CANCELADA").length} />
             </div>
 

@@ -19,8 +19,7 @@ function toInt(v: string): number | null {
 }
 
 /** Parar a atividade: quantos itens foram feitos (e, se quiser, como ficaram: bons, transferência, descarte). */
-/** `expectedLeft` = quanto falta para a nota; `null` quando quem está parando não vê a nota (aí não aparece nada disso). */
-export function StopDpvimDialog({ sessionId, code, expectedLeft }: { sessionId: string; code: string; expectedLeft: number | null }) {
+export function StopDpvimDialog({ sessionId, code, expectedLeft }: { sessionId: string; code: string; expectedLeft: number }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
@@ -34,8 +33,6 @@ export function StopDpvimDialog({ sessionId, code, expectedLeft }: { sessionId: 
 
   const done = toInt(qtyDone);
   const valid = done !== null && Number.isInteger(done) && done >= 0;
-  // Ao finalizar, o que foi contado é comparado com a nota: a diferença vira divergência no painel.
-  const balance = finish && valid && done !== null && expectedLeft !== null ? done - expectedLeft : 0;
 
   function submit() {
     if (!valid || done === null) return;
@@ -68,10 +65,10 @@ export function StopDpvimDialog({ sessionId, code, expectedLeft }: { sessionId: 
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Parar {code}</DialogTitle>
-          <DialogDescription>{expectedLeft !== null ? `Informe quanto vocês fizeram. Ainda faltam ${expectedLeft} itens para a carga fechar.` : "Informe quantos itens vocês contaram nesta atividade."}</DialogDescription>
+          <DialogDescription>Informe quanto vocês fizeram. Ainda faltam {expectedLeft} itens para a carga fechar.</DialogDescription>
         </DialogHeader>
         <DialogBody className="flex flex-col gap-4">
-          <FormField label="Quantos itens foram contados" required hint="Paletes, chapatex ou quadros contados nesta atividade">
+          <FormField label="Quantos itens foram feitos" required hint="Paletes, chapatex ou quadros selecionados nesta atividade">
             <Input value={qtyDone} onChange={(e) => setQtyDone(e.target.value)} inputMode="numeric" placeholder="0" className="tabular-nums" />
           </FormField>
           <div className="grid grid-cols-3 gap-3">
@@ -90,16 +87,8 @@ export function StopDpvimDialog({ sessionId, code, expectedLeft }: { sessionId: 
           </FormField>
           <label className="flex cursor-pointer items-center gap-2 text-sm text-foreground">
             <Checkbox checked={finish} onCheckedChange={(v) => setFinish(v === true)} />
-            Terminamos esta DPVIM (não sobrou mais nada para contar)
+            Terminamos esta DPVIM (não sobrou mais nada para selecionar)
           </label>
-          {finish && balance !== 0 && (
-            <p className="rounded-md border border-warning/40 bg-warning-soft px-3 py-2 text-sm text-warning">
-              {balance < 0
-                ? `Vai fechar com divergência: faltam ${-balance} em relação à nota. Ela entra no painel de divergências, por fornecedor.`
-                : `Vai fechar com divergência: sobraram ${balance} em relação à nota. Ela entra no painel de divergências, por fornecedor.`}{" "}
-              Se quiser, explique na observação.
-            </p>
-          )}
           {error && <p className="text-sm text-danger">{error}</p>}
         </DialogBody>
         <DialogFooter>
