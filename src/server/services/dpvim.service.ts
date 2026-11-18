@@ -309,9 +309,29 @@ function toSessionRow(s: SessionDb, code: string, data: ItemData): DpvimSessionR
 const dayKeyBrt = (d: Date) => formatInTimeZone(d, APP_TIMEZONE, "yyyy-MM-dd");
 
 /** O filtro de tipo vale para a DPVIM que tem aquele produto em qualquer uma das linhas. */
-export type DpvimFilters = { from?: string | null; to?: string | null; kind?: DpvimKind | null; situation?: DpvimSituation | null };
+export type DpvimFilters = { from?: string | null; to?: string | null; kind?: DpvimKind | null; situation?: DpvimSituation | null; /** Só as que ainda esperam a nota (vale só para quem vê a nota). */ invoicePending?: boolean };
 
-export type DpvimSupplierDivergence = { origin: string; count: number; withDivergence: number; invoiced: number; counted: number; balance: number; missing: number; surplus: number };
+/** Todas as DPVIM do fornecedor (conferidas ou não), para abrir a lista dele no painel. */
+export type DpvimSupplierDpvim = {
+  id: string;
+  code: string;
+  status: DpvimStatus;
+  arrivedAt: Date;
+  finishedAt: Date | null;
+  lines: { kind: string; counted: number; invoiced: number | null; balance: number | null }[];
+};
+
+export type DpvimSupplierDivergence = {
+  origin: string;
+  count: number;
+  withDivergence: number;
+  invoiced: number;
+  counted: number;
+  balance: number;
+  missing: number;
+  surplus: number;
+  dpvims: DpvimSupplierDpvim[];
+};
 
 export type DpvimDivergenceLine = { kind: string; invoiced: number; counted: number; balance: number };
 
@@ -328,8 +348,8 @@ export type DpvimDivergenceSummary = {
   missingRate: number | null;
   bySupplier: DpvimSupplierDivergence[];
   byKind: { kind: string; invoiced: number; counted: number; missing: number; surplus: number }[];
-  /** DPVIM (não canceladas) em que falta a nota de algum produto. */
-  awaitingInvoice: { id: string; code: string; origin: string; kinds: string[]; counted: number }[];
+  /** DPVIM (não canceladas) em que falta a nota de algum produto; as concluídas primeiro, porque são as que travam a conferência. */
+  awaitingInvoice: { id: string; code: string; origin: string; status: DpvimStatus; lines: { kind: string; invoice: number | null }[] }[];
   items: { id: string; code: string; origin: string; finishedAt: Date | null; balance: number; lines: DpvimDivergenceLine[] }[];
 };
 
@@ -423,6 +443,7 @@ export async function getDpvimDashboard(user: CurrentUser, filters: DpvimFilters
     })
     .filter((r) => (kindFilter ? r.lines.some((l) => l.kind === kindFilter) : true))
     .filter((r) => (filters.situation ? r.situation === filters.situation : true))
+    .filter((r) => (filters.invoicePending && showInvoice ? r.status !== "CANCELADA" && r.lines.some((l) => l.invoice === null) : true))
     // Pendentes primeiro, pela que vence antes (as atrasadas no topo); depois as concluídas, da mais recente.
     .sort((a, b) => {
       const aOpen = a.status === "ABERTA" || a.status === "EM_ANDAMENTO";
@@ -463,7 +484,7 @@ export async function getDpvimDashboard(user: CurrentUser, filters: DpvimFilters
   let invoicedTotal = 0;
   for (const r of conferred) {
     const key = originGroupKey(r.origin);
-    const e = suppliers.get(key) ?? { origin: r.origin, count: 0, withDivergence: 0, invoiced: 0, counted: 0, balance: 0, missing: 0, surplus: 0 };
+    const e = suppliers.get(key) ?? { origin: r.origin, count: 0, withDivergence: 0, invoiced: 0, counted: 0, balance: 0, missing: 0, surplus: 0, dpvims: [] };
     e.count += 1;
     if (r.lines.some((l) => l.balance !== null && l.balance !== 0)) e.withDivergence += 1;
     for (const l of r.lines) {
@@ -489,6 +510,20 @@ export async function getDpvimDashboard(user: CurrentUser, filters: DpvimFilters
     }
     suppliers.set(key, e);
   }
+  // A lista de cada fornecedor traz todas as DPVIM dele (inclusive as que ainda esperam a nota), da mais recente para a mais antiga.
+  for (const r of active) {
+    const e = suppliers.get(originGroupKey(r.origin));
+    if (!e) continue;
+    e.dpvims.push({
+      id: r.id,
+      code: r.code,
+      status: r.status,
+      arrivedAt: r.arrivedAt,
+      finishedAt: r.finishedAt,
+      lines: r.lines.map((l) => ({ kind: l.kind, counted: l.done, invoiced: l.invoice, balance: l.balance })),
+    });
+  }
+  for (const e of suppliers.values()) e.dpvims.sort((a, b) => b.arrivedAt.getTime() - a.arrivedAt.getTime());
   const divergentRows = conferred.filter((r) => r.lines.some((l) => l.balance !== null && l.balance !== 0));
   const divergence: DpvimDivergenceSummary = {
     checked: conferred.length,
@@ -498,7 +533,10 @@ export async function getDpvimDashboard(user: CurrentUser, filters: DpvimFilters
     invoiced: invoicedTotal,
     missingRate: invoicedTotal > 0 ? Math.round((missingTotal / invoicedTotal) * 1000) / 10 : null,
     awaitingInvoice: showInvoice
-      ? active.filter((r) => r.lines.some((l) => l.invoice === null)).map((r) => ({ id: r.id, code: r.code, origin: r.origin, kinds: r.lines.filter((l) => l.invoice === null).map((l) => l.kind), counted: r.doneQty }))
+      ? active
+          .filter((r) => r.lines.some((l) => l.invoice === null))
+          .map((r) => ({ id: r.id, code: r.code, origin: r.origin, status: r.status, lines: r.lines.map((l) => ({ kind: l.kind, invoice: l.invoice })) }))
+          .sort((a, b) => Number(b.status === "CONCLUIDA") - Number(a.status === "CONCLUIDA"))
       : [],
     bySupplier: [...suppliers.values()].sort((a, b) => b.missing - a.missing || a.balance - b.balance || b.count - a.count),
     byKind: [...kinds.values()].sort((a, b) => b.missing - a.missing || b.surplus - a.surplus),

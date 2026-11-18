@@ -28,22 +28,23 @@ function addDays(key: string, delta: number): string {
   return new Date(new Date(`${key}T00:00:00Z`).getTime() + delta * 86400000).toISOString().slice(0, 10);
 }
 
-export default async function DpvimPage({ searchParams }: { searchParams: Promise<{ de?: string; ate?: string; tipo?: string; situacao?: string }> }) {
+export default async function DpvimPage({ searchParams }: { searchParams: Promise<{ de?: string; ate?: string; tipo?: string; situacao?: string; nota?: string }> }) {
   const user = await requireUser();
-  const { de, ate, tipo, situacao } = await searchParams;
+  const { de, ate, tipo, situacao, nota } = await searchParams;
   const situation = SITUATIONS.find((s) => s === situacao) ?? null;
   const from = parseDayKey(de);
   const to = parseDayKey(ate);
   const hasPeriod = !!(from || to);
 
-  const data = await getDpvimDashboard(user, { from, to, kind: tipo ?? null, situation });
+  const data = await getDpvimDashboard(user, { from, to, kind: tipo ?? null, situation, invoicePending: nota === "pendente" });
+  const onlyPending = nota === "pendente" && data.canSeeInvoice;
   // O tipo do filtro só vale se existir (os de fábrica e os cadastrados).
   const kind = data.kinds.find((k) => k.key === tipo)?.key ?? null;
   const kindName = (key: string) => dpvimKindLabel(key, data.kinds);
   const todayKey = currentDayKey();
 
-  function href(over: { de?: string; ate?: string; tipo?: string; situacao?: string } = {}) {
-    const v = { de: from ?? undefined, ate: to ?? undefined, tipo: kind ?? undefined, situacao: situation ?? undefined, ...over };
+  function href(over: { de?: string; ate?: string; tipo?: string; situacao?: string; nota?: string } = {}) {
+    const v = { de: from ?? undefined, ate: to ?? undefined, tipo: kind ?? undefined, situacao: situation ?? undefined, nota: onlyPending ? "pendente" : undefined, ...over };
     const q = new URLSearchParams();
     for (const [k, val] of Object.entries(v)) if (val) q.set(k, val);
     const qs = q.toString();
@@ -131,10 +132,25 @@ export default async function DpvimPage({ searchParams }: { searchParams: Promis
                       {s ? DPVIM_SITUATION_LABEL[s as DpvimSituation] : "Todas"}
                     </Link>
                   ))}
+                  {data.canSeeInvoice && (
+                    <>
+                      <span className="ml-4 text-xs font-medium text-foreground-subtle">Nota:</span>
+                      {[null, "pendente"].map((n) => (
+                        <Link
+                          key={n ?? "todas"}
+                          href={href({ nota: n ?? undefined })}
+                          className={cn("rounded-full border px-3 py-1 text-xs font-medium transition-colors", (n === "pendente") === onlyPending ? "border-accent bg-accent-soft text-accent" : "border-border text-foreground-muted hover:bg-surface-muted")}
+                        >
+                          {n ? "Falta lançar a nota" : "Todas"}
+                        </Link>
+                      ))}
+                    </>
+                  )}
                 </div>
                 <form method="get" action="/dpvim" className="flex flex-wrap items-end gap-3">
                   {kind && <input type="hidden" name="tipo" value={kind} />}
                   {situation && <input type="hidden" name="situacao" value={situation} />}
+                  {onlyPending && <input type="hidden" name="nota" value="pendente" />}
                   <label className="flex flex-col gap-1 text-xs text-foreground-subtle">
                     Chegou de
                     <input type="date" name="de" defaultValue={from ?? ""} max={todayKey} className="h-9 rounded-md border border-border-strong bg-surface px-2 text-sm text-foreground" />
@@ -172,6 +188,9 @@ export default async function DpvimPage({ searchParams }: { searchParams: Promis
               <StatCard label="Rebatidas no prazo" value={k.onTimeRate === null ? "—" : `${k.onTimeRate}%`} tone={k.onTimeRate === null ? "neutral" : k.onTimeRate >= 90 ? "success" : k.onTimeRate >= 70 ? "warning" : "danger"} hint={doneTotal > 0 ? `${k.doneOnTime} de ${doneTotal} concluídas` : "nenhuma concluída ainda"} />
               <StatCard label="Tempo médio para rebater" value={k.avgLeadHours === null ? "—" : formatHours(k.avgLeadHours)} hint="da chegada à conclusão" />
               <StatCard label="Itens contados" value={k.totalDone} hint={`norte do conferente: ${k.totalExpected}`} />
+              {data.canSeeInvoice && (
+                <StatCard label="Esperando a nota" value={dv.awaitingInvoice.length} tone={dv.awaitingInvoice.length > 0 ? "warning" : "success"} hint="falta lançar a quantidade da nota" />
+              )}
               <StatCard label="DPVIM no painel" value={data.rows.filter((r) => r.status !== "CANCELADA").length} />
             </div>
 
@@ -291,6 +310,11 @@ export default async function DpvimPage({ searchParams }: { searchParams: Promis
                             ))}
                             {r.origin}
                           </p>
+                          {data.canSeeInvoice && r.status !== "CANCELADA" && r.lines.some((l) => l.invoice === null) && (
+                            <Badge tone="warning" className="mt-1">
+                              Falta lançar a nota
+                            </Badge>
+                          )}
                         </td>
                         <td className="px-3 py-2.5 text-foreground-subtle">{formatDateTime(r.arrivedAt)}</td>
                         <td className="px-3 py-2.5">

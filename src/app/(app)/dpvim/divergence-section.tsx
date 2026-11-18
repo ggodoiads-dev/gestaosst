@@ -1,10 +1,13 @@
 import Link from "next/link";
-import { CheckCircle2, Scale } from "lucide-react";
+import { CheckCircle2, ChevronRight, Scale } from "lucide-react";
 import { dpvimKindLabel, type DpvimKindOption } from "@/domain/dpvim/rules";
 import type { DpvimDivergenceSummary } from "@/server/services/dpvim.service";
 import { formatDateTime } from "@/lib/dates";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { InvoiceQtyDialog } from "./invoice-dialog";
+
+const STATUS_LABEL: Record<string, string> = { ABERTA: "Aguardando começar", EM_ANDAMENTO: "Em andamento", CONCLUIDA: "Finalizada", CANCELADA: "Cancelada" };
 
 const n = (v: number) => v.toLocaleString("pt-BR");
 const pct = (v: number) => `${v.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`;
@@ -29,18 +32,29 @@ export function DivergenceSection({ data, kinds }: { data: DpvimDivergenceSummar
       </CardHeader>
       <CardContent className="flex flex-col gap-6">
         {data.awaitingInvoice.length > 0 && (
-          <div className="flex flex-col gap-2 rounded-lg border border-warning/40 bg-warning-soft/40 px-4 py-3">
-            <p className="text-sm font-semibold text-foreground">
-              {data.awaitingInvoice.length === 1 ? "1 DPVIM espera a quantidade da nota" : `${data.awaitingInvoice.length} DPVIM esperam a quantidade da nota`}
-            </p>
-            <p className="text-xs text-foreground-subtle">Quem recebe e conta não vê a nota. Abra a DPVIM e informe a quantidade da nota de cada produto para ela ser conferida.</p>
-            <div className="flex flex-wrap gap-2">
-              {data.awaitingInvoice.slice(0, 12).map((a) => (
-                <Link key={a.id} href={`/dpvim/${a.id}`} className="rounded-md border border-border bg-surface px-2.5 py-1 text-xs hover:bg-surface-muted">
-                  <strong className="text-accent">{a.code}</strong> · {a.origin} · falta a nota de {a.kinds.map(kindName).join(", ")}
-                </Link>
-              ))}
+          <div className="flex flex-col gap-3 rounded-lg border border-warning/40 bg-warning-soft/40 px-4 py-3">
+            <div>
+              <p className="text-sm font-semibold text-foreground">
+                {data.awaitingInvoice.length === 1 ? "1 DPVIM ainda espera a quantidade da nota" : `${data.awaitingInvoice.length} DPVIM ainda esperam a quantidade da nota`}
+              </p>
+              <p className="text-xs text-foreground-subtle">Quem recebe e conta não vê a nota. Enquanto a nota não é lançada, a DPVIM não entra na conferência. As já finalizadas vêm primeiro.</p>
             </div>
+            <ul className="flex flex-col gap-2">
+              {data.awaitingInvoice.slice(0, 15).map((a) => (
+                <li key={a.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-surface px-3 py-2 text-sm">
+                  <span className="flex flex-wrap items-center gap-2">
+                    <Link href={`/dpvim/${a.id}`} className="font-semibold text-accent hover:underline">
+                      {a.code}
+                    </Link>
+                    <span className="text-foreground">{a.origin}</span>
+                    <Badge tone={a.status === "CONCLUIDA" ? "success" : "neutral"}>{STATUS_LABEL[a.status] ?? a.status}</Badge>
+                    <span className="text-xs text-foreground-subtle">falta a nota de {a.lines.filter((l) => l.invoice === null).map((l) => kindName(l.kind)).join(", ")}</span>
+                  </span>
+                  <InvoiceQtyDialog key={a.lines.map((l) => `${l.kind}:${l.invoice}`).join("|")} id={a.id} code={a.code} lines={a.lines.map((l) => ({ kind: l.kind, label: kindName(l.kind), invoice: l.invoice }))} />
+                </li>
+              ))}
+            </ul>
+            {data.awaitingInvoice.length > 15 && <p className="text-xs text-foreground-subtle">Mostrando 15 de {data.awaitingInvoice.length}. Use o filtro &ldquo;Falta lançar a nota&rdquo; na fila abaixo para ver todas.</p>}
           </div>
         )}
 
@@ -95,24 +109,65 @@ export function DivergenceSection({ data, kinds }: { data: DpvimDivergenceSummar
 
             <div className="flex flex-col gap-3">
               <h3 className="text-sm font-semibold text-foreground">Por fornecedor (de onde veio)</h3>
-              <ul className="flex flex-col gap-3">
+              <ul className="flex flex-col gap-2">
                 {withIssue.map((s) => (
-                  <li key={s.origin} className="flex flex-col gap-1.5">
-                    <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-                      <span className="font-medium text-foreground">{s.origin}</span>
-                      <span className="text-sm tabular-nums">
-                        {s.missing > 0 && <strong className="text-danger">Faltou {n(s.missing)}</strong>}
-                        {s.missing > 0 && s.surplus > 0 && <span className="text-foreground-subtle"> · </span>}
-                        {s.surplus > 0 && <strong className="text-warning">Sobrou {n(s.surplus)}</strong>}
-                      </span>
-                    </div>
-                    <div className="h-2 w-full overflow-hidden rounded-full bg-surface-muted">
-                      <div className="h-full rounded-full bg-danger" style={{ width: `${Math.round((s.missing / maxMissing) * 100)}%` }} />
-                    </div>
-                    <p className="text-xs text-foreground-subtle">
-                      {s.withDivergence} de {s.count} DPVIM com divergência
-                      {s.missing > 0 && s.invoiced > 0 ? ` · faltou ${pct((s.missing / s.invoiced) * 100)} do que veio na nota (${n(s.invoiced)})` : ""}
-                    </p>
+                  <li key={s.origin}>
+                    <details className="group rounded-lg border border-border">
+                      <summary className="flex cursor-pointer list-none flex-col gap-1.5 px-3 py-2.5 hover:bg-surface-muted [&::-webkit-details-marker]:hidden">
+                        <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+                          <span className="flex items-center gap-1.5 font-medium text-foreground">
+                            <ChevronRight className="size-4 shrink-0 text-foreground-subtle transition-transform group-open:rotate-90" />
+                            {s.origin}
+                          </span>
+                          <span className="text-sm tabular-nums">
+                            {s.missing > 0 && <strong className="text-danger">Faltou {n(s.missing)}</strong>}
+                            {s.missing > 0 && s.surplus > 0 && <span className="text-foreground-subtle"> · </span>}
+                            {s.surplus > 0 && <strong className="text-warning">Sobrou {n(s.surplus)}</strong>}
+                          </span>
+                        </div>
+                        <div className="h-2 w-full overflow-hidden rounded-full bg-surface-muted">
+                          <div className="h-full rounded-full bg-danger" style={{ width: `${Math.round((s.missing / maxMissing) * 100)}%` }} />
+                        </div>
+                        <p className="text-xs text-foreground-subtle">
+                          {s.withDivergence} de {s.count} DPVIM com divergência
+                          {s.missing > 0 && s.invoiced > 0 ? ` · faltou ${pct((s.missing / s.invoiced) * 100)} do que veio na nota (${n(s.invoiced)})` : ""}
+                          {" · "}
+                          <span className="text-accent">clique para ver as {s.dpvims.length} DPVIM</span>
+                        </p>
+                      </summary>
+                      <div className="flex flex-col gap-2 border-t border-border px-3 py-3">
+                        {s.dpvims.map((d) => (
+                          <div key={d.id} className="flex flex-col gap-1 rounded-md border border-border px-3 py-2 text-sm">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <span className="flex flex-wrap items-center gap-2">
+                                <Link href={`/dpvim/${d.id}`} className="font-semibold text-accent hover:underline">
+                                  {d.code}
+                                </Link>
+                                <Badge tone={d.status === "CONCLUIDA" ? "success" : "neutral"}>{STATUS_LABEL[d.status] ?? d.status}</Badge>
+                              </span>
+                              <span className="text-xs text-foreground-subtle">chegou {formatDateTime(d.arrivedAt)}</span>
+                            </div>
+                            <div className="flex flex-col gap-0.5">
+                              {d.lines.map((l) => (
+                                <div key={l.kind} className="flex flex-wrap items-center gap-2 text-xs">
+                                  <span className="min-w-24 text-foreground">{kindName(l.kind)}</span>
+                                  <span className="tabular-nums text-foreground-subtle">{l.invoiced === null ? `contado ${n(l.counted)}` : `${n(l.invoiced)} → ${n(l.counted)}`}</span>
+                                  {l.invoiced === null ? (
+                                    <Badge tone="warning">Falta lançar a nota</Badge>
+                                  ) : l.balance === null ? (
+                                    <span className="text-foreground-subtle">aguarda finalizar</span>
+                                  ) : l.balance === 0 ? (
+                                    <Badge tone="success">Bateu</Badge>
+                                  ) : (
+                                    <Badge tone={l.balance < 0 ? "danger" : "warning"}>{l.balance < 0 ? `Faltou ${n(-l.balance)}` : `Sobrou ${n(l.balance)}`}</Badge>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
                   </li>
                 ))}
               </ul>
