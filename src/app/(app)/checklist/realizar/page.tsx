@@ -90,11 +90,12 @@ export default async function RealizarChecklistPage({
         <PageBody>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {areas.map((area) => {
+              // Os checklists liberados ("Qual check pode realizar?") são para fazer quando precisar: não contam como pendente nem atrasado.
               const pendentesEquip = area.items.filter(
-                (i) => i.situation === "PENDENTE" || i.situation === "ATRASADO",
+                (i) => !i.granted && (i.situation === "PENDENTE" || i.situation === "ATRASADO"),
               ).length;
-              const atrasados = area.items.filter((i) => i.situation === "ATRASADO").length;
-              const pendenteArea = area.areaChecklists.reduce((sum, a) => sum + (a.totalCount - a.completedTodayCount), 0);
+              const atrasados = area.items.filter((i) => !i.granted && i.situation === "ATRASADO").length;
+              const pendenteArea = area.areaChecklists.filter((a) => !a.granted).reduce((sum, a) => sum + (a.totalCount - a.completedTodayCount), 0);
               const pendentes = pendentesEquip + pendenteArea;
               return (
                 <Link
@@ -167,7 +168,7 @@ export default async function RealizarChecklistPage({
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <Badge tone={done ? "success" : "neutral"} dot>
-                    {done ? "Realizado" : "Pendente"}
+                    {done ? "Realizado" : areaChecklist.granted ? "Disponível" : "Pendente"}
                   </Badge>
                   <ChevronRight className="size-4 text-foreground-subtle" />
                 </div>
@@ -175,7 +176,8 @@ export default async function RealizarChecklistPage({
             );
           })}
           {currentArea.items.map((item) => {
-            const cfg = SITUATION_CONFIG[item.situation];
+            // Liberado para a pessoa (não é cobrança): enquanto não for feito, aparece como "Disponível", e não como pendente/atrasado.
+            const cfg = item.granted && (item.situation === "PENDENTE" || item.situation === "ATRASADO") ? { label: "Disponível", tone: "neutral" as const } : SITUATION_CONFIG[item.situation];
             const blocked = item.situation === "BLOQUEADO";
             const content = (
               <>
@@ -190,7 +192,7 @@ export default async function RealizarChecklistPage({
                       <>
                         {item.templateName}
                         {item.granted && <Badge tone="info" className="ml-1">Liberado para você</Badge>}
-                        {item.scheduledFor && (
+                        {item.scheduledFor && !item.granted && (
                           <>
                             <span className="mx-1">·</span>
                             <Clock className="size-3" /> previsto {formatTime(item.scheduledFor)}
