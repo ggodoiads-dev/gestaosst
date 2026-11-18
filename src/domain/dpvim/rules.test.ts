@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildLines, dpvimBalance, dpvimKindLabel, dpvimSituation, dueAtFrom, formatHours, kindKeyFromLabel, originGroupKey, parseBrasiliaLocal, progressPercent } from "./rules";
+import { buildLines, similarSuppliers, supplierKey, supplierLabel, dpvimBalance, dpvimKindLabel, dpvimSituation, dueAtFrom, formatHours, kindKeyFromLabel, originGroupKey, parseBrasiliaLocal, progressPercent } from "./rules";
 
 const arrived = new Date("2026-11-10T12:00:00Z");
 
@@ -102,5 +102,27 @@ describe("produtos da DPVIM (linhas)", () => {
   it("tipo que só aparece na contagem ou na nota entra com norte 0", () => {
     const lines = buildLines({ legacyKind: "PALETE", legacyExpected: 0, items: [{ kind: "PALETE", expectedQty: 10 }], doneByKind: new Map([["QUADRO", 7]]), invoiceByKind: new Map([["BARRIL", 3]]), concluded: true });
     expect(lines.map((l) => [l.kind, l.expected, l.done, l.balance])).toEqual([["PALETE", 10, 0, null], ["QUADRO", 0, 7, null], ["BARRIL", 0, 0, -3]]);
+  });
+});
+
+describe("fornecedores (nome e unidade)", () => {
+  it("nome com e sem unidade", () => {
+    expect(supplierLabel("  Ambev ", " Jaguariúna ")).toBe("Ambev · Jaguariúna");
+    expect(supplierLabel("Ambev", "")).toBe("Ambev");
+    expect(supplierLabel("Ambev", null)).toBe("Ambev");
+  });
+  it("chave ignora maiúsculas, acento e espaços", () => {
+    expect(supplierKey("AMBEV", "jaguariuna")).toBe(supplierKey(" Ambev ", "Jaguariúna"));
+    expect(supplierKey("Ambev", "Lages")).not.toBe(supplierKey("Ambev", "Jaguariúna"));
+  });
+  it("avisa de nome parecido, mas não do mesmo nome com outra unidade", () => {
+    const list = [
+      { label: "Ambev · Lages", name: "Ambev" },
+      { label: "Heineken", name: "Heineken" },
+    ];
+    expect(similarSuppliers("Ambev", list)).toEqual([]);
+    expect(similarSuppliers("Ambeb", list)).toEqual(["Ambev · Lages"]);
+    expect(similarSuppliers("Heinekem", list)).toEqual(["Heineken"]);
+    expect(similarSuppliers("Brahma", list)).toEqual([]);
   });
 });

@@ -143,3 +143,45 @@ export function buildLines(p: {
     return { kind, expected: expected.get(kind) ?? 0, done, good: q?.good ?? 0, transfer: q?.transfer ?? 0, discard: q?.discard ?? 0, invoice, balance: p.concluded && invoice !== null ? dpvimBalance(done, invoice) : null };
   });
 }
+
+/** Fornecedor cadastrado (nome e unidade). `label` é o que aparece e o que fica gravado em "De onde veio" de cada DPVIM. */
+export type DpvimSupplierOption = { id: string; name: string; unit: string | null; label: string; active: boolean };
+
+/** "Ambev · Jaguariúna" (com unidade) ou só "Ambev". */
+export function supplierLabel(name: string, unit?: string | null): string {
+  const n = name.trim().replace(/\s+/g, " ");
+  const u = (unit ?? "").trim().replace(/\s+/g, " ");
+  return u ? `${n} · ${u}` : n;
+}
+
+/** Chave para comparar fornecedores sem se importar com maiúsculas, acento e espaços. */
+export function supplierKey(name: string, unit?: string | null): string {
+  return originGroupKey(supplierLabel(name, unit));
+}
+
+function editDistance(a: string, b: string): number {
+  const prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    let diag = prev[0];
+    prev[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const tmp = prev[j];
+      prev[j] = Math.min(prev[j] + 1, prev[j - 1] + 1, diag + (a[i - 1] === b[j - 1] ? 0 : 1));
+      diag = tmp;
+    }
+  }
+  return prev[b.length];
+}
+
+/** Fornecedores já cadastrados com nome parecido (erro de digitação, nome contido no outro). Mesmo nome com outra unidade NÃO conta: é normal ter várias unidades. */
+export function similarSuppliers(name: string, list: { label: string; name: string }[]): string[] {
+  const nk = originGroupKey(name);
+  if (nk.length < 3) return [];
+  return list
+    .filter((s) => {
+      const sk = originGroupKey(s.name);
+      if (sk === nk) return false;
+      return Math.min(sk.length, nk.length) >= 4 && (sk.includes(nk) || nk.includes(sk) || editDistance(sk, nk) <= 2);
+    })
+    .map((s) => s.label);
+}

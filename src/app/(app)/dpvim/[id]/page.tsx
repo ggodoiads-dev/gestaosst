@@ -96,6 +96,8 @@ export default async function DpvimDetailPage({ params }: { params: Promise<{ id
             <CardContent className="flex flex-wrap gap-2 border-t border-border pt-4">
               <DpvimFormDialog
                 kinds={detail.kinds}
+                suppliers={detail.suppliers}
+                suppliersReady={detail.suppliersReady}
                 initial={{
                   id: row.id,
                   origin: row.origin,

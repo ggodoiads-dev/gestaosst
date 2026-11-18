@@ -6,6 +6,10 @@ import { InvalidUploadError, savePhotoUpload } from "@/server/services/storage";
 import {
   createDpvim,
   createDpvimKind,
+  createDpvimSupplier,
+  mergeDpvimSupplier,
+  setDpvimSupplierActive,
+  updateDpvimSupplier,
   deleteDpvim,
   setDpvimCancelled,
   setDpvimInvoiceQty,
@@ -85,6 +89,34 @@ export async function setDpvimInvoiceQtyAction(id: string, items: { kind: string
   return run(async () => {
     await setDpvimInvoiceQty(await requireUser(), id, items);
     return {};
+  });
+}
+
+export async function createDpvimSupplierAction(name: string, unit: string | null) {
+  return run(async () => {
+    const created = await createDpvimSupplier(await requireUser(), { name, unit });
+    return { label: created.label };
+  });
+}
+
+export async function updateDpvimSupplierAction(id: string, name: string, unit: string | null) {
+  return run(async () => {
+    await updateDpvimSupplier(await requireUser(), id, { name, unit });
+    return {};
+  });
+}
+
+export async function setDpvimSupplierActiveAction(id: string, active: boolean) {
+  return run(async () => {
+    await setDpvimSupplierActive(await requireUser(), id, active);
+    return {};
+  });
+}
+
+export async function mergeDpvimSupplierAction(fromId: string, intoId: string) {
+  return run(async () => {
+    const r = await mergeDpvimSupplier(await requireUser(), fromId, intoId);
+    return { moved: r.moved };
   });
 }
 

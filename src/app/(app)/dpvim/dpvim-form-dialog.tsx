@@ -9,8 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { FormField } from "@/components/ui/label";
 import { Dialog, DialogBody, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { createDpvimAction, updateDpvimAction } from "@/server/actions/dpvim.actions";
-import { DPVIM_DEADLINE_HOURS, parseBrasiliaLocal, type DpvimKindOption } from "@/domain/dpvim/rules";
+import { createDpvimAction, createDpvimSupplierAction, updateDpvimAction } from "@/server/actions/dpvim.actions";
+import { DPVIM_DEADLINE_HOURS, originGroupKey, parseBrasiliaLocal, similarSuppliers, type DpvimKindOption, type DpvimSupplierOption } from "@/domain/dpvim/rules";
 
 const field = "h-9 w-full rounded-md border border-border-strong bg-surface px-2 text-sm text-foreground";
 
@@ -22,7 +22,7 @@ type Row = { kind: string; qty: string };
  * Cadastrar (ou editar) uma DPVIM: de onde veio, quando chegou e o que veio, produto a produto (ex.: 120 paletes + 200 chapatex + 400 quadros).
  * As quantidades são a contagem do conferente, só um norte. O prazo de 48h conta da chegada.
  */
-export function DpvimFormDialog({ initial, disabled, kinds }: { initial?: DpvimFormInitial; disabled?: boolean; kinds: DpvimKindOption[] }) {
+export function DpvimFormDialog({ initial, disabled, kinds, suppliers, suppliersReady }: { initial?: DpvimFormInitial; disabled?: boolean; kinds: DpvimKindOption[]; suppliers: DpvimSupplierOption[]; suppliersReady: boolean }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
@@ -33,6 +33,35 @@ export function DpvimFormDialog({ initial, disabled, kinds }: { initial?: DpvimF
   const [arrived, setArrived] = useState(initial?.arrivedLocal ?? "");
   const [notes, setNotes] = useState(initial?.notes ?? "");
   const [error, setError] = useState<string | null>(null);
+  // Fornecedor: escolhe da lista ou cadastra na hora (nome e unidade). `extra` guarda os recém-cadastrados até a lista da página atualizar.
+  const [extra, setExtra] = useState<string[]>([]);
+  const [newSupplier, setNewSupplier] = useState(false);
+  const [supName, setSupName] = useState("");
+  const [supUnit, setSupUnit] = useState("");
+  const [supError, setSupError] = useState<string | null>(null);
+
+  const supplierLabels = suppliers.filter((s) => s.active).map((s) => s.label);
+  const supplierOptions = [...supplierLabels, ...extra.filter((l) => !supplierLabels.some((x) => originGroupKey(x) === originGroupKey(l)))];
+  // DPVIM antiga com um fornecedor digitado que não está na lista: continua selecionável.
+  if (origin && !supplierOptions.some((l) => originGroupKey(l) === originGroupKey(origin))) supplierOptions.push(origin);
+  const supSimilar = similarSuppliers(supName, suppliers);
+
+  function addSupplier() {
+    setSupError(null);
+    start(async () => {
+      const res = await createDpvimSupplierAction(supName, supUnit.trim() ? supUnit : null);
+      if (!res.ok) {
+        setSupError(res.error);
+        return;
+      }
+      setExtra((prev) => [...prev, res.label]);
+      setOrigin(res.label);
+      setNewSupplier(false);
+      setSupName("");
+      setSupUnit("");
+      router.refresh();
+    });
+  }
 
   const arrivedDate = parseBrasiliaLocal(arrived);
   const dueLabel = arrivedDate
@@ -44,7 +73,7 @@ export function DpvimFormDialog({ initial, disabled, kinds }: { initial?: DpvimF
   const chosen = rows.map((r) => r.kind).filter(Boolean);
   const rowOk = (r: Row) => !!r.kind && Number.isInteger(Number(r.qty)) && Number(r.qty) > 0 && r.qty.trim() !== "";
   const total = rows.reduce((s, r) => s + (rowOk(r) ? Number(r.qty) : 0), 0);
-  const valid = rows.length > 0 && rows.every(rowOk) && new Set(chosen).size === chosen.length && origin.trim().length >= 2 && !!arrivedDate;
+  const valid = rows.length > 0 && rows.every(rowOk) && new Set(chosen).size === chosen.length && origin.trim().length >= 2 && !newSupplier && !!arrivedDate;
 
   function setRow(i: number, patch: Partial<Row>) {
     setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
@@ -111,9 +140,54 @@ export function DpvimFormDialog({ initial, disabled, kinds }: { initial?: DpvimF
               </div>
             </div>
           </FormField>
-          <FormField label="De onde veio" required hint="Ex.: cervejaria, fábrica">
-            <Input value={origin} onChange={(e) => setOrigin(e.target.value)} maxLength={120} />
-          </FormField>
+          {suppliersReady ? (
+            <FormField label="De onde veio" required hint="O fornecedor (nome e unidade). Se não estiver na lista, cadastre na hora.">
+              <div className="flex flex-col gap-2">
+                <select
+                  value={newSupplier ? "__new__" : origin}
+                  onChange={(e) => {
+                    if (e.target.value === "__new__") setNewSupplier(true);
+                    else {
+                      setNewSupplier(false);
+                      setOrigin(e.target.value);
+                    }
+                  }}
+                  className={field}
+                  aria-label="Fornecedor"
+                >
+                  <option value="">Escolher o fornecedor…</option>
+                  {supplierOptions.map((l) => (
+                    <option key={l} value={l}>
+                      {l}
+                    </option>
+                  ))}
+                  <option value="__new__">+ Cadastrar um fornecedor novo…</option>
+                </select>
+                {newSupplier && (
+                  <div className="flex flex-col gap-2 rounded-lg border border-border p-3">
+                    <div className="grid grid-cols-2 gap-2">
+                      <Input value={supName} onChange={(e) => setSupName(e.target.value)} placeholder="Nome (ex.: Ambev)" maxLength={80} aria-label="Nome do fornecedor" />
+                      <Input value={supUnit} onChange={(e) => setSupUnit(e.target.value)} placeholder="Unidade (opcional)" maxLength={60} aria-label="Unidade do fornecedor" />
+                    </div>
+                    {supSimilar.length > 0 && <p className="text-xs text-warning">Parecido com já cadastrado: {supSimilar.join(", ")}. Confira se não é o mesmo.</p>}
+                    {supError && <p className="text-xs text-danger">{supError}</p>}
+                    <div className="flex justify-end gap-2">
+                      <Button type="button" size="sm" variant="ghost" onClick={() => setNewSupplier(false)}>
+                        Cancelar
+                      </Button>
+                      <Button type="button" size="sm" loading={pending} disabled={supName.trim().length < 2} onClick={addSupplier}>
+                        Cadastrar fornecedor
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </FormField>
+          ) : (
+            <FormField label="De onde veio" required hint="Ex.: cervejaria, fábrica">
+              <Input value={origin} onChange={(e) => setOrigin(e.target.value)} maxLength={120} />
+            </FormField>
+          )}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <FormField label="Quando chegou" required>
               <input type="datetime-local" value={arrived} onChange={(e) => setArrived(e.target.value)} className={field} />

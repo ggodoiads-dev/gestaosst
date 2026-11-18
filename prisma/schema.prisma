@@ -2049,6 +2049,17 @@ model DpvimItemInvoice {
   @@id([dpvimId, kind])
 }
 
+/// Fornecedores de onde vêm as DPVIM, só com nome e unidade (ex.: Ambev · Jaguariúna). `key` é o nome+unidade sem acento/maiúsculas, para não repetir.
+/// A DPVIM guarda o texto do fornecedor (`origin`), sem chave estrangeira. Tabela isolada.
+model DpvimSupplier {
+  id        String   @id @default(uuid())
+  name      String
+  unit      String?
+  key       String   @unique
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
 /// Uma vez que alguém abre a DPVIM e trabalha nela: quem, quando começou (com a foto), quando parou e quanto fez.
 model DpvimSession {
   id             String    @id @default(uuid())

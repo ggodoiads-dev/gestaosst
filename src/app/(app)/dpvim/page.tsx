@@ -16,6 +16,7 @@ import { DonutStat } from "@/components/domain/charts/donut-stat";
 import { HorizontalBarChart } from "@/components/domain/charts/horizontal-bar-chart";
 import { DpvimFormDialog } from "./dpvim-form-dialog";
 import { DpvimKindsDialog } from "./kinds-dialog";
+import { DpvimSuppliersDialog } from "./suppliers-dialog";
 import { DivergenceSection } from "./divergence-section";
 import { StartDpvimDialog } from "./start-dialog";
 import { StopDpvimDialog } from "./stop-dialog";
@@ -67,7 +68,8 @@ export default async function DpvimPage({ searchParams }: { searchParams: Promis
           data.canLaunch ? (
             <div className="flex flex-wrap items-center gap-2">
               {data.canManage && <DpvimKindsDialog kinds={data.kinds} disabled={!data.kindsReady} />}
-              <DpvimFormDialog disabled={!data.ready} kinds={data.kinds} />
+              {data.canManage && <DpvimSuppliersDialog suppliers={data.suppliers} unregistered={data.unregisteredOrigins} disabled={!data.suppliersReady} />}
+              <DpvimFormDialog disabled={!data.ready} kinds={data.kinds} suppliers={data.suppliers} suppliersReady={data.suppliersReady} />
             </div>
           ) : undefined
         }
@@ -82,6 +84,12 @@ export default async function DpvimPage({ searchParams }: { searchParams: Promis
         {data.canManage && !data.kindsReady && (
           <div className="rounded-lg border border-warning/40 bg-warning-soft px-4 py-3 text-sm text-warning">
             A atualização do banco de dados para cadastrar tipos de DPVIM ainda não foi aplicada. Enquanto isso, só os tipos de fábrica (palete, chapatex e quadro) estão disponíveis.
+          </div>
+        )}
+
+        {data.canManage && !data.suppliersReady && (
+          <div className="rounded-lg border border-warning/40 bg-warning-soft px-4 py-3 text-sm text-warning">
+            A atualização do banco de dados para cadastrar fornecedores ainda não foi aplicada. Enquanto isso, &ldquo;De onde veio&rdquo; continua como texto livre.
           </div>
         )}
 

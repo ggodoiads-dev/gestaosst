@@ -8,7 +8,7 @@ import type { CurrentUser } from "@/server/auth/current-user";
 import { ForbiddenError, hasPermission, requirePermission } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
 import { APP_TIMEZONE } from "@/lib/dates";
-import { DPVIM_KINDS, buildLines, dpvimKindLabel, dpvimSituation, dueAtFrom, kindKeyFromLabel, originGroupKey, progressPercent, type DpvimKind, type DpvimKindOption, type DpvimLine, type DpvimSituation, type DpvimStatus } from "@/domain/dpvim/rules";
+import { DPVIM_KINDS, buildLines, dpvimKindLabel, dpvimSituation, dueAtFrom, kindKeyFromLabel, originGroupKey, progressPercent, supplierLabel, type DpvimKind, type DpvimKindOption, type DpvimLine, type DpvimSupplierOption, type DpvimSituation, type DpvimStatus } from "@/domain/dpvim/rules";
 
 /** Quem cadastra, edita e cancela DPVIM e vê o painel completo: gestão de produtividade, líderes que fazem chamada. */
 export function canManageDpvim(user: CurrentUser): boolean {
@@ -126,6 +126,81 @@ export async function setDpvimKindActive(user: CurrentUser, id: string, active: 
   const before = await db.dpvimKindDef.findUniqueOrThrow({ where: { id } });
   await db.dpvimKindDef.update({ where: { id }, data: { active } });
   await recordAudit({ userId: user.id, action: "UPDATE", entityType: "DpvimKindDef", entityId: id, previousValue: { active: before.active }, newValue: { active } });
+}
+
+/** Fornecedores cadastrados (nome e unidade). Se a tabela ainda não existe, nenhum: "De onde veio" segue como texto livre (nada quebra). */
+export async function listDpvimSuppliers(): Promise<{ suppliers: DpvimSupplierOption[]; ready: boolean }> {
+  try {
+    const rows = await db.dpvimSupplier.findMany({ orderBy: { name: "asc" } });
+    return { suppliers: rows.map((r) => ({ id: r.id, name: r.name, unit: r.unit, label: supplierLabel(r.name, r.unit), active: r.active })), ready: true };
+  } catch (error) {
+    console.error("[dpvim] tabela de fornecedores indisponível:", error);
+    return { suppliers: [], ready: false };
+  }
+}
+
+function cleanSupplier(name: string, unit: string | null | undefined) {
+  const n = name.trim().replace(/\s+/g, " ").slice(0, 80);
+  const u = (unit ?? "").trim().replace(/\s+/g, " ").slice(0, 60);
+  if (n.length < 2) throw new Error("Informe o nome do fornecedor.");
+  return { name: n, unit: u ? u : null };
+}
+
+/** Passa para o nome cadastrado todas as DPVIM que tinham esse fornecedor digitado (ou escrito de outro jeito: maiúsculas, acento, espaços). */
+async function retargetOrigins(fromKey: string, toLabel: string) {
+  const rows = await db.dpvim.findMany({ select: { id: true, origin: true } });
+  const ids = rows.filter((r) => originGroupKey(r.origin) === fromKey && r.origin !== toLabel).map((r) => r.id);
+  if (ids.length > 0) await db.dpvim.updateMany({ where: { id: { in: ids } }, data: { origin: toLabel } });
+  return ids.length;
+}
+
+/** Quem lança pode cadastrar o fornecedor na hora; editar, desativar e unir ficam com a gestão. */
+export async function createDpvimSupplier(user: CurrentUser, input: { name: string; unit: string | null }) {
+  if (!(await canLaunchDpvim(user))) throw new ForbiddenError();
+  const { name, unit } = cleanSupplier(input.name, input.unit);
+  const label = supplierLabel(name, unit);
+  const key = originGroupKey(label);
+  const { suppliers } = await listDpvimSuppliers();
+  if (suppliers.some((s) => originGroupKey(s.label) === key)) throw new Error("Já existe esse fornecedor (mesmo nome e unidade). Ele pode estar desativado.");
+  const created = await db.dpvimSupplier.create({ data: { name, unit, key } });
+  // DPVIM antigas digitadas do mesmo jeito passam a usar o nome cadastrado.
+  await retargetOrigins(key, label);
+  await recordAudit({ userId: user.id, action: "CREATE", entityType: "DpvimSupplier", entityId: created.id, newValue: { name, unit } });
+  return { id: created.id, label };
+}
+
+export async function updateDpvimSupplier(user: CurrentUser, id: string, input: { name: string; unit: string | null }) {
+  if (!canManageDpvim(user)) throw new ForbiddenError();
+  const before = await db.dpvimSupplier.findUniqueOrThrow({ where: { id } });
+  const { name, unit } = cleanSupplier(input.name, input.unit);
+  const label = supplierLabel(name, unit);
+  const key = originGroupKey(label);
+  const other = await db.dpvimSupplier.findUnique({ where: { key } });
+  if (other && other.id !== id) throw new Error("Já existe outro fornecedor com esse nome e unidade. Use \"Unir\" para juntar os dois.");
+  await db.dpvimSupplier.update({ where: { id }, data: { name, unit, key } });
+  // As DPVIM que usavam o nome antigo passam para o novo.
+  await retargetOrigins(before.key, label);
+  await recordAudit({ userId: user.id, action: "UPDATE", entityType: "DpvimSupplier", entityId: id, previousValue: { name: before.name, unit: before.unit }, newValue: { name, unit } });
+}
+
+/** Fornecedor desativado some das opções de novo cadastro, mas as DPVIM dele continuam como estão. */
+export async function setDpvimSupplierActive(user: CurrentUser, id: string, active: boolean) {
+  if (!canManageDpvim(user)) throw new ForbiddenError();
+  const before = await db.dpvimSupplier.findUniqueOrThrow({ where: { id } });
+  await db.dpvimSupplier.update({ where: { id }, data: { active } });
+  await recordAudit({ userId: user.id, action: "UPDATE", entityType: "DpvimSupplier", entityId: id, previousValue: { active: before.active }, newValue: { active } });
+}
+
+/** Junta dois fornecedores: todas as DPVIM de `fromId` passam para `intoId` e o primeiro sai da lista. */
+export async function mergeDpvimSupplier(user: CurrentUser, fromId: string, intoId: string) {
+  if (!canManageDpvim(user)) throw new ForbiddenError();
+  if (fromId === intoId) throw new Error("Escolha outro fornecedor para unir.");
+  const from = await db.dpvimSupplier.findUniqueOrThrow({ where: { id: fromId } });
+  const into = await db.dpvimSupplier.findUniqueOrThrow({ where: { id: intoId } });
+  const moved = await retargetOrigins(from.key, supplierLabel(into.name, into.unit));
+  await db.dpvimSupplier.delete({ where: { id: fromId } });
+  await recordAudit({ userId: user.id, action: "UPDATE", entityType: "DpvimSupplier", entityId: fromId, previousValue: { name: from.name, unit: from.unit }, newValue: { mergedInto: intoId, moved } });
+  return { moved };
 }
 
 export type DpvimRow = {
@@ -385,6 +460,11 @@ export type DpvimDashboard = {
   divergence: DpvimDivergenceSummary;
   kinds: DpvimKindOption[];
   kindsReady: boolean;
+  /** Fornecedores cadastrados; `suppliersReady` falso = a tabela ainda não existe (De onde veio fica como texto livre). */
+  suppliers: DpvimSupplierOption[];
+  suppliersReady: boolean;
+  /** Fornecedores digitados em DPVIM e ainda não cadastrados (só para a gestão), para cadastrar de uma vez. */
+  unregisteredOrigins: { origin: string; count: number }[];
   byPair: { label: string; qty: number; sessions: number }[];
   recent: DpvimSessionRow[];
   collaborators: { id: string; name: string }[];
@@ -414,6 +494,9 @@ export async function getDpvimDashboard(user: CurrentUser, filters: DpvimFilters
     divergence: { checked: 0, withDivergence: 0, missing: 0, surplus: 0, invoiced: 0, missingRate: null, bySupplier: [], byKind: [], awaitingInvoice: [], items: [] },
     kinds: [],
     kindsReady: true,
+    suppliers: [],
+    suppliersReady: true,
+    unregisteredOrigins: [],
     byPair: [],
     recent: [],
     collaborators: [],
@@ -431,6 +514,18 @@ export async function getDpvimDashboard(user: CurrentUser, filters: DpvimFilters
 
   const itemData = await loadItemData(all.map((d) => d.id), showInvoice);
   const kindList = await listDpvimKinds();
+  const supplierList = await listDpvimSuppliers();
+  const registeredKeys = new Set(supplierList.suppliers.map((s) => originGroupKey(s.label)));
+  const unregistered = new Map<string, { origin: string; count: number }>();
+  if (manage && supplierList.ready) {
+    for (const d of all) {
+      const k = originGroupKey(d.origin);
+      if (registeredKeys.has(k)) continue;
+      const e = unregistered.get(k) ?? { origin: d.origin, count: 0 };
+      e.count += 1;
+      unregistered.set(k, e);
+    }
+  }
   const kindFilter = filters.kind && kindList.kinds.some((k) => k.key === filters.kind) ? filters.kind : null;
   const fromAt = filters.from ? new Date(`${filters.from}T00:00:00-03:00`) : null;
   const toAt = filters.to ? new Date(new Date(`${filters.to}T00:00:00-03:00`).getTime() + 24 * 60 * 60 * 1000) : null;
@@ -608,6 +703,9 @@ export async function getDpvimDashboard(user: CurrentUser, filters: DpvimFilters
     divergence,
     kinds: kindList.kinds,
     kindsReady: kindList.ready,
+    suppliers: supplierList.suppliers,
+    suppliersReady: supplierList.ready,
+    unregisteredOrigins: [...unregistered.values()].sort((a, b) => b.count - a.count),
     byOrigin: [...origins.entries()].map(([origin, count]) => ({ origin, count })).sort((a, b) => b.count - a.count),
     byPair: [...pairs.entries()].map(([label, v]) => ({ label, ...v })).sort((a, b) => b.qty - a.qty),
     recent: periodSessions.slice(0, 15).map((s) => toSessionRow(s, codeById.get(s.dpvimId) ?? "?", itemData)),
@@ -626,6 +724,8 @@ export type DpvimDetail = {
   collaborators: { id: string; name: string }[];
   myCollaboratorId: string | null;
   kinds: DpvimKindOption[];
+  suppliers: DpvimSupplierOption[];
+  suppliersReady: boolean;
 };
 
 export async function getDpvimDetail(user: CurrentUser, id: string): Promise<DpvimDetail | null> {
@@ -648,13 +748,15 @@ export async function getDpvimDetail(user: CurrentUser, id: string): Promise<Dpv
     collaborators: await db.collaborator.findMany({ where: { active: true }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
     myCollaboratorId: collab?.id ?? null,
     kinds: (await listDpvimKinds()).kinds,
+    suppliers: (await listDpvimSuppliers()).suppliers,
+    suppliersReady: (await listDpvimSuppliers()).ready,
   };
 }
 
 /** `items` = o que veio, produto a produto, pela contagem do conferente (só um norte). A quantidade da NOTA é lançada à parte, por quem tem acesso a ela. */
 export type DpvimInput = { origin: string; reference: string; material: string; items: { kind: string; qty: number }[]; arrivedAtIso: string; notes: string };
 
-async function validate(input: DpvimInput, currentKinds: string[] = []) {
+async function validate(input: DpvimInput, currentKinds: string[] = [], currentOrigin?: string) {
   const { kinds } = await listDpvimKinds();
   if (input.items.length === 0) throw new Error("Informe pelo menos um produto (tipo e quantidade).");
   if (input.items.length > 12) throw new Error("Informe no máximo 12 produtos por DPVIM.");
@@ -667,23 +769,33 @@ async function validate(input: DpvimInput, currentKinds: string[] = []) {
     seen.add(it.kind);
     if (!Number.isInteger(it.qty) || it.qty <= 0 || it.qty > 100000) throw new Error("Informe a quantidade de cada produto com um número inteiro.");
   }
-  if (input.origin.trim().length < 2) throw new Error("Informe de onde a DPVIM veio.");
+  // Com a lista de fornecedores no ar, "De onde veio" tem que ser um fornecedor ativo (ou o que a DPVIM já tinha). Sem a lista, vale o texto livre de antes.
+  const { suppliers, ready } = await listDpvimSuppliers();
+  let origin = input.origin.trim();
+  if (ready) {
+    const key = originGroupKey(origin);
+    const match = suppliers.find((s) => s.active && originGroupKey(s.label) === key);
+    if (match) origin = match.label;
+    else if (!(currentOrigin !== undefined && originGroupKey(currentOrigin) === key)) throw new Error("Escolha o fornecedor da lista (ou cadastre um novo).");
+  } else if (origin.length < 2) {
+    throw new Error("Informe de onde a DPVIM veio.");
+  }
   const arrivedAt = new Date(input.arrivedAtIso);
   if (Number.isNaN(arrivedAt.getTime())) throw new Error("Informe quando a DPVIM chegou.");
   if (arrivedAt.getTime() > Date.now() + 60 * 60 * 1000) throw new Error("A chegada não pode ser no futuro.");
-  return arrivedAt;
+  return { arrivedAt, origin: origin.slice(0, 120) };
 }
 
 export async function createDpvim(user: CurrentUser, input: DpvimInput) {
   if (!(await canLaunchDpvim(user))) throw new ForbiddenError();
-  const arrivedAt = await validate(input);
+  const { arrivedAt, origin } = await validate(input);
   const code = await nextFriendlyCode("dpvim", "DPVIM", 4);
   const created = await db.$transaction(async (tx) => {
     const dpvim = await tx.dpvim.create({
       data: {
         code,
         kind: input.items[0].kind,
-        origin: input.origin.trim().slice(0, 120),
+        origin,
         reference: input.reference.trim() ? input.reference.trim().slice(0, 80) : null,
         material: input.material.trim() ? input.material.trim().slice(0, 300) : null,
         expectedQty: input.items.reduce((s, i) => s + i.qty, 0),
@@ -705,13 +817,13 @@ export async function updateDpvim(user: CurrentUser, id: string, input: DpvimInp
   if (!(await canLaunchDpvim(user))) throw new ForbiddenError();
   const before = await db.dpvim.findUniqueOrThrow({ where: { id } });
   const currentItems = await db.dpvimItem.findMany({ where: { dpvimId: id } }).catch(() => []);
-  const arrivedAt = await validate(input, currentItems.length > 0 ? currentItems.map((i) => i.kind) : [before.kind]);
+  const { arrivedAt, origin } = await validate(input, currentItems.length > 0 ? currentItems.map((i) => i.kind) : [before.kind], before.origin);
   const updated = await db.$transaction(async (tx) => {
     const dpvim = await tx.dpvim.update({
       where: { id },
       data: {
         kind: input.items[0].kind,
-        origin: input.origin.trim().slice(0, 120),
+        origin,
         reference: input.reference.trim() ? input.reference.trim().slice(0, 80) : null,
         material: input.material.trim() ? input.material.trim().slice(0, 300) : null,
         expectedQty: input.items.reduce((s, i) => s + i.qty, 0),
