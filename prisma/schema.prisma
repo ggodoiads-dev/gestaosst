@@ -2024,6 +2024,19 @@ model DpvimSessionItem {
   @@index([dpvimId])
 }
 
+/// Dos itens que os ajudantes contaram de cada produto numa atividade: quantos bons, quantos transferência e quantos descarte. Sem chaves estrangeiras.
+model DpvimSessionQuality {
+  sessionId String
+  kind      String
+  good      Int    @default(0)
+  transfer  Int    @default(0)
+  discard   Int    @default(0)
+  dpvimId   String
+
+  @@id([sessionId, kind])
+  @@index([dpvimId])
+}
+
 /// Quantidade da NOTA por produto de cada DPVIM, lançada por quem tem acesso à nota. Fica fora das outras tabelas de propósito: quem recebe e conta não pode ver esse número.
 model DpvimItemInvoice {
   dpvimId       String

@@ -85,7 +85,19 @@ describe("produtos da DPVIM (linhas)", () => {
   });
   it("DPVIM antiga, sem itens, usa o tipo e a quantidade únicos", () => {
     const lines = buildLines({ legacyKind: "QUADRO", legacyExpected: 420, items: [], doneByKind: new Map([["QUADRO", 400]]), invoiceByKind: new Map([["QUADRO", 420]]), concluded: true });
-    expect(lines).toEqual([{ kind: "QUADRO", expected: 420, done: 400, invoice: 420, balance: -20 }]);
+    expect(lines).toEqual([{ kind: "QUADRO", expected: 420, done: 400, good: 0, transfer: 0, discard: 0, invoice: 420, balance: -20 }]);
+  });
+  it("bons, transferência e descarte são por produto", () => {
+    const lines = buildLines({
+      legacyKind: "X",
+      legacyExpected: 0,
+      items,
+      doneByKind: new Map([["PALETE", 100], ["CHAPATEX", 50]]),
+      qualityByKind: new Map([["PALETE", { good: 90, transfer: 6, discard: 4 }]]),
+      invoiceByKind: null,
+      concluded: true,
+    });
+    expect(lines.map((l) => [l.kind, l.good, l.transfer, l.discard])).toEqual([["PALETE", 90, 6, 4], ["CHAPATEX", 0, 0, 0]]);
   });
   it("tipo que só aparece na contagem ou na nota entra com norte 0", () => {
     const lines = buildLines({ legacyKind: "PALETE", legacyExpected: 0, items: [{ kind: "PALETE", expectedQty: 10 }], doneByKind: new Map([["QUADRO", 7]]), invoiceByKind: new Map([["BARRIL", 3]]), concluded: true });

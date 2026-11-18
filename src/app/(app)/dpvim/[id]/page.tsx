@@ -162,14 +162,24 @@ export default async function DpvimDetailPage({ params }: { params: Promise<{ id
                       </p>
                       <p className="text-foreground">
                         Fez <strong>{s.qtyDone ?? 0}</strong> item(ns)
-                        {s.byKind.length > 1 ? <span className="text-foreground-subtle"> ({s.byKind.map((b) => `${dpvimKindLabel(b.kind, detail.kinds)} ${b.qty}`).join(" · ")})</span> : null}
-                        {s.qtyGood !== null || s.qtyTransfer !== null || s.qtyDiscard !== null ? (
+                        {s.byKind.length > 1 && !s.byKind.some((b) => b.good !== null) ? <span className="text-foreground-subtle"> ({s.byKind.map((b) => `${dpvimKindLabel(b.kind, detail.kinds)} ${b.qty}`).join(" · ")})</span> : null}
+                        {!s.byKind.some((b) => b.good !== null) && (s.qtyGood !== null || s.qtyTransfer !== null || s.qtyDiscard !== null) ? (
                           <span className="text-foreground-subtle">
                             {" "}
                             · bons {s.qtyGood ?? 0} · transferência {s.qtyTransfer ?? 0} · descarte {s.qtyDiscard ?? 0}
                           </span>
                         ) : null}
                       </p>
+                      {s.byKind.some((b) => b.good !== null) && (
+                        <ul className="flex flex-col gap-0.5 text-xs text-foreground-subtle">
+                          {s.byKind.map((b) => (
+                            <li key={b.kind}>
+                              <strong className="text-foreground">{dpvimKindLabel(b.kind, detail.kinds)} {b.qty}</strong>
+                              {b.good !== null ? ` · bons ${b.good} · transferência ${b.transfer ?? 0} · descarte ${b.discard ?? 0}` : ""}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                       {s.notes && <p className="text-xs text-foreground-subtle">{s.notes}</p>}
                     </>
                   ) : (

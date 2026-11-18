@@ -8,7 +8,7 @@ import type { CurrentUser } from "@/server/auth/current-user";
 import { ForbiddenError, hasPermission, requirePermission } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
 import { APP_TIMEZONE } from "@/lib/dates";
-import { DPVIM_KINDS, buildLines, dpvimSituation, dueAtFrom, kindKeyFromLabel, originGroupKey, progressPercent, type DpvimKind, type DpvimKindOption, type DpvimLine, type DpvimSituation, type DpvimStatus } from "@/domain/dpvim/rules";
+import { DPVIM_KINDS, buildLines, dpvimKindLabel, dpvimSituation, dueAtFrom, kindKeyFromLabel, originGroupKey, progressPercent, type DpvimKind, type DpvimKindOption, type DpvimLine, type DpvimSituation, type DpvimStatus } from "@/domain/dpvim/rules";
 
 /** Quem cadastra, edita e cancela DPVIM e vê o painel completo: gestão de produtividade, líderes que fazem chamada. */
 export function canManageDpvim(user: CurrentUser): boolean {
@@ -169,8 +169,8 @@ export type DpvimSessionRow = {
   stoppedAt: Date | null;
   photoPath: string;
   qtyDone: number | null;
-  /** O que contaram de cada produto nessa atividade (vazio nas atividades antigas, de um produto só). */
-  byKind: { kind: string; qty: number }[];
+  /** O que contaram de cada produto nessa atividade (vazio nas atividades antigas, de um produto só), e como ficou: bons, transferência e descarte (`null` = não informado). */
+  byKind: { kind: string; qty: number; good: number | null; transfer: number | null; discard: number | null }[];
   qtyGood: number | null;
   qtyTransfer: number | null;
   qtyDiscard: number | null;
@@ -182,18 +182,24 @@ type SessionDb = Awaited<ReturnType<typeof db.dpvimSession.findMany>>[number];
 type ItemData = {
   items: { dpvimId: string; kind: string; expectedQty: number; sort: number }[];
   sessionItems: { sessionId: string; dpvimId: string; kind: string; qty: number }[];
+  quality: { sessionId: string; dpvimId: string; kind: string; good: number; transfer: number; discard: number }[];
   /** `null` = quem vê não tem acesso à nota (as notas nem são lidas). */
   invoice: { dpvimId: string; kind: string; qty: number }[] | null;
 };
 
 /** Produtos, contagem por produto e notas das DPVIM. Leitura tolerante: se as tabelas novas ainda não existem, tudo vale como antes (um produto só). */
 async function loadItemData(dpvimIds: string[], showInvoice: boolean): Promise<ItemData> {
-  const data: ItemData = { items: [], sessionItems: [], invoice: showInvoice ? [] : null };
+  const data: ItemData = { items: [], sessionItems: [], quality: [], invoice: showInvoice ? [] : null };
   try {
     data.items = await db.dpvimItem.findMany({ where: { dpvimId: { in: dpvimIds } }, orderBy: { sort: "asc" } });
     data.sessionItems = await db.dpvimSessionItem.findMany({ where: { dpvimId: { in: dpvimIds } } });
   } catch (error) {
     console.error("[dpvim] tabelas de produtos indisponíveis:", error);
+  }
+  try {
+    data.quality = await db.dpvimSessionQuality.findMany({ where: { dpvimId: { in: dpvimIds } } });
+  } catch (error) {
+    console.error("[dpvim] tabela de bons/transferência/descarte indisponível:", error);
   }
   if (showInvoice) {
     try {
@@ -221,12 +227,31 @@ function toRow(d: DpvimDb, sessions: SessionDb[], now: Date, data: ItemData): Dp
   for (const s of mine) {
     if (s.stoppedAt && (s.qtyDone ?? 0) > 0 && !withItems.has(s.id)) doneByKind.set(d.kind, (doneByKind.get(d.kind) ?? 0) + (s.qtyDone ?? 0));
   }
+  // Bons, transferência e descarte por produto. Atividades antigas (sem a divisão por produto) valem para o tipo da DPVIM.
+  const qualityByKind = new Map<string, { good: number; transfer: number; discard: number }>();
+  const addQuality = (kind: string, good: number, transfer: number, discard: number) => {
+    const q = qualityByKind.get(kind) ?? { good: 0, transfer: 0, discard: 0 };
+    q.good += good;
+    q.transfer += transfer;
+    q.discard += discard;
+    qualityByKind.set(kind, q);
+  };
+  const withQuality = new Set<string>();
+  for (const q of data.quality) {
+    if (q.dpvimId !== d.id) continue;
+    withQuality.add(q.sessionId);
+    addQuality(q.kind, q.good, q.transfer, q.discard);
+  }
+  for (const s of mine) {
+    if (s.stoppedAt && !withQuality.has(s.id) && (s.qtyGood !== null || s.qtyTransfer !== null || s.qtyDiscard !== null)) addQuality(d.kind, s.qtyGood ?? 0, s.qtyTransfer ?? 0, s.qtyDiscard ?? 0);
+  }
   const invoiceByKind = data.invoice ? new Map(data.invoice.filter((i) => i.dpvimId === d.id).map((i) => [i.kind, i.qty] as const)) : null;
   const lines = buildLines({
     legacyKind: d.kind,
     legacyExpected: d.expectedQty,
     items: data.items.filter((i) => i.dpvimId === d.id),
     doneByKind,
+    qualityByKind,
     invoiceByKind,
     concluded: status === "CONCLUIDA",
   });
@@ -268,7 +293,12 @@ function toSessionRow(s: SessionDb, code: string, data: ItemData): DpvimSessionR
     stoppedAt: s.stoppedAt,
     photoPath: s.startPhotoPath,
     qtyDone: s.qtyDone,
-    byKind: data.sessionItems.filter((i) => i.sessionId === s.id).map((i) => ({ kind: i.kind, qty: i.qty })),
+    byKind: data.sessionItems
+      .filter((i) => i.sessionId === s.id)
+      .map((i) => {
+        const q = data.quality.find((x) => x.sessionId === s.id && x.kind === i.kind);
+        return { kind: i.kind, qty: i.qty, good: q ? q.good : null, transfer: q ? q.transfer : null, discard: q ? q.discard : null };
+      }),
     qtyGood: s.qtyGood,
     qtyTransfer: s.qtyTransfer,
     qtyDiscard: s.qtyDiscard,
@@ -735,8 +765,12 @@ export async function startDpvimSession(
   return session;
 }
 
-/** `items` = quanto contaram de cada produto da DPVIM nesta atividade. */
-export type StopInput = { items: { kind: string; qty: number }[]; qtyGood: number | null; qtyTransfer: number | null; qtyDiscard: number | null; notes: string; finish: boolean };
+/** `items` = quanto contaram de cada produto da DPVIM nesta atividade e, se quiserem, quantos desses foram bons, transferência e descarte (por produto). */
+export type StopInput = {
+  items: { kind: string; qty: number; good: number | null; transfer: number | null; discard: number | null }[];
+  notes: string;
+  finish: boolean;
+};
 
 function optionalInt(v: number | null, label: string): number | null {
   if (v === null) return null;
@@ -755,16 +789,24 @@ export async function stopDpvimSession(user: CurrentUser, sessionId: string, inp
   const d = await db.dpvim.findUniqueOrThrow({ where: { id: session.dpvimId } });
   const dpvimItems = await db.dpvimItem.findMany({ where: { dpvimId: d.id } }).catch(() => []);
   const allowed = dpvimItems.length > 0 ? dpvimItems.map((i) => i.kind) : [d.kind];
+  const kindOptions = (await listDpvimKinds()).kinds;
   const seen = new Set<string>();
   for (const it of input.items) {
     if (!allowed.includes(it.kind) || seen.has(it.kind)) throw new Error("Escolha só os produtos desta DPVIM, uma vez cada.");
     seen.add(it.kind);
     if (!Number.isInteger(it.qty) || it.qty < 0 || it.qty > 100000) throw new Error("Informe quantos itens foram feitos de cada produto.");
+    const label = dpvimKindLabel(it.kind, kindOptions);
+    const good = optionalInt(it.good, `Bons de ${label}`);
+    const transfer = optionalInt(it.transfer, `Transferência de ${label}`);
+    const discard = optionalInt(it.discard, `Descarte de ${label}`);
+    if ((good ?? 0) + (transfer ?? 0) + (discard ?? 0) > it.qty) throw new Error(`Informe de novo: em ${label}, bons + transferência + descarte passam do que foi contado.`);
   }
   const qtyDone = input.items.reduce((s, i) => s + i.qty, 0);
-  const qtyGood = optionalInt(input.qtyGood, "Bons");
-  const qtyTransfer = optionalInt(input.qtyTransfer, "Transferência");
-  const qtyDiscard = optionalInt(input.qtyDiscard, "Descarte");
+  // No total da atividade (e nas atividades antigas) ficam as somas de cada produto; sem nenhum valor informado, fica vazio.
+  const sumOf = (pick: (i: StopInput["items"][number]) => number | null) => (input.items.some((i) => pick(i) !== null) ? input.items.reduce((s, i) => s + (pick(i) ?? 0), 0) : null);
+  const qtyGood = sumOf((i) => i.good);
+  const qtyTransfer = sumOf((i) => i.transfer);
+  const qtyDiscard = sumOf((i) => i.discard);
 
   const now = new Date();
   const doneQty = d.doneQty + qtyDone;
@@ -775,6 +817,10 @@ export async function stopDpvimSession(user: CurrentUser, sessionId: string, inp
     });
     const positive = input.items.filter((i) => i.qty > 0);
     if (positive.length > 0) await tx.dpvimSessionItem.createMany({ data: positive.map((i) => ({ sessionId, dpvimId: d.id, kind: i.kind, qty: i.qty })) });
+    const withQuality = input.items.filter((i) => i.good !== null || i.transfer !== null || i.discard !== null);
+    if (withQuality.length > 0) {
+      await tx.dpvimSessionQuality.createMany({ data: withQuality.map((i) => ({ sessionId, dpvimId: d.id, kind: i.kind, good: i.good ?? 0, transfer: i.transfer ?? 0, discard: i.discard ?? 0 })) });
+    }
     await tx.dpvim.update({ where: { id: d.id }, data: { doneQty, ...(input.finish ? { status: "CONCLUIDA", finishedAt: now } : {}) } });
   });
   await recordAudit({ userId: user.id, action: "UPDATE", entityType: "DpvimSession", entityId: sessionId, newValue: { ...input, qtyDone, code: d.code, concluded: input.finish } });
@@ -793,6 +839,7 @@ export async function deleteDpvim(user: CurrentUser, id: string) {
   await db.dpvimSessionItem.deleteMany({ where: { dpvimId: id } }).catch(() => undefined);
   await db.dpvimItem.deleteMany({ where: { dpvimId: id } }).catch(() => undefined);
   await db.dpvimItemInvoice.deleteMany({ where: { dpvimId: id } }).catch(() => undefined);
+  await db.dpvimSessionQuality.deleteMany({ where: { dpvimId: id } }).catch(() => undefined);
   for (const s of sessions) await deleteStoredFile(s.startPhotoPath);
   await recordAudit({ userId: user.id, action: "CANCEL", entityType: "Dpvim", entityId: id, previousValue: { code: before.code, kind: before.kind, origin: before.origin, expectedQty: before.expectedQty, doneQty: before.doneQty, sessions: sessions.length } });
 }

@@ -100,6 +100,10 @@ export type DpvimLine = {
   expected: number;
   /** Soma do que os ajudantes contaram nesse produto. */
   done: number;
+  /** Dos que foram contados desse produto, quantos foram bons, quantos transferência e quantos descarte (somando todas as atividades). */
+  good: number;
+  transfer: number;
+  discard: number;
   /** Quantidade da nota (só para quem tem acesso a ela, e depois de informada). */
   invoice: number | null;
   /** Contado pelos ajudantes menos a nota, só depois de concluída e com a nota informada. Negativo = faltou, positivo = sobrou. */
@@ -115,6 +119,7 @@ export function buildLines(p: {
   legacyExpected: number;
   items: { kind: string; expectedQty: number }[];
   doneByKind: Map<string, number>;
+  qualityByKind?: Map<string, { good: number; transfer: number; discard: number }>;
   invoiceByKind: Map<string, number> | null;
   concluded: boolean;
 }): DpvimLine[] {
@@ -134,6 +139,7 @@ export function buildLines(p: {
   return order.map((kind) => {
     const done = p.doneByKind.get(kind) ?? 0;
     const invoice = p.invoiceByKind?.get(kind) ?? null;
-    return { kind, expected: expected.get(kind) ?? 0, done, invoice, balance: p.concluded && invoice !== null ? dpvimBalance(done, invoice) : null };
+    const q = p.qualityByKind?.get(kind);
+    return { kind, expected: expected.get(kind) ?? 0, done, good: q?.good ?? 0, transfer: q?.transfer ?? 0, discard: q?.discard ?? 0, invoice, balance: p.concluded && invoice !== null ? dpvimBalance(done, invoice) : null };
   });
 }

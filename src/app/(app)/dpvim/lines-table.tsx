@@ -11,6 +11,7 @@ export function LinesTable({ lines, kinds, canSeeInvoice, concluded }: { lines: 
             <th className="px-3 py-2 font-semibold">Produto</th>
             <th className="px-3 py-2 text-right font-semibold">Norte do conferente</th>
             <th className="px-3 py-2 text-right font-semibold">Contado pelos ajudantes</th>
+            <th className="px-3 py-2 font-semibold">Bons · transferência · descarte</th>
             {canSeeInvoice && <th className="px-3 py-2 text-right font-semibold">Nota</th>}
             {canSeeInvoice && <th className="px-3 py-2 font-semibold">Diferença</th>}
           </tr>
@@ -21,6 +22,9 @@ export function LinesTable({ lines, kinds, canSeeInvoice, concluded }: { lines: 
               <td className="px-3 py-2 font-medium text-foreground">{dpvimKindLabel(l.kind, kinds)}</td>
               <td className="px-3 py-2 text-right tabular-nums text-foreground-subtle">{l.expected}</td>
               <td className="px-3 py-2 text-right font-semibold tabular-nums">{l.done}</td>
+              <td className="px-3 py-2 text-xs tabular-nums text-foreground-subtle">
+                {l.good + l.transfer + l.discard > 0 ? `${l.good} · ${l.transfer} · ${l.discard}` : "—"}
+              </td>
               {canSeeInvoice && <td className="px-3 py-2 text-right tabular-nums">{l.invoice ?? <span className="text-foreground-subtle">—</span>}</td>}
               {canSeeInvoice && (
                 <td className="px-3 py-2">
