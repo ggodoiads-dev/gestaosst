@@ -21,7 +21,11 @@ export function SituationBadge({ situation, hoursLeft }: { situation: DpvimSitua
   );
 }
 
-export function ProgressBar({ done, expected, progress }: { done: number; expected: number; progress: number }) {
+/** Sem a quantidade da nota (quem lança não vê, ou ainda não foi informada), só mostra quanto foi contado. */
+export function ProgressBar({ done, expected, progress }: { done: number; expected: number | null; progress: number | null }) {
+  if (expected === null || progress === null) {
+    return <span className="text-[11px] tabular-nums text-foreground-subtle">{done} contados</span>;
+  }
   return (
     <div className="flex min-w-32 flex-col gap-1">
       <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-muted">

@@ -15,6 +15,7 @@ import { StartDpvimDialog } from "../start-dialog";
 import { StopDpvimDialog } from "../stop-dialog";
 import { CancelDpvimButton } from "../cancel-button";
 import { DeleteDpvimButton } from "../delete-button";
+import { InvoiceQtyDialog } from "../invoice-dialog";
 import { ProgressBar, SituationBadge } from "../situation-badge";
 
 function toLocalInput(d: Date): string {
@@ -30,7 +31,7 @@ export default async function DpvimDetailPage({ params }: { params: Promise<{ id
   const { row, sessions } = detail;
   const open = row.status === "ABERTA" || row.status === "EM_ANDAMENTO";
   const canStart = open && detail.hasCollaborator && !detail.mySession;
-  const left = Math.max(0, row.expectedQty - row.doneQty);
+  const left = row.expectedQty === null ? null : Math.max(0, row.expectedQty - row.doneQty);
 
   return (
     <>
@@ -70,7 +71,13 @@ export default async function DpvimDetailPage({ params }: { params: Promise<{ id
             <div className="flex flex-col gap-2">
               <p className="text-xs text-foreground-subtle">Andamento</p>
               <ProgressBar done={row.doneQty} expected={row.expectedQty} progress={row.progress} />
-              <p className="text-sm text-foreground">{left > 0 ? `Faltam ${left} itens` : "Carga toda contada"}</p>
+              {left !== null && <p className="text-sm text-foreground">{left > 0 ? `Faltam ${left} itens` : "Carga toda contada"}</p>}
+              {detail.canSeeInvoice && row.status !== "CANCELADA" && (
+                <div className="flex flex-col items-start gap-1">
+                  {row.expectedQty === null && <p className="text-xs text-foreground-subtle">A quantidade da nota ainda não foi informada.</p>}
+                  <InvoiceQtyDialog id={row.id} code={row.code} current={row.expectedQty} />
+                </div>
+              )}
               {row.balance !== null && (
                 <p className={row.balance === 0 ? "text-sm font-semibold text-success" : row.balance < 0 ? "text-sm font-semibold text-danger" : "text-sm font-semibold text-warning"}>
                   {row.balance === 0
@@ -94,6 +101,7 @@ export default async function DpvimDetailPage({ params }: { params: Promise<{ id
             <CardContent className="flex flex-wrap gap-2 border-t border-border pt-4">
               <DpvimFormDialog
                 kinds={detail.kinds}
+                canSeeInvoice={detail.canSeeInvoice}
                 initial={{
                   id: row.id,
                   kind: row.kind,

@@ -14,10 +14,10 @@ import { DPVIM_DEADLINE_HOURS, parseBrasiliaLocal, type DpvimKindOption } from "
 
 const field = "h-9 w-full rounded-md border border-border-strong bg-surface px-2 text-sm text-foreground";
 
-export type DpvimFormInitial = { id: string; kind: string; origin: string; reference: string; material: string; expectedQty: number; arrivedLocal: string; notes: string };
+export type DpvimFormInitial = { id: string; kind: string; origin: string; reference: string; material: string; expectedQty: number | null; arrivedLocal: string; notes: string };
 
 /** Cadastrar (ou editar) uma DPVIM: de onde veio, quando chegou, quantos itens, o que veio e o tipo (palete, chapatex ou quadro). O prazo de 48h conta da chegada. */
-export function DpvimFormDialog({ initial, disabled, kinds }: { initial?: DpvimFormInitial; disabled?: boolean; kinds: DpvimKindOption[] }) {
+export function DpvimFormDialog({ initial, disabled, kinds, canSeeInvoice }: { initial?: DpvimFormInitial; disabled?: boolean; kinds: DpvimKindOption[]; canSeeInvoice: boolean }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
@@ -25,7 +25,7 @@ export function DpvimFormDialog({ initial, disabled, kinds }: { initial?: DpvimF
   const [origin, setOrigin] = useState(initial?.origin ?? "");
   const [reference, setReference] = useState(initial?.reference ?? "");
   const [material, setMaterial] = useState(initial?.material ?? "");
-  const [qty, setQty] = useState(initial ? String(initial.expectedQty) : "420");
+  const [qty, setQty] = useState(initial?.expectedQty ? String(initial.expectedQty) : "");
   const [arrived, setArrived] = useState(initial?.arrivedLocal ?? "");
   const [notes, setNotes] = useState(initial?.notes ?? "");
   const [error, setError] = useState<string | null>(null);
@@ -34,14 +34,16 @@ export function DpvimFormDialog({ initial, disabled, kinds }: { initial?: DpvimF
   const dueLabel = arrivedDate
     ? new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" }).format(new Date(arrivedDate.getTime() + DPVIM_DEADLINE_HOURS * 3600 * 1000))
     : null;
+  // A quantidade da nota só existe para quem tem acesso à nota, e é opcional (pode ser informada depois). Quem só lança nem vê esse campo.
   const qtyNum = Number(qty);
-  const valid = !!kind && origin.trim().length >= 2 && Number.isInteger(qtyNum) && qtyNum > 0 && !!arrivedDate;
+  const qtyOk = !canSeeInvoice || qty.trim() === "" || (Number.isInteger(qtyNum) && qtyNum > 0);
+  const valid = !!kind && origin.trim().length >= 2 && qtyOk && !!arrivedDate;
 
   function save() {
     if (!arrivedDate) return;
     setError(null);
     start(async () => {
-      const input = { kind, origin, reference, material, expectedQty: qtyNum, arrivedAtIso: arrivedDate.toISOString(), notes };
+      const input = { kind, origin, reference, material, expectedQty: canSeeInvoice && qty.trim() !== "" ? qtyNum : null, arrivedAtIso: arrivedDate.toISOString(), notes };
       const res = initial ? await updateDpvimAction(initial.id, input) : await createDpvimAction(input);
       if (!res.ok) {
         setError(res.error);
@@ -69,10 +71,10 @@ export function DpvimFormDialog({ initial, disabled, kinds }: { initial?: DpvimF
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>{initial ? "Editar DPVIM" : "Nova DPVIM"}</DialogTitle>
-          <DialogDescription>O prazo para rebater é de {DPVIM_DEADLINE_HOURS}h a partir da chegada. A quantidade é a que veio na nota; ao finalizar, a contagem é comparada com ela.</DialogDescription>
+          <DialogDescription>O prazo para rebater é de {DPVIM_DEADLINE_HOURS}h a partir da chegada.{canSeeInvoice ? " A quantidade da nota é comparada com a contagem ao finalizar." : ""}</DialogDescription>
         </DialogHeader>
         <DialogBody className="flex flex-col gap-4">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className={canSeeInvoice ? "grid grid-cols-1 gap-3 sm:grid-cols-2" : "grid grid-cols-1 gap-3"}>
             <FormField label="Tipo" required>
               <select value={kind} onChange={(e) => setKind(e.target.value)} className={field}>
                 <option value="">Escolher…</option>
@@ -85,9 +87,11 @@ export function DpvimFormDialog({ initial, disabled, kinds }: { initial?: DpvimF
                   ))}
               </select>
             </FormField>
-            <FormField label="Quantos itens (na nota)" required hint="O valor que o conferente lançou">
-              <Input value={qty} onChange={(e) => setQty(e.target.value)} inputMode="numeric" className="tabular-nums" />
-            </FormField>
+            {canSeeInvoice && (
+              <FormField label="Quantidade na nota" hint="Opcional: pode informar depois">
+                <Input value={qty} onChange={(e) => setQty(e.target.value)} inputMode="numeric" className="tabular-nums" />
+              </FormField>
+            )}
           </div>
           <FormField label="De onde veio" required hint="Ex.: cervejaria, fábrica">
             <Input value={origin} onChange={(e) => setOrigin(e.target.value)} maxLength={120} />

@@ -6,7 +6,7 @@ import { requireUser } from "@/server/auth/current-user";
 import * as userService from "@/server/services/user.service";
 import { ForbiddenError } from "@/server/auth/current-user";
 import { setUserNavWhitelist } from "@/server/services/nav-access.service";
-import { setDpvimLaunchGrant } from "@/server/services/dpvim.service";
+import { setDpvimInvoiceGrant, setDpvimLaunchGrant } from "@/server/services/dpvim.service";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -89,6 +89,7 @@ export async function createUserAction(_prev: ActionResult, formData: FormData) 
     });
     if (formData.get("navRestrict") === "1") await saveNavAccess(admin, created.id, formData);
     if (formData.get("canLaunchDpvim") === "1") await setDpvimLaunchGrant(admin, created.id, true);
+    if (formData.get("canSeeDpvimInvoice") === "1") await setDpvimInvoiceGrant(admin, created.id, true);
     revalidatePath("/usuarios");
   });
 }
@@ -121,6 +122,7 @@ export async function updateUserAction(_prev: ActionResult, formData: FormData) 
     });
     await saveNavAccess(admin, id, formData);
     await setDpvimLaunchGrant(admin, id, formData.get("canLaunchDpvim") === "1");
+    await setDpvimInvoiceGrant(admin, id, formData.get("canSeeDpvimInvoice") === "1");
     revalidatePath("/usuarios");
   });
 }

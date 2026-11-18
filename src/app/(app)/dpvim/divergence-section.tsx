@@ -21,11 +21,26 @@ export function DivergenceSection({ data, kinds }: { data: DpvimDivergenceSummar
         <CardTitle className="flex items-center gap-2">
           <Scale className="size-4" /> Divergências: nota × contagem
         </CardTitle>
-        <CardDescription>Quando a contagem final não bate com a quantidade da nota. Só entram as DPVIM que já foram finalizadas.</CardDescription>
+        <CardDescription>Quando a contagem final não bate com a quantidade da nota. Só entram as DPVIM já finalizadas e com a quantidade da nota informada.</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-6">
+        {data.awaitingInvoice.length > 0 && (
+          <div className="flex flex-col gap-2 rounded-lg border border-warning/40 bg-warning-soft/40 px-4 py-3">
+            <p className="text-sm font-semibold text-foreground">
+              {data.awaitingInvoice.length === 1 ? "1 DPVIM finalizada espera a quantidade da nota" : `${data.awaitingInvoice.length} DPVIM finalizadas esperam a quantidade da nota`}
+            </p>
+            <p className="text-xs text-foreground-subtle">Quem contou não vê a nota. Abra a DPVIM e informe a quantidade da nota para ela ser conferida.</p>
+            <div className="flex flex-wrap gap-2">
+              {data.awaitingInvoice.slice(0, 12).map((a) => (
+                <Link key={a.id} href={`/dpvim/${a.id}`} className="rounded-md border border-border bg-surface px-2.5 py-1 text-xs hover:bg-surface-muted">
+                  <strong className="text-accent">{a.code}</strong> · {a.origin} · contado {a.counted}
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
         {data.checked === 0 ? (
-          <p className="text-sm text-foreground-subtle">Ainda não há DPVIM finalizada nesse filtro para comparar com a nota.</p>
+          <p className="text-sm text-foreground-subtle">Ainda não há DPVIM finalizada e com a nota informada nesse filtro para conferir.</p>
         ) : data.withDivergence === 0 ? (
           <div className="flex items-center gap-3 rounded-lg border border-success/40 bg-success-soft px-4 py-3 text-sm text-success">
             <CheckCircle2 className="size-5 shrink-0" />

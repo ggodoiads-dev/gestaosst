@@ -1993,6 +1993,13 @@ model DpvimLaunchAccess {
   createdAt DateTime @default(now())
 }
 
+/// Usuários que podem ver a quantidade da NOTA da DPVIM e as divergências (saldo, falta, sobra). Quem lança só conta, sem ver a nota. Gestão e administrador já veem pelo perfil.
+/// Tabela isolada, sem chaves estrangeiras.
+model DpvimInvoiceAccess {
+  userId    String   @id
+  createdAt DateTime @default(now())
+}
+
 /// Uma vez que alguém abre a DPVIM e trabalha nela: quem, quando começou (com a foto), quando parou e quanto fez.
 model DpvimSession {
   id             String    @id @default(uuid())

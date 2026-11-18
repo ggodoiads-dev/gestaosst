@@ -209,6 +209,23 @@ function DpvimLaunchField({ initial }: { initial: boolean }) {
   );
 }
 
+/** "Vê a nota e as divergências da DPVIM?": quem lança só conta; só quem tem esse acesso vê a quantidade da nota, o saldo e as divergências. Vai no form como `canSeeDpvimInvoice`. */
+function DpvimInvoiceField({ initial, byRole }: { initial: boolean; byRole: boolean }) {
+  const [value, setValue] = useState(initial);
+  return (
+    <div className="flex flex-col gap-1 rounded-md border border-border p-3">
+      <input type="hidden" name="canSeeDpvimInvoice" value={value ? "1" : "0"} />
+      <label className="flex items-center gap-2 text-sm font-medium text-foreground">
+        <Checkbox checked={value || byRole} disabled={byRole} onCheckedChange={(v) => setValue(v === true)} />
+        Vê a nota e as divergências da DPVIM?
+      </label>
+      <p className="text-xs text-foreground-subtle">
+        {byRole ? "Administrador e gestor já veem pelo perfil. " : ""}Marcado: vê a quantidade da nota, o saldo e as divergências, e informa a quantidade da nota. Desmarcado: só conta, sem ver a nota.
+      </p>
+    </div>
+  );
+}
+
 /** Bloco "Faz chamada?" reaproveitado no criar e no editar — só aparece o checklist de área/turno
  * quando marcado, mas os hidden inputs de área/turno só vão junto do form se `canRollCall` for
  * true (senão a seleção anterior fica "fantasma" e volta a valer se o usuário marcar de novo). */
@@ -376,6 +393,7 @@ export function CreateUserDialog({ roles, units, areas, functions, turnos, colla
             </div>
             {roleId === auditorNav.roleId && <NavAccessPicker groups={auditorNav.groups} initial={[]} />}
             <DpvimLaunchField initial={false} />
+            <DpvimInvoiceField initial={false} byRole={roles.find((r) => r.id === roleId)?.key === "ADMINISTRADOR" || roles.find((r) => r.id === roleId)?.key === "GESTOR"} />
             <RollCallFields
               areas={areas}
               turnos={turnos}
@@ -408,7 +426,7 @@ type UserWithAreas = Omit<User, "passwordHash"> & { userAreas: { areaId: string 
   userRollCallCollaborators: { collaboratorId: string }[];
 };
 
-export function EditUserDialog({ user, roles, units, areas, functions, turnos, collaborators, auditorNav, navWhitelist, canLaunchDpvim }: FormProps & { user: UserWithAreas; navWhitelist: string[] | null; canLaunchDpvim: boolean }) {
+export function EditUserDialog({ user, roles, units, areas, functions, turnos, collaborators, auditorNav, navWhitelist, canLaunchDpvim, canSeeDpvimInvoice }: FormProps & { user: UserWithAreas; navWhitelist: string[] | null; canLaunchDpvim: boolean; canSeeDpvimInvoice: boolean }) {
   const [open, setOpen] = useState(false);
   const [state, formAction, pending] = useActionState(updateUserAction, initialState);
   useCloseOnSuccess(pending, state, () => setOpen(false));
@@ -526,6 +544,7 @@ export function EditUserDialog({ user, roles, units, areas, functions, turnos, c
               <NavAccessPicker groups={auditorNav.groups} initial={navWhitelist ?? auditorNav.groups.flatMap((g) => g.items.map((i) => i.href)).filter((h) => !isOptInHref(h))} />
             )}
             <DpvimLaunchField initial={canLaunchDpvim} />
+            <DpvimInvoiceField initial={canSeeDpvimInvoice} byRole={roles.find((r) => r.id === roleId)?.key === "ADMINISTRADOR" || roles.find((r) => r.id === roleId)?.key === "GESTOR"} />
             <RollCallFields
               areas={areas}
               turnos={turnos}

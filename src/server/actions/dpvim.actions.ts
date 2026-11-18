@@ -8,6 +8,7 @@ import {
   createDpvimKind,
   deleteDpvim,
   setDpvimCancelled,
+  setDpvimInvoiceQty,
   setDpvimKindActive,
   startDpvimSession,
   stopDpvimSession,
@@ -76,6 +77,13 @@ export async function stopDpvimSessionAction(sessionId: string, input: StopInput
 export async function deleteDpvimAction(id: string) {
   return run(async () => {
     await deleteDpvim(await requireUser(), id);
+    return {};
+  });
+}
+
+export async function setDpvimInvoiceQtyAction(id: string, qty: number) {
+  return run(async () => {
+    await setDpvimInvoiceQty(await requireUser(), id, qty);
     return {};
   });
 }

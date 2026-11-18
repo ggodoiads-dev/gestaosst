@@ -19,7 +19,8 @@ function toInt(v: string): number | null {
 }
 
 /** Parar a atividade: quantos itens foram feitos (e, se quiser, como ficaram: bons, transferência, descarte). */
-export function StopDpvimDialog({ sessionId, code, expectedLeft }: { sessionId: string; code: string; expectedLeft: number }) {
+/** `expectedLeft` = quanto falta para a nota; `null` quando quem está parando não vê a nota (aí não aparece nada disso). */
+export function StopDpvimDialog({ sessionId, code, expectedLeft }: { sessionId: string; code: string; expectedLeft: number | null }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
@@ -34,7 +35,7 @@ export function StopDpvimDialog({ sessionId, code, expectedLeft }: { sessionId: 
   const done = toInt(qtyDone);
   const valid = done !== null && Number.isInteger(done) && done >= 0;
   // Ao finalizar, o que foi contado é comparado com a nota: a diferença vira divergência no painel.
-  const balance = finish && valid && done !== null ? done - expectedLeft : 0;
+  const balance = finish && valid && done !== null && expectedLeft !== null ? done - expectedLeft : 0;
 
   function submit() {
     if (!valid || done === null) return;
@@ -67,10 +68,10 @@ export function StopDpvimDialog({ sessionId, code, expectedLeft }: { sessionId: 
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Parar {code}</DialogTitle>
-          <DialogDescription>Informe quanto vocês fizeram. Ainda faltam {expectedLeft} itens para a carga fechar.</DialogDescription>
+          <DialogDescription>{expectedLeft !== null ? `Informe quanto vocês fizeram. Ainda faltam ${expectedLeft} itens para a carga fechar.` : "Informe quantos itens vocês contaram nesta atividade."}</DialogDescription>
         </DialogHeader>
         <DialogBody className="flex flex-col gap-4">
-          <FormField label="Quantos itens foram feitos" required hint="Paletes, chapatex ou quadros selecionados nesta atividade">
+          <FormField label="Quantos itens foram contados" required hint="Paletes, chapatex ou quadros contados nesta atividade">
             <Input value={qtyDone} onChange={(e) => setQtyDone(e.target.value)} inputMode="numeric" placeholder="0" className="tabular-nums" />
           </FormField>
           <div className="grid grid-cols-3 gap-3">
