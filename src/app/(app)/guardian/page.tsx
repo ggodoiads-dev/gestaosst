@@ -11,7 +11,7 @@ import {
   listGuardianReportsOfMonth,
   listPendingGoldenRulesOutsideMonth,
 } from "@/server/services/guardian.service";
-import { clampPeriodToMonth, GOLDEN_RULE_OUTCOME_LABELS, parseDayKey, parseGroupFilter, type GuardianGroupFilter } from "@/domain/guardian/golden-rule";
+import { clampPeriodToMonth, goldenReviewLabel, parseDayKey, parseGroupFilter, type GuardianGroupFilter } from "@/domain/guardian/golden-rule";
 import { GUARDIAN_TYPE_LABELS } from "@/domain/guardian/labels";
 import { formatWallClockDateTime } from "@/lib/dates";
 import { cn } from "@/lib/utils";
@@ -221,7 +221,7 @@ export default async function GuardianPage({
                       {r.area && <span className="text-xs text-foreground-subtle">· {r.area}</span>}
                       <span className="ml-auto">
                         {r.goldenReview ? (
-                          <Badge tone={r.goldenReview.outcome === "APLICADO_MDT" ? "success" : "neutral"}>{GOLDEN_RULE_OUTCOME_LABELS[r.goldenReview.outcome]}</Badge>
+                          <Badge tone={r.goldenReview.outcome === "APLICADO_MDT" ? "success" : "neutral"}>{goldenReviewLabel(r.goldenReview.outcome, r.goldenReview.mdtStep)}</Badge>
                         ) : (
                           <Badge tone="danger">Pendente</Badge>
                         )}
@@ -534,7 +534,7 @@ export default async function GuardianPage({
                     canOpenProfile={canOpenProfiles}
                     isLeader={r.isLeader}
                     goldenRule={r.goldenRule}
-                    goldenStatus={r.goldenReview ? GOLDEN_RULE_OUTCOME_LABELS[r.goldenReview.outcome] : null}
+                    goldenStatus={r.goldenReview ? goldenReviewLabel(r.goldenReview.outcome, r.goldenReview.mdtStep) : null}
                   />
                 ))}
               </TableBody>

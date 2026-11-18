@@ -6,7 +6,7 @@ import { PERMISSIONS } from "@/domain/shared/permissions";
 import type { GuardianReportType } from "@/generated/prisma/enums";
 import { GUARDIAN_TYPE_LABELS } from "@/domain/guardian/labels";
 import { RISK_ACT_GOAL_PER_PERSON, type GoalPerson } from "@/domain/guardian/goal";
-import { isAdmTurno, isGoldenRule, isGuardianLeader, reportedPerson, type GoldenRuleOutcome } from "@/domain/guardian/golden-rule";
+import { isAdmTurno, isGoldenRule, isGuardianLeader, isMdtStep, reportedPerson, type GoldenRuleOutcome } from "@/domain/guardian/golden-rule";
 
 export { GUARDIAN_TYPE_LABELS };
 
@@ -369,7 +369,7 @@ export async function listGuardianReportsOfMonth(user: CurrentUser, month: strin
   });
 }
 
-export type GoldenRuleReview = { outcome: GoldenRuleOutcome; note: string | null; decidedByName: string; decidedAt: Date };
+export type GoldenRuleReview = { outcome: GoldenRuleOutcome; note: string | null; decidedByName: string; decidedAt: Date; /** Qual medida disciplinar (MDT) foi aplicada, quando informada. */ mdtStep: string | null };
 
 /** Conclusões já dadas aos relatos de Regra de Ouro. Leitura tolerante: sem a tabela no banco, tudo aparece como pendente. */
 async function loadGoldenReviews(guardianIds: string[]): Promise<Map<string, GoldenRuleReview>> {
@@ -377,9 +377,19 @@ async function loadGoldenReviews(guardianIds: string[]): Promise<Map<string, Gol
   if (guardianIds.length === 0) return map;
   try {
     const rows = await db.guardianGoldenRuleReview.findMany({ where: { guardianId: { in: guardianIds } } });
-    for (const r of rows) map.set(r.guardianId, { outcome: r.outcome as GoldenRuleOutcome, note: r.note, decidedByName: r.decidedByName, decidedAt: r.decidedAt });
+    for (const r of rows) map.set(r.guardianId, { outcome: r.outcome as GoldenRuleOutcome, note: r.note, decidedByName: r.decidedByName, decidedAt: r.decidedAt, mdtStep: null });
   } catch (error) {
     console.error("[guardian] conclusões de regra de ouro indisponíveis:", error);
+  }
+  // A medida aplicada fica em tabela à parte: se ela ainda não existe, as conclusões aparecem normalmente, só sem a medida.
+  try {
+    const mdt = await db.guardianGoldenRuleMdt.findMany({ where: { guardianId: { in: guardianIds } } });
+    for (const m of mdt) {
+      const r = map.get(m.guardianId);
+      if (r) r.mdtStep = m.step;
+    }
+  } catch (error) {
+    console.error("[guardian] medida (MDT) aplicada indisponível:", error);
   }
   return map;
 }
@@ -406,20 +416,28 @@ export async function listPendingGoldenRulesOutsideMonth(user: CurrentUser, mont
 }
 
 /** Conclui (ou reabre, com `outcome` nulo) um relato de Regra de Ouro: MDT aplicado ou desconsiderado. */
-export async function resolveGoldenRule(user: CurrentUser, guardianId: string, outcome: GoldenRuleOutcome | null, note: string | null) {
+export async function resolveGoldenRule(user: CurrentUser, guardianId: string, outcome: GoldenRuleOutcome | null, note: string | null, mdtStep: string | null = null) {
   if (!hasPermission(user, PERMISSIONS.GUARDIAN_MANAGE)) throw new ForbiddenError();
   const report = await db.guardianReport.findUnique({ where: { guardianId }, select: { raw: true } });
   if (!report || !isGoldenRule(report.raw)) throw new Error("Esse relato não é de Regra de Ouro.");
   if (outcome === null) {
     await db.guardianGoldenRuleReview.deleteMany({ where: { guardianId } });
+    await db.guardianGoldenRuleMdt.deleteMany({ where: { guardianId } }).catch(() => undefined);
     return;
   }
+  // "Aplicado MDT" exige dizer qual medida disciplinar foi aplicada.
+  if (outcome === "APLICADO_MDT" && !(mdtStep && isMdtStep(mdtStep))) throw new Error("Escolha qual MDT foi aplicado.");
   const cleanNote = note?.trim() ? note.trim().slice(0, 500) : null;
   await db.guardianGoldenRuleReview.upsert({
     where: { guardianId },
     create: { guardianId, outcome, note: cleanNote, decidedById: user.id, decidedByName: user.name },
     update: { outcome, note: cleanNote, decidedById: user.id, decidedByName: user.name, decidedAt: new Date() },
   });
+  if (outcome === "APLICADO_MDT" && mdtStep) {
+    await db.guardianGoldenRuleMdt.upsert({ where: { guardianId }, create: { guardianId, step: mdtStep }, update: { step: mdtStep } });
+  } else {
+    await db.guardianGoldenRuleMdt.deleteMany({ where: { guardianId } }).catch(() => undefined);
+  }
 }
 
 /** Cargos que existem no turno ADM (hoje, entre os ativos) e se cada um é operação (fora da liderança). `configured` falso = ainda é a sugestão automática. */

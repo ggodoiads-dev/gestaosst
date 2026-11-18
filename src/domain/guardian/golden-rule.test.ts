@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { clampPeriodToMonth, isGoldenRule, isAdmTurno, isGuardianLeader, parseDayKey, reportedPerson } from "./golden-rule";
+import { clampPeriodToMonth, isGoldenRule, isAdmTurno, isGuardianLeader, parseDayKey, reportedPerson, goldenReviewLabel, isMdtStep } from "./golden-rule";
 
 describe("isGoldenRule", () => {
   it("só 'Sim' conta (qualquer caixa/acento), vazio e 'Não' não", () => {
@@ -52,5 +52,18 @@ describe("período", () => {
     expect(clampPeriodToMonth("2026-11", "2026-10-20", "2026-12-10")).toEqual({ from: "2026-11-01", to: "2026-11-30" });
     expect(clampPeriodToMonth("2026-11", "2026-12-02", "2026-12-10")).toBeNull();
     expect(clampPeriodToMonth("2026-11", "2026-11-20", null)).toEqual({ from: "2026-11-20", to: "2026-11-30" });
+  });
+});
+
+describe("MDT aplicado", () => {
+  it("só aceita medidas da escada disciplinar", () => {
+    expect(isMdtStep("ADV_VERBAL")).toBe(true);
+    expect(isMdtStep("SUSPENSAO_1")).toBe(true);
+    expect(isMdtStep("QUALQUER")).toBe(false);
+  });
+  it("rótulo mostra a medida só quando foi aplicada", () => {
+    expect(goldenReviewLabel("APLICADO_MDT", "ADV_VERBAL")).toBe("Aplicado MDT · Advertência verbal");
+    expect(goldenReviewLabel("APLICADO_MDT", null)).toBe("Aplicado MDT");
+    expect(goldenReviewLabel("DESCONSIDERADO", "ADV_VERBAL")).toBe("Desconsiderado");
   });
 });

@@ -1897,6 +1897,13 @@ model GuardianGoldenRuleReview {
   decidedAt     DateTime @default(now())
 }
 
+/// Qual medida disciplinar (MDT) foi aplicada quando um relato de Regra de Ouro é concluído como APLICADO_MDT. `step` é uma chave da escada disciplinar (DTO_1, ADV_VERBAL, SUSPENSAO_1...).
+/// Tabela à parte da GuardianGoldenRuleReview de propósito: sem ela, o resto do Guardian segue funcionando normalmente. Sem chaves estrangeiras.
+model GuardianGoldenRuleMdt {
+  guardianId String @id
+  step       String
+}
+
 /// Quais funções (cargos) contam como liderança na adesão do Guardian. Uma linha só ("default"); sem linha vale a sugestão por nome do cargo.
 model GuardianLeadershipConfig {
   id          String   @id

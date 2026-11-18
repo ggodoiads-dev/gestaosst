@@ -24,14 +24,16 @@ export async function resolveGoldenRuleAction(
   guardianId: string,
   outcome: GoldenRuleOutcome | null,
   note: string | null,
+  mdtStep: string | null = null,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
     const user = await requireUser();
-    await resolveGoldenRule(user, guardianId, outcome, note);
+    await resolveGoldenRule(user, guardianId, outcome, note, mdtStep);
     revalidatePath("/guardian");
     return { ok: true };
   } catch (error) {
     if (error instanceof ForbiddenError) return { ok: false, error: error.message };
+    if (error instanceof Error && error.message.startsWith("Escolha")) return { ok: false, error: error.message };
     console.error("[guardian] falha ao concluir regra de ouro:", error);
     return { ok: false, error: "Não foi possível salvar. Se a atualização do banco do Guardian ainda não foi feita, ela precisa ser aplicada primeiro." };
   }

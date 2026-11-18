@@ -1,6 +1,19 @@
 /** Tudo que o SIGO sabe sobre "Regra de Ouro" e "liderança" no Guardian, sem acesso a banco (testável). */
 
+import { DISCIPLINE_STEPS, disciplineStepLabel } from "@/domain/discipline/ladder";
+
 export type GoldenRuleOutcome = "APLICADO_MDT" | "DESCONSIDERADO";
+
+/** As medidas disciplinares (MDT) que dá para escolher ao concluir um relato como "Aplicado MDT". */
+export const MDT_STEP_OPTIONS = DISCIPLINE_STEPS.map((s) => ({ key: s.key as string, label: s.label }));
+
+export const isMdtStep = (key: string): boolean => MDT_STEP_OPTIONS.some((o) => o.key === key);
+
+/** "Aplicado MDT · Advertência verbal" (a medida só aparece quando foi informada). */
+export function goldenReviewLabel(outcome: GoldenRuleOutcome, mdtStep: string | null | undefined): string {
+  const base = outcome === "APLICADO_MDT" ? "Aplicado MDT" : "Desconsiderado";
+  return outcome === "APLICADO_MDT" && mdtStep ? `${base} · ${disciplineStepLabel(mdtStep)}` : base;
+}
 
 export const GOLDEN_RULE_OUTCOME_LABELS: Record<GoldenRuleOutcome, string> = {
   APLICADO_MDT: "Aplicado MDT",
