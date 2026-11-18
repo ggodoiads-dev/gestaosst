@@ -1033,3 +1033,134 @@ export async function deleteDpvim(user: CurrentUser, id: string) {
   for (const s of sessions) await deleteStoredFile(s.startPhotoPath);
   await recordAudit({ userId: user.id, action: "CANCEL", entityType: "Dpvim", entityId: id, previousValue: { code: before.code, kind: before.kind, origin: before.origin, expectedQty: before.expectedQty, doneQty: before.doneQty, sessions: sessions.length } });
 }
+
+export type DpvimTimelineEvent = { at: Date; text: string; by: string | null; href: string | null; tone: "neutral" | "success" | "danger" | "warning" | "accent" };
+
+export type DpvimSupplierDetail = {
+  supplier: DpvimSupplierOption & { createdAt: Date; createdBy: string | null };
+  stats: { total: number; open: number; late: number; concluded: number; onTimeRate: number | null; avgLeadHours: number | null };
+  canSeeInvoice: boolean;
+  /** Saldo por produto somando todas as DPVIM do fornecedor (só para quem vê a nota). Negativo = faltam, positivo = sobram. */
+  balance: { kind: string; balance: number }[] | null;
+  /** DPVIM ainda sem a nota de algum produto (só para quem vê a nota). */
+  awaitingInvoice: number;
+  rows: (DpvimRow & { createdByName: string })[];
+  timeline: DpvimTimelineEvent[];
+  kinds: DpvimKindOption[];
+};
+
+function parseJson(v: string | null): Record<string, unknown> | null {
+  if (!v) return null;
+  try {
+    const parsed = JSON.parse(v);
+    return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** A ficha de um fornecedor: cadastro, números, todas as DPVIM dele e a linha do tempo (quem cadastrou, editou, uniu, abriu, finalizou e lançou a nota). Só gestão. */
+export async function getDpvimSupplierDetail(user: CurrentUser, id: string): Promise<DpvimSupplierDetail | null> {
+  if (!canManageDpvim(user)) throw new ForbiddenError();
+  const sup = await db.dpvimSupplier.findUnique({ where: { id } });
+  if (!sup) return null;
+  const label = supplierLabel(sup.name, sup.unit);
+  const key = originGroupKey(label);
+  const showInvoice = await canSeeDpvimInvoice(user);
+  const { kinds } = await listDpvimKinds();
+  const kindName = (k: string) => dpvimKindLabel(k, kinds);
+
+  const all = await db.dpvim.findMany({ orderBy: { arrivedAt: "desc" } });
+  const mine = all.filter((d) => originGroupKey(d.origin) === key);
+  const ids = mine.map((d) => d.id);
+  const sessions = ids.length > 0 ? await db.dpvimSession.findMany({ where: { dpvimId: { in: ids } }, orderBy: { startedAt: "desc" } }) : [];
+  const itemData = await loadItemData(ids, showInvoice);
+  const now = new Date();
+  const rows = mine.map((d) => ({ ...toRow(d, sessions, now, itemData), createdByName: d.createdByName }));
+
+  const active = rows.filter((r) => r.status !== "CANCELADA");
+  const doneRows = active.filter((r) => r.status === "CONCLUIDA");
+  const onTime = doneRows.filter((r) => r.situation === "CONCLUIDA_NO_PRAZO").length;
+  const leads = doneRows.filter((r) => r.finishedAt).map((r) => (r.finishedAt!.getTime() - r.arrivedAt.getTime()) / 3600000);
+
+  let balance: DpvimSupplierDetail["balance"] = null;
+  if (showInvoice) {
+    const per = new Map<string, number>();
+    for (const r of active) for (const l of r.lines) if (l.balance !== null) per.set(l.kind, (per.get(l.kind) ?? 0) + l.balance);
+    balance = [...per.entries()].map(([kind, b]) => ({ kind, balance: b }));
+  }
+
+  // Linha do tempo: o que aconteceu com o cadastro do fornecedor (log de auditoria) e com as DPVIM dele.
+  const audits = await db.auditLog
+    .findMany({
+      where: { entityType: "DpvimSupplier", OR: [{ entityId: id }, { newValue: { contains: `"mergedInto":"${id}"` } }] },
+      orderBy: { occurredAt: "desc" },
+      include: { user: { select: { name: true } } },
+      take: 100,
+    })
+    .catch(() => []);
+  const timeline: DpvimTimelineEvent[] = [];
+  let createdBy: string | null = null;
+  for (const a of audits) {
+    const prev = parseJson(a.previousValue);
+    const next = parseJson(a.newValue);
+    const by = a.user?.name ?? null;
+    if (a.action === "CREATE" && a.entityId === id) {
+      createdBy = by;
+      timeline.push({ at: a.occurredAt, text: "Fornecedor cadastrado", by, href: null, tone: "accent" });
+    } else if (next && "mergedInto" in next) {
+      const moved = typeof next.moved === "number" ? next.moved : 0;
+      timeline.push({ at: a.occurredAt, text: `Unido a este fornecedor: ${prev && typeof prev.name === "string" ? supplierLabel(prev.name, typeof prev.unit === "string" ? prev.unit : null) : "outro cadastro"} (${moved} DPVIM passaram para cá)`, by, href: null, tone: "warning" });
+    } else if (next && "active" in next) {
+      timeline.push({ at: a.occurredAt, text: next.active ? "Fornecedor reativado" : "Fornecedor desativado", by, href: null, tone: next.active ? "success" : "neutral" });
+    } else if (prev && next && typeof prev.name === "string" && typeof next.name === "string") {
+      const from = supplierLabel(prev.name, typeof prev.unit === "string" ? prev.unit : null);
+      const to = supplierLabel(next.name, typeof next.unit === "string" ? next.unit : null);
+      timeline.push({ at: a.occurredAt, text: `Nome alterado de "${from}" para "${to}"`, by, href: null, tone: "neutral" });
+    }
+  }
+  if (!audits.some((a) => a.action === "CREATE" && a.entityId === id)) timeline.push({ at: sup.createdAt, text: "Fornecedor cadastrado", by: null, href: null, tone: "accent" });
+
+  for (const d of mine) {
+    const r = rows.find((x) => x.id === d.id)!;
+    const href = `/dpvim/${d.id}`;
+    timeline.push({ at: d.createdAt, text: `${d.code} cadastrada (${r.lines.map((l) => `${kindName(l.kind)} ${l.expected}`).join(" + ")})`, by: d.createdByName, href, tone: "neutral" });
+    for (const s of sessions.filter((x) => x.dpvimId === d.id)) {
+      timeline.push({ at: s.startedAt, text: `${d.code} aberta${s.partnerName ? ` (dupla: ${s.partnerName})` : ""}`, by: s.workerName, href, tone: "accent" });
+    }
+    if (d.finishedAt && d.status === "CONCLUIDA") {
+      timeline.push({ at: d.finishedAt, text: `${d.code} finalizada ${r.situation === "CONCLUIDA_ATRASADA" ? "com atraso" : "no prazo"} (${d.doneQty} contados)`, by: null, href, tone: r.situation === "CONCLUIDA_ATRASADA" ? "danger" : "success" });
+    }
+  }
+  if (showInvoice && ids.length > 0) {
+    const invoices = await db.dpvimItemInvoice.findMany({ where: { dpvimId: { in: ids } } }).catch(() => []);
+    const latest = new Map<string, (typeof invoices)[number]>();
+    for (const i of invoices) {
+      const cur = latest.get(i.dpvimId);
+      if (!cur || i.updatedAt > cur.updatedAt) latest.set(i.dpvimId, i);
+    }
+    for (const [dpvimId, i] of latest) {
+      const d = mine.find((x) => x.id === dpvimId);
+      if (d) timeline.push({ at: i.updatedAt, text: `Quantidade da nota lançada em ${d.code}`, by: i.updatedByName, href: `/dpvim/${dpvimId}`, tone: "accent" });
+    }
+  }
+  timeline.sort((a, b) => b.at.getTime() - a.at.getTime());
+
+  return {
+    supplier: { id: sup.id, name: sup.name, unit: sup.unit, label, active: sup.active, createdAt: sup.createdAt, createdBy },
+    stats: {
+      total: active.length,
+      open: active.filter((r) => r.status === "ABERTA" || r.status === "EM_ANDAMENTO").length,
+      late: active.filter((r) => r.situation === "ATRASADA").length,
+      concluded: doneRows.length,
+      onTimeRate: doneRows.length > 0 ? Math.round((onTime / doneRows.length) * 100) : null,
+      avgLeadHours: leads.length > 0 ? leads.reduce((sum, h) => sum + h, 0) / leads.length : null,
+    },
+    canSeeInvoice: showInvoice,
+    balance,
+    awaitingInvoice: showInvoice ? active.filter((r) => r.lines.some((l) => l.invoice === null)).length : 0,
+    rows,
+    timeline: timeline.slice(0, 80),
+    kinds,
+  };
+}

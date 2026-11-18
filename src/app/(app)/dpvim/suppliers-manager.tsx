@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -92,12 +93,16 @@ function SupplierRow({ s, all, busy, run }: { s: DpvimSupplierOverview; all: Dpv
   return (
     <li className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm">
       <span className="flex min-w-0 flex-col">
-        <span className={s.active ? "font-medium text-foreground" : "font-medium text-foreground-subtle line-through"}>{s.label}</span>
+        <Link href={`/dpvim/fornecedores/${s.id}`} className={s.active ? "font-medium text-accent hover:underline" : "font-medium text-foreground-subtle line-through hover:underline"}>
+          {s.label}
+        </Link>
         <span className="text-xs text-foreground-subtle">
           {s.total === 0 ? "Nenhuma DPVIM ainda" : `${s.total} DPVIM`}
           {s.open > 0 ? ` · ${s.open} em aberto` : ""}
           {s.late > 0 ? <strong className="text-danger"> · {s.late} atrasada(s)</strong> : null}
           {s.lastArrivedAt ? ` · última chegada ${formatDateTime(s.lastArrivedAt)}` : ""}
+          {" · "}
+          <span className="text-accent">ver histórico</span>
         </span>
       </span>
       <span className="flex shrink-0 items-center gap-1">
