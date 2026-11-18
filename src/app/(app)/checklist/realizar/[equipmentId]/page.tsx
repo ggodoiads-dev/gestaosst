@@ -9,12 +9,15 @@ import { ChecklistRunner, type RunnerAnswer, type RunnerQuestion } from "./check
 
 export default async function RealizarChecklistEquipamentoPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ equipmentId: string }>;
+  searchParams: Promise<{ template?: string }>;
 }) {
   const { equipmentId } = await params;
+  const { template: templateId } = await searchParams;
   const user = await requireUser();
-  const ctx = await getExecutionContext(user, equipmentId);
+  const ctx = await getExecutionContext(user, equipmentId, templateId);
 
   if (ctx.blocked) {
     return (

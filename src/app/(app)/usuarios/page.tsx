@@ -7,6 +7,7 @@ import { listCollaboratorsForUser } from "@/server/services/collaborator.service
 import { listTurnosForSelect } from "@/server/services/schedule.service";
 import { listNavWhitelists, listSelectableNavGroups } from "@/server/services/nav-access.service";
 import { listDpvimInvoiceGrants, listDpvimLaunchGrants } from "@/server/services/dpvim.service";
+import { listAllChecklistGrants, listGrantableTemplates } from "@/server/services/checklist-grant.service";
 import { PageHeader, PageBody } from "@/components/domain/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -31,7 +32,7 @@ export default async function UsuariosPage({ searchParams }: { searchParams: Pro
   const user = await requireUser();
   requirePermission(user, PERMISSIONS.USER_MANAGE);
 
-  const [allUsers, roles, units, areas, functions, turnos, activeCollaborators, auditorGroups, navWhitelists, dpvimGrants, dpvimInvoiceGrants] = await Promise.all([
+  const [allUsers, roles, units, areas, functions, turnos, activeCollaborators, auditorGroups, navWhitelists, dpvimGrants, dpvimInvoiceGrants, checklistGrants, grantableTemplates] = await Promise.all([
     listUsers(),
     listRoles(),
     listUnits(),
@@ -43,6 +44,8 @@ export default async function UsuariosPage({ searchParams }: { searchParams: Pro
     listNavWhitelists(),
     listDpvimLaunchGrants(),
     listDpvimInvoiceGrants(),
+    listAllChecklistGrants(),
+    listGrantableTemplates(),
   ]);
   const auditorNav = { roleId: roles.find((r) => r.key === "AUDITOR")?.id ?? "", groups: auditorGroups };
   const collaboratorOptions = activeCollaborators.map((c) => ({ id: c.id, name: c.name, areaName: c.area?.name ?? null }));
@@ -81,7 +84,7 @@ export default async function UsuariosPage({ searchParams }: { searchParams: Pro
                 ))}
               </div>
             </div>
-            <CreateUserDialog roles={roles} units={units} areas={areas} functions={functions} turnos={turnos} collaborators={collaboratorOptions} auditorNav={auditorNav} />
+            <CreateUserDialog roles={roles} units={units} areas={areas} functions={functions} turnos={turnos} collaborators={collaboratorOptions} auditorNav={auditorNav} checklistTemplates={grantableTemplates} />
           </CardHeader>
           <CardContent className="p-0">
             <Table>
@@ -95,13 +98,14 @@ export default async function UsuariosPage({ searchParams }: { searchParams: Pro
                   <TableHead>Chamada</TableHead>
                   <TableHead>Lança DPVIM</TableHead>
                   <TableHead>Vê a nota</TableHead>
+                  <TableHead>Checks extras</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Último acesso</TableHead>
                   <TableHead className="w-20" />
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {users.length === 0 && <TableEmpty colSpan={11} />}
+                {users.length === 0 && <TableEmpty colSpan={12} />}
                 {users.map((u) => (
                   <TableRow key={u.id} className={!u.active ? "opacity-60" : undefined}>
                     <TableCell>{u.name}</TableCell>
@@ -131,13 +135,14 @@ export default async function UsuariosPage({ searchParams }: { searchParams: Pro
                     </TableCell>
                     <TableCell className="text-foreground-subtle">{dpvimGrants.has(u.id) ? "Sim" : "—"}</TableCell>
                     <TableCell className="text-foreground-subtle">{dpvimInvoiceGrants.has(u.id) || u.role.key === "ADMINISTRADOR" || u.role.key === "GESTOR" ? "Sim" : "—"}</TableCell>
+                    <TableCell className="text-foreground-subtle">{(checklistGrants[u.id]?.length ?? 0) > 0 ? checklistGrants[u.id].length : "—"}</TableCell>
                     <TableCell>
                       <Badge tone={u.active ? "success" : "neutral"}>{u.active ? "Ativo" : "Excluído"}</Badge>
                     </TableCell>
                     <TableCell className="text-foreground-subtle">{formatDateTime(u.lastLoginAt)}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
-                        <EditUserDialog user={u} roles={roles} units={units} areas={areas} functions={functions} turnos={turnos} collaborators={collaboratorOptions} auditorNav={auditorNav} navWhitelist={navWhitelists[u.id] ?? null} canLaunchDpvim={dpvimGrants.has(u.id)} canSeeDpvimInvoice={dpvimInvoiceGrants.has(u.id)} />
+                        <EditUserDialog user={u} roles={roles} units={units} areas={areas} functions={functions} turnos={turnos} collaborators={collaboratorOptions} auditorNav={auditorNav} navWhitelist={navWhitelists[u.id] ?? null} canLaunchDpvim={dpvimGrants.has(u.id)} canSeeDpvimInvoice={dpvimInvoiceGrants.has(u.id)} checklistTemplates={grantableTemplates} grantedTemplateIds={checklistGrants[u.id] ?? []} />
                         <ResetPasswordDialog userId={u.id} userName={u.name} />
                         {u.active ? (
                           <SoftDeleteButton

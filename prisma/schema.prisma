@@ -1874,6 +1874,16 @@ model AccidentInvolvedPerson {
   @@index([accidentId])
 }
 
+/// Checklists que um usuário PODE realizar além dos que já aparecem pela área e pelo cargo dele (ex.: amarradores que ajudam na reforma de bulk).
+/// É só liberação: não vira cobrança nem entra nos indicadores dele. Sem relação com User de propósito: nenhuma consulta existente de usuário passa a depender desta tabela.
+model UserChecklistGrant {
+  userId     String
+  templateId String
+
+  @@id([userId, templateId])
+  @@index([userId])
+}
+
 /// Abas do menu que um usuário restrito (perfil Auditor) pode ver. Sem linhas = sem restrição. `href` é o caminho do item do menu (ex.: "/financeiro/dre").
 /// Sem relação com User de propósito: nenhuma consulta existente de usuário passa a depender desta tabela.
 model UserNavAccess {

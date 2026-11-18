@@ -28,6 +28,7 @@ import { isOptInHref } from "@/domain/shared/nav-access";
 import type { SelectableNavGroup } from "@/server/services/nav-access.service";
 import { ROLE_LABELS, type RoleKeyValue } from "@/domain/shared/permissions";
 import type { Area, JobFunction, Role, Unit, User } from "@/generated/prisma/client";
+import type { GrantableTemplate } from "@/server/services/checklist-grant.service";
 
 const initialState: ActionResult = { ok: true };
 
@@ -44,6 +45,8 @@ type FormProps = {
   collaborators: CollaboratorOption[];
   /** Abas que o perfil Auditor enxerga (para marcar o que cada auditor pode ver) e o id do perfil. */
   auditorNav: { roleId: string; groups: SelectableNavGroup[] };
+  /** Checklists publicados que dá para liberar em "Qual check pode realizar?". */
+  checklistTemplates: GrantableTemplate[];
 };
 
 /** Escolha, pessoa por pessoa, de quem o usuário faz a chamada (presença/falta). Guarda a própria
@@ -194,6 +197,54 @@ function TurnoChecklist({
   );
 }
 
+/**
+ * "Qual check pode realizar?": checklists que o usuário pode fazer além dos que já vê pela área e pelo cargo (ex.: amarradores que ajudam na reforma de bulk).
+ * Só libera: não vira cobrança. Os marcados vão no form como `grantedTemplateIds`.
+ */
+function ChecklistGrantField({ templates, initial }: { templates: GrantableTemplate[]; initial: string[] }) {
+  const [selected, setSelected] = useState<Set<string>>(new Set(initial));
+  const [query, setQuery] = useState("");
+  const shown = templates.filter((t) => {
+    const q = query.trim().toLowerCase();
+    return q === "" || selected.has(t.id) || t.name.toLowerCase().includes(q) || (t.areaName ?? "").toLowerCase().includes(q);
+  });
+  function toggle(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+  return (
+    <div className="flex flex-col gap-2 rounded-md border border-border p-3">
+      {[...selected].map((id) => (
+        <input key={id} type="hidden" name="grantedTemplateIds" value={id} />
+      ))}
+      <div className="flex items-center justify-between gap-2">
+        <Label>Qual check pode realizar?</Label>
+        <span className="text-xs text-foreground-subtle">{selected.size} liberado(s)</span>
+      </div>
+      <p className="text-xs text-foreground-subtle">
+        Além dos checklists da área e do cargo dele. Só libera (aparece em Realizar Checklist, com a etiqueta &ldquo;Liberado para você&rdquo;): não vira cobrança nem entra nos indicadores. O perfil precisa poder realizar checklist.
+      </p>
+      {templates.length > 6 && <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar checklist…" className="h-8 text-xs" />}
+      <div className="flex max-h-44 flex-col gap-1 overflow-y-auto">
+        {templates.length === 0 && <p className="text-xs text-foreground-subtle">Nenhum checklist publicado.</p>}
+        {shown.map((t) => (
+          <label key={t.id} className="flex cursor-pointer items-start gap-2 text-sm text-foreground">
+            <Checkbox checked={selected.has(t.id)} onCheckedChange={() => toggle(t.id)} className="mt-0.5" />
+            <span>
+              {t.name}
+              <span className="text-xs text-foreground-subtle">{t.scope === "AREA" ? ` · checklist de área${t.areaName ? ` (${t.areaName})` : ""}` : " · por equipamento"}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /** "Pode lançar DPVIM?": libera o usuário (de qualquer perfil, inclusive o Auditor) a cadastrar, editar e cancelar DPVIM. Vai no form como `canLaunchDpvim`. */
 function DpvimLaunchField({ initial }: { initial: boolean }) {
   const [value, setValue] = useState(initial);
@@ -283,7 +334,7 @@ function RollCallFields({
   );
 }
 
-export function CreateUserDialog({ roles, units, areas, functions, turnos, collaborators, auditorNav }: FormProps) {
+export function CreateUserDialog({ roles, units, areas, functions, turnos, collaborators, auditorNav, checklistTemplates }: FormProps) {
   const [open, setOpen] = useState(false);
   const [state, formAction, pending] = useActionState(createUserAction, initialState);
   useCloseOnSuccess(pending, state, () => setOpen(false));
@@ -392,6 +443,7 @@ export function CreateUserDialog({ roles, units, areas, functions, turnos, colla
               <FunctionChecklist functions={functions} selected={selectedFunctions} onToggle={toggleFunction} />
             </div>
             {roleId === auditorNav.roleId && <NavAccessPicker groups={auditorNav.groups} initial={[]} />}
+            <ChecklistGrantField templates={checklistTemplates} initial={[]} />
             <DpvimLaunchField initial={false} />
             <DpvimInvoiceField initial={false} byRole={roles.find((r) => r.id === roleId)?.key === "ADMINISTRADOR" || roles.find((r) => r.id === roleId)?.key === "GESTOR"} />
             <RollCallFields
@@ -426,7 +478,7 @@ type UserWithAreas = Omit<User, "passwordHash"> & { userAreas: { areaId: string 
   userRollCallCollaborators: { collaboratorId: string }[];
 };
 
-export function EditUserDialog({ user, roles, units, areas, functions, turnos, collaborators, auditorNav, navWhitelist, canLaunchDpvim, canSeeDpvimInvoice }: FormProps & { user: UserWithAreas; navWhitelist: string[] | null; canLaunchDpvim: boolean; canSeeDpvimInvoice: boolean }) {
+export function EditUserDialog({ user, roles, units, areas, functions, turnos, collaborators, auditorNav, navWhitelist, canLaunchDpvim, canSeeDpvimInvoice, checklistTemplates, grantedTemplateIds }: FormProps & { user: UserWithAreas; navWhitelist: string[] | null; canLaunchDpvim: boolean; canSeeDpvimInvoice: boolean; grantedTemplateIds: string[] }) {
   const [open, setOpen] = useState(false);
   const [state, formAction, pending] = useActionState(updateUserAction, initialState);
   useCloseOnSuccess(pending, state, () => setOpen(false));
@@ -543,6 +595,7 @@ export function EditUserDialog({ user, roles, units, areas, functions, turnos, c
             {roleId === auditorNav.roleId && (
               <NavAccessPicker groups={auditorNav.groups} initial={navWhitelist ?? auditorNav.groups.flatMap((g) => g.items.map((i) => i.href)).filter((h) => !isOptInHref(h))} />
             )}
+            <ChecklistGrantField templates={checklistTemplates} initial={grantedTemplateIds} />
             <DpvimLaunchField initial={canLaunchDpvim} />
             <DpvimInvoiceField initial={canSeeDpvimInvoice} byRole={roles.find((r) => r.id === roleId)?.key === "ADMINISTRADOR" || roles.find((r) => r.id === roleId)?.key === "GESTOR"} />
             <RollCallFields

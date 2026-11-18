@@ -44,7 +44,7 @@ export default async function RealizarChecklistPage({
   requirePermission(user, PERMISSIONS.CHECKLIST_EXECUTE);
   const { area: selectedAreaId } = await searchParams;
   // Checklist é por pessoa: aqui conta só o que EU concluí hoje, não o que outras pessoas fizeram.
-  const board = await listChecklistBoardForUser(user, { mine: true });
+  const board = await listChecklistBoardForUser(user, { mine: true, includeGranted: true });
 
   const equipmentItems = board.filter(isEquipmentItem);
   const areaChecklistItems = board.filter(isAreaItem);
@@ -159,6 +159,7 @@ export default async function RealizarChecklistPage({
                   <span className="text-sm font-medium text-foreground flex items-center gap-1.5">
                     <ClipboardList className="size-4 text-accent" />
                     {areaChecklist.templateName}
+                    {areaChecklist.granted && <Badge tone="info">Liberado para você</Badge>}
                   </span>
                   <span className="text-xs text-foreground-subtle">
                     {areaChecklist.completedTodayCount} de {areaChecklist.totalCount} equipamentos concluídos hoje
@@ -188,6 +189,7 @@ export default async function RealizarChecklistPage({
                     ) : (
                       <>
                         {item.templateName}
+                        {item.granted && <Badge tone="info" className="ml-1">Liberado para você</Badge>}
                         {item.scheduledFor && (
                           <>
                             <span className="mx-1">·</span>
@@ -221,7 +223,7 @@ export default async function RealizarChecklistPage({
             return (
               <Link
                 key={item.equipment.id}
-                href={`/checklist/realizar/${item.equipment.id}`}
+                href={`/checklist/realizar/${item.equipment.id}?template=${item.templateId}`}
                 className="flex items-center justify-between gap-3 px-4 py-3.5 hover:bg-surface-muted transition-colors"
               >
                 {content}

@@ -6,6 +6,7 @@ import { recordEquipmentEvent } from "@/server/services/equipment-events";
 import { nextFriendlyCode } from "@/server/services/sequence";
 import type { CurrentUser } from "@/server/auth/current-user";
 import { requirePermission, requireAreaAccess, ForbiddenError } from "@/server/auth/current-user";
+import { listUserChecklistGrants } from "@/server/services/checklist-grant.service";
 import { PERMISSIONS } from "@/domain/shared/permissions";
 import { startOfTodayInAppTimezone } from "@/lib/dates";
 import { evaluateChecklist, type AnswerInput, type QuestionInput } from "@/domain/checklist/rule-engine";
@@ -22,6 +23,8 @@ export type ChecklistBoardEquipmentItem = {
   situation: "REALIZADO" | "EM_ANDAMENTO" | "ATRASADO" | "PENDENTE" | "BLOQUEADO";
   completedAt: Date | null;
   inProgressExecutionId: string | null;
+  /** Veio da liberação "Qual check pode realizar?" (não é da área nem do cargo da pessoa). Só preenchido com `includeGranted`. */
+  granted?: boolean;
 };
 
 export type ChecklistBoardAreaItem = {
@@ -34,7 +37,18 @@ export type ChecklistBoardAreaItem = {
   completedTodayCount: number;
   /** Equipamentos do checklist de área que estão bloqueados e por isso não entram no previsto. */
   blockedCount: number;
+  granted?: boolean;
 };
+
+/** Passa se a pessoa tem acesso à área, ou se o checklist pedido foi liberado para ela ("Qual check pode realizar?"). */
+async function requireAreaOrGrant(user: CurrentUser, areaId: string, templateId?: string) {
+  try {
+    requireAreaAccess(user, areaId, PERMISSIONS.EQUIPMENT_VIEW_ALL_AREAS);
+  } catch (error) {
+    if (error instanceof ForbiddenError && templateId && (await listUserChecklistGrants(user.id)).has(templateId)) return;
+    throw error;
+  }
+}
 
 export type ChecklistBoardItem = ChecklistBoardEquipmentItem | ChecklistBoardAreaItem;
 
@@ -47,7 +61,7 @@ export type ChecklistBoardItem = ChecklistBoardEquipmentItem | ChecklistBoardAre
  */
 export async function listChecklistBoardForUser(
   user: CurrentUser,
-  filters: { areaId?: string; /** Só o que EU fiz/estou fazendo hoje (checklist é por pessoa) — pra tela de quem executa. Sem isso, conta o que qualquer pessoa fez (visão de supervisão). */ mine?: boolean } = {},
+  filters: { areaId?: string; /** Inclui os checklists liberados em "Qual check pode realizar?" — só a tela de quem executa pede (não entram em indicadores nem na cobrança). */ includeGranted?: boolean; /** Só o que EU fiz/estou fazendo hoje (checklist é por pessoa) — pra tela de quem executa. Sem isso, conta o que qualquer pessoa fez (visão de supervisão). */ mine?: boolean } = {},
 ): Promise<ChecklistBoardItem[]> {
   // Só lista a situação do dia — também alimenta os indicadores e o início, que perfis só-leitura
   // (Auditor) precisam abrir. Iniciar/responder um checklist continua exigindo CHECKLIST_EXECUTE
@@ -73,11 +87,14 @@ export async function listChecklistBoardForUser(
   });
   const requiredTemplateIds = new Set(collaborator?.function?.requiredChecklists.map((r) => r.templateId) ?? []);
 
+  const granted = filters.includeGranted ? await listUserChecklistGrants(user.id) : new Set<string>();
+  const areaCond = filters.areaId ? { areaId: filters.areaId } : allowedAreaIds ? { areaId: { in: allowedAreaIds } } : {};
   const equipments = await db.equipment.findMany({
     where: {
       active: true,
-      areaId: filters.areaId ? filters.areaId : allowedAreaIds ? { in: allowedAreaIds } : undefined,
       assignments: { some: { active: true } },
+      // Os liberados entram mesmo fora das áreas da pessoa (só pelo checklist liberado).
+      ...(granted.size > 0 && !filters.areaId ? { OR: [areaCond, { assignments: { some: { active: true, templateId: { in: [...granted] } } } }] } : areaCond),
     },
     include: {
       area: true,
@@ -108,7 +125,12 @@ export async function listChecklistBoardForUser(
     for (const assignment of equipment.assignments) {
     const version = assignment.template.versions[0];
     if (!version) continue;
-    if (assignment.template.scope !== "AREA" && equipmentItemDone) continue;
+    // Equipamento de fora das áreas da pessoa só entra pelo checklist liberado para ela; "extra" = só está aqui por causa da liberação (não é da área/cargo dela).
+    const inArea = filters.areaId ? true : !allowedAreaIds || allowedAreaIds.includes(equipment.areaId);
+    const isGranted = granted.has(assignment.templateId);
+    if (!inArea && !isGranted) continue;
+    const extra = isGranted && !(inArea && (requiredTemplateIds.size === 0 || requiredTemplateIds.has(assignment.templateId)));
+    if (assignment.template.scope !== "AREA" && equipmentItemDone && !extra) continue;
 
     const schedule = equipment.schedules.find((s) => s.templateId === assignment.templateId);
     const scheduledFor = schedule ? getScheduledTimeForDate(schedule, now) : null;
@@ -145,6 +167,7 @@ export async function listChecklistBoardForUser(
         totalCount: 0,
         completedTodayCount: 0,
         blockedCount: 0,
+        ...(extra ? { granted: true } : {}),
       };
       // Bloqueado não dá pra inspecionar — não entra no "previsto" (senão o % nunca fecha), mas é contado à parte.
       if (equipment.status === "BLOQUEADO") {
@@ -176,13 +199,15 @@ export async function listChecklistBoardForUser(
       situation,
       completedAt: completedToday?.finishedAt ?? null,
       inProgressExecutionId: inProgress?.id ?? null,
+      ...(extra ? { granted: true } : {}),
     });
-    equipmentItemDone = true;
+    if (!extra) equipmentItemDone = true;
     }
   }
 
   const allItems = [...equipmentItems, ...areaGroups.values()];
-  return requiredTemplateIds.size > 0 ? allItems.filter((item) => requiredTemplateIds.has(item.templateId)) : allItems;
+  // O filtro do cargo não esconde o que foi liberado para a pessoa.
+  return requiredTemplateIds.size > 0 ? allItems.filter((item) => item.granted || requiredTemplateIds.has(item.templateId)) : allItems;
 }
 
 /**
@@ -194,7 +219,7 @@ export async function listChecklistBoardForUser(
  */
 export async function getAreaChecklistContext(user: CurrentUser, areaId: string, templateId?: string) {
   requirePermission(user, PERMISSIONS.CHECKLIST_EXECUTE);
-  requireAreaAccess(user, areaId, PERMISSIONS.EQUIPMENT_VIEW_ALL_AREAS);
+  await requireAreaOrGrant(user, areaId, templateId);
 
   const area = await db.area.findUniqueOrThrow({ where: { id: areaId } });
   const template = await db.checklistTemplate.findFirst({
@@ -275,7 +300,7 @@ export async function getExecutionContext(user: CurrentUser, equipmentId: string
     where: { id: equipmentId },
     include: { area: true, type: true },
   });
-  requireAreaAccess(user, equipment.areaId, PERMISSIONS.EQUIPMENT_VIEW_ALL_AREAS);
+  await requireAreaOrGrant(user, equipment.areaId, templateId);
 
   const assignment = await db.equipmentChecklistAssignment.findFirst({
     where: { equipmentId, active: true, ...(templateId ? { templateId } : {}) },
