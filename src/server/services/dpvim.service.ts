@@ -330,6 +330,8 @@ export type DpvimSupplierDivergence = {
   balance: number;
   missing: number;
   surplus: number;
+  /** Saldo por produto, somando todas as DPVIM do fornecedor (negativo = faltam, positivo = sobram). */
+  byKind: { kind: string; balance: number }[];
   dpvims: DpvimSupplierDpvim[];
 };
 
@@ -340,14 +342,14 @@ export type DpvimDivergenceSummary = {
   checked: number;
   /** Quantas fecharam com diferença em algum produto. */
   withDivergence: number;
-  /** Total que faltou e total que sobrou, somando produto a produto (uma falta num produto não "compensa" uma sobra em outro). */
+  /** Saldo final: por produto, o que sobrou numa DPVIM abate o que faltou na outra. Falta/sobra = o que resta de cada produto, somado (produtos diferentes não se compensam). */
   missing: number;
   surplus: number;
   /** Soma das notas conferidas, e quanto a falta representa disso (%). */
   invoiced: number;
   missingRate: number | null;
   bySupplier: DpvimSupplierDivergence[];
-  byKind: { kind: string; invoiced: number; counted: number; missing: number; surplus: number }[];
+  byKind: { kind: string; invoiced: number; counted: number; balance: number; missing: number; surplus: number }[];
   /** DPVIM (não canceladas) em que falta a nota de algum produto; as concluídas primeiro, porque são as que travam a conferência. */
   awaitingInvoice: { id: string; code: string; origin: string; status: DpvimStatus; lines: { kind: string; invoice: number | null }[] }[];
   items: { id: string; code: string; origin: string; finishedAt: Date | null; balance: number; lines: DpvimDivergenceLine[] }[];
@@ -478,37 +480,44 @@ export async function getDpvimDashboard(user: CurrentUser, filters: DpvimFilters
   // Agrupa o fornecedor sem diferenciar maiúsculas/acento, mostrando o nome como foi digitado primeiro.
   const conferred = active.filter((r) => r.lines.some((l) => l.balance !== null));
   const suppliers = new Map<string, DpvimSupplierDivergence>();
-  const kinds = new Map<string, { kind: string; invoiced: number; counted: number; missing: number; surplus: number }>();
+  const kinds = new Map<string, { kind: string; invoiced: number; counted: number; balance: number; missing: number; surplus: number }>();
+  const supplierKinds = new Map<string, Map<string, number>>();
   let missingTotal = 0;
   let surplusTotal = 0;
   let invoicedTotal = 0;
   for (const r of conferred) {
     const key = originGroupKey(r.origin);
-    const e = suppliers.get(key) ?? { origin: r.origin, count: 0, withDivergence: 0, invoiced: 0, counted: 0, balance: 0, missing: 0, surplus: 0, dpvims: [] };
+    const e = suppliers.get(key) ?? { origin: r.origin, count: 0, withDivergence: 0, invoiced: 0, counted: 0, balance: 0, missing: 0, surplus: 0, byKind: [], dpvims: [] };
     e.count += 1;
     if (r.lines.some((l) => l.balance !== null && l.balance !== 0)) e.withDivergence += 1;
+    const perKind = supplierKinds.get(key) ?? new Map<string, number>();
     for (const l of r.lines) {
       if (l.balance === null || l.invoice === null) continue;
       e.invoiced += l.invoice;
       e.counted += l.done;
       e.balance += l.balance;
-      const k = kinds.get(l.kind) ?? { kind: l.kind, invoiced: 0, counted: 0, missing: 0, surplus: 0 };
+      perKind.set(l.kind, (perKind.get(l.kind) ?? 0) + l.balance);
+      const k = kinds.get(l.kind) ?? { kind: l.kind, invoiced: 0, counted: 0, balance: 0, missing: 0, surplus: 0 };
       k.invoiced += l.invoice;
       k.counted += l.done;
+      k.balance += l.balance;
       invoicedTotal += l.invoice;
-      if (l.balance < 0) {
-        e.missing += -l.balance;
-        k.missing += -l.balance;
-        missingTotal += -l.balance;
-      }
-      if (l.balance > 0) {
-        e.surplus += l.balance;
-        k.surplus += l.balance;
-        surplusTotal += l.balance;
-      }
       kinds.set(l.kind, k);
     }
+    supplierKinds.set(key, perKind);
     suppliers.set(key, e);
+  }
+  // Saldo final: soma por produto (o que sobrou numa DPVIM abate o que faltou na outra) e só depois separa em "faltam" e "sobram".
+  for (const [key, e] of suppliers) {
+    e.byKind = [...(supplierKinds.get(key) ?? new Map<string, number>()).entries()].map(([kind, balance]) => ({ kind, balance }));
+    e.missing = e.byKind.reduce((sum, b) => sum + Math.max(0, -b.balance), 0);
+    e.surplus = e.byKind.reduce((sum, b) => sum + Math.max(0, b.balance), 0);
+  }
+  for (const k of kinds.values()) {
+    k.missing = Math.max(0, -k.balance);
+    k.surplus = Math.max(0, k.balance);
+    missingTotal += k.missing;
+    surplusTotal += k.surplus;
   }
   // A lista de cada fornecedor traz todas as DPVIM dele (inclusive as que ainda esperam a nota), da mais recente para a mais antiga.
   for (const r of active) {

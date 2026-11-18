@@ -15,10 +15,10 @@ const pct = (v: number) => `${v.toLocaleString("pt-BR", { maximumFractionDigits:
 /** O que faltou ou sobrou entre a nota e a contagem dos ajudantes, produto a produto: o total, quem mais deixa faltar e quais DPVIM fecharam diferentes. */
 export function DivergenceSection({ data, kinds }: { data: DpvimDivergenceSummary; kinds: DpvimKindOption[] }) {
   const kindName = (k: string) => dpvimKindLabel(k, kinds);
-  const withIssue = data.bySupplier.filter((s) => s.missing > 0 || s.surplus > 0);
+  const withIssue = data.bySupplier.filter((s) => s.withDivergence > 0);
   const clean = data.bySupplier.length - withIssue.length;
   const maxMissing = Math.max(1, ...withIssue.map((s) => s.missing));
-  const kindsWithIssue = data.byKind.filter((k) => k.missing > 0 || k.surplus > 0);
+  const kindsWithIssue = data.byKind;
 
   return (
     <Card>
@@ -27,7 +27,7 @@ export function DivergenceSection({ data, kinds }: { data: DpvimDivergenceSummar
           <Scale className="size-4" /> Divergências: nota × contagem dos ajudantes
         </CardTitle>
         <CardDescription>
-          Compara, produto a produto, a quantidade da nota com o que os ajudantes contaram. Só entram as DPVIM já finalizadas e com a nota informada. O norte do conferente não entra na conta.
+          Compara, produto a produto, a quantidade da nota com o que os ajudantes contaram. O saldo soma todas as DPVIM do mesmo produto: o que sobrou numa abate o que faltou na outra. Só entram as DPVIM já finalizadas e com a nota informada. O norte do conferente não entra na conta.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-6">
@@ -69,14 +69,14 @@ export function DivergenceSection({ data, kinds }: { data: DpvimDivergenceSummar
           <>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <div className="rounded-lg border border-danger/30 bg-danger-soft/40 px-4 py-3">
-                <p className="text-xs font-medium text-foreground-subtle">Faltou no total</p>
+                <p className="text-xs font-medium text-foreground-subtle">Faltam no saldo</p>
                 <p className="text-3xl font-bold tabular-nums text-danger">{n(data.missing)}</p>
                 <p className="text-xs text-foreground-subtle">{data.missingRate !== null ? `${pct(data.missingRate)} do que veio nas notas (${n(data.invoiced)})` : "itens"}</p>
               </div>
               <div className="rounded-lg border border-border px-4 py-3">
-                <p className="text-xs font-medium text-foreground-subtle">Sobrou no total</p>
+                <p className="text-xs font-medium text-foreground-subtle">Sobram no saldo</p>
                 <p className={data.surplus > 0 ? "text-3xl font-bold tabular-nums text-warning" : "text-3xl font-bold tabular-nums text-foreground-subtle"}>{n(data.surplus)}</p>
-                <p className="text-xs text-foreground-subtle">os ajudantes contaram a mais do que a nota diz</p>
+                <p className="text-xs text-foreground-subtle">contado a mais do que a nota diz, já abatidas as faltas do mesmo produto</p>
               </div>
               <div className="rounded-lg border border-border px-4 py-3">
                 <p className="text-xs font-medium text-foreground-subtle">DPVIM com divergência</p>
@@ -90,15 +90,19 @@ export function DivergenceSection({ data, kinds }: { data: DpvimDivergenceSummar
 
             {kindsWithIssue.length > 0 && (
               <div className="flex flex-col gap-2">
-                <h3 className="text-sm font-semibold text-foreground">Por tipo de produto</h3>
+                <h3 className="text-sm font-semibold text-foreground">Saldo por tipo de produto</h3>
                 <div className="flex flex-wrap gap-2">
                   {kindsWithIssue.map((k) => (
                     <div key={k.kind} className="rounded-lg border border-border px-3 py-2 text-sm">
                       <p className="font-medium text-foreground">{kindName(k.kind)}</p>
                       <p className="text-xs tabular-nums text-foreground-subtle">
-                        {k.missing > 0 && <strong className="text-danger">Faltou {n(k.missing)}</strong>}
-                        {k.missing > 0 && k.surplus > 0 && " · "}
-                        {k.surplus > 0 && <strong className="text-warning">Sobrou {n(k.surplus)}</strong>}
+                        {k.balance < 0 ? (
+                          <strong className="text-danger">Faltam {n(-k.balance)}</strong>
+                        ) : k.balance > 0 ? (
+                          <strong className="text-warning">Sobram {n(k.balance)}</strong>
+                        ) : (
+                          <strong className="text-success">Saldo zerado</strong>
+                        )}
                         {` · nota ${n(k.invoiced)}`}
                       </p>
                     </div>
@@ -120,9 +124,20 @@ export function DivergenceSection({ data, kinds }: { data: DpvimDivergenceSummar
                             {s.origin}
                           </span>
                           <span className="text-sm tabular-nums">
-                            {s.missing > 0 && <strong className="text-danger">Faltou {n(s.missing)}</strong>}
-                            {s.missing > 0 && s.surplus > 0 && <span className="text-foreground-subtle"> · </span>}
-                            {s.surplus > 0 && <strong className="text-warning">Sobrou {n(s.surplus)}</strong>}
+                            {s.byKind.filter((b) => b.balance !== 0).length === 0 ? (
+                              <strong className="text-success">Saldo zerado</strong>
+                            ) : (
+                              s.byKind
+                                .filter((b) => b.balance !== 0)
+                                .map((b, i) => (
+                                  <span key={b.kind}>
+                                    {i > 0 && <span className="text-foreground-subtle"> · </span>}
+                                    <strong className={b.balance < 0 ? "text-danger" : "text-warning"}>
+                                      {kindName(b.kind)}: {b.balance < 0 ? `faltam ${n(-b.balance)}` : `sobram ${n(b.balance)}`}
+                                    </strong>
+                                  </span>
+                                ))
+                            )}
                           </span>
                         </div>
                         <div className="h-2 w-full overflow-hidden rounded-full bg-surface-muted">
@@ -130,7 +145,7 @@ export function DivergenceSection({ data, kinds }: { data: DpvimDivergenceSummar
                         </div>
                         <p className="text-xs text-foreground-subtle">
                           {s.withDivergence} de {s.count} DPVIM com divergência
-                          {s.missing > 0 && s.invoiced > 0 ? ` · faltou ${pct((s.missing / s.invoiced) * 100)} do que veio na nota (${n(s.invoiced)})` : ""}
+                          {s.missing > 0 && s.invoiced > 0 ? ` · no saldo faltam ${pct((s.missing / s.invoiced) * 100)} do que veio na nota (${n(s.invoiced)})` : ""}
                           {" · "}
                           <span className="text-accent">clique para ver as {s.dpvims.length} DPVIM</span>
                         </p>
