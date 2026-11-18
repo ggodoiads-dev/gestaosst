@@ -268,7 +268,7 @@ export default async function DpvimPage({ searchParams }: { searchParams: Promis
                         <SituationBadge situation={r.situation} hoursLeft={r.hoursLeft} />
                       </div>
                       <p className="text-xs text-foreground-subtle">
-                        {r.lines.map((l) => `${kindName(l.kind)} ${l.expected}`).join(" + ")} · {r.origin} · chegou {formatDateTime(r.arrivedAt)}
+                        {r.lines.map((l) => `${kindName(l.kind)} ${l.expected}`).join(" + ")}{r.origin ? ` · ${r.origin}` : ""} · chegou {formatDateTime(r.arrivedAt)}
                       </p>
                       <ProgressBar done={r.doneQty} expected={r.expectedQty} progress={r.progress} />
                     </Link>

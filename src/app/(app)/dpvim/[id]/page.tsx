@@ -40,7 +40,7 @@ export default async function DpvimDetailPage({ params }: { params: Promise<{ id
     <>
       <PageHeader
         title={row.code}
-        description={`${row.lines.map((l) => dpvimKindLabel(l.kind, detail.kinds)).join(" + ")} · de ${row.origin}`}
+        description={`${row.lines.map((l) => dpvimKindLabel(l.kind, detail.kinds)).join(" + ")}${row.origin ? ` · de ${row.origin}` : ""}`}
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Button asChild size="sm" variant="ghost">

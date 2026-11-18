@@ -729,7 +729,8 @@ export async function getDpvimDashboard(user: CurrentUser, filters: DpvimFilters
       totalExpected: active.reduce((s, r) => s + r.expectedQty, 0),
       totalDone: active.reduce((s, r) => s + r.doneQty, 0),
     },
-    rows,
+    // Quem só executa (ajudante/colaborador, sem acesso ao painel) não vê de qual fornecedor veio a carga: o nome nem sai do servidor.
+    rows: seeDash ? rows : rows.map((r) => ({ ...r, origin: "" })),
     arrivalsByDay: [...arrivals.entries()].map(([dayKey, v]) => ({ dayKey, ...v })).sort((a, b) => a.dayKey.localeCompare(b.dayKey)),
     divergence,
     kinds: kindList.kinds,
@@ -737,7 +738,7 @@ export async function getDpvimDashboard(user: CurrentUser, filters: DpvimFilters
     suppliers: supplierList.suppliers,
     suppliersReady: supplierList.ready,
     unregisteredOrigins: [...unregistered.values()].sort((a, b) => b.count - a.count),
-    byOrigin: [...origins.entries()].map(([origin, count]) => ({ origin, count })).sort((a, b) => b.count - a.count),
+    byOrigin: seeDash ? [...origins.entries()].map(([origin, count]) => ({ origin, count })).sort((a, b) => b.count - a.count) : [],
     byPair: [...pairs.entries()].map(([label, v]) => ({ label, ...v })).sort((a, b) => b.qty - a.qty),
     recent: periodSessions.slice(0, 15).map((s) => toSessionRow(s, codeById.get(s.dpvimId) ?? "?", itemData)),
     collaborators,
@@ -768,11 +769,15 @@ export async function getDpvimDetail(user: CurrentUser, id: string): Promise<Dpv
   const itemData = await loadItemData([id], showInvoice);
   const collab = me ?? (await myCollaborator(user));
   const openMine = await db.dpvimSession.findFirst({ where: { userId: user.id, stoppedAt: null } });
+  const launch = await canLaunchDpvim(user);
+  // Quem só executa não vê o fornecedor da carga.
+  const seeSupplier = canViewDpvimDashboard(user) || launch || showInvoice;
+  const row = toRow(d, sessions, new Date(), itemData);
   return {
-    row: toRow(d, sessions, new Date(), itemData),
+    row: seeSupplier ? row : { ...row, origin: "" },
     sessions: sessions.map((s) => toSessionRow(s, d.code, itemData)),
     canManage: canManageDpvim(user),
-    canLaunch: await canLaunchDpvim(user),
+    canLaunch: launch,
     canSeeInvoice: showInvoice,
     mySession: openMine && openMine.dpvimId === id ? { id: openMine.id, startedAt: openMine.startedAt } : null,
     hasCollaborator: !!collab,
