@@ -100,10 +100,7 @@ export default async function DpvimPage({ searchParams }: { searchParams: Promis
               <StopDpvimDialog
                 sessionId={data.mySession.id}
                 code={data.mySession.dpvimCode}
-                expectedLeft={(() => {
-                  const r = data.rows.find((x) => x.id === data.mySession!.dpvimId);
-                  return r ? Math.max(0, r.expectedQty - r.doneQty) : 0;
-                })()}
+                lines={data.mySession.lines.map((l) => ({ kind: l.kind, label: kindName(l.kind), expected: l.expected }))}
               />
             </div>
           </div>
@@ -174,7 +171,7 @@ export default async function DpvimPage({ searchParams }: { searchParams: Promis
               <StatCard label="Em andamento" value={k.inProgress} tone="accent" />
               <StatCard label="Rebatidas no prazo" value={k.onTimeRate === null ? "—" : `${k.onTimeRate}%`} tone={k.onTimeRate === null ? "neutral" : k.onTimeRate >= 90 ? "success" : k.onTimeRate >= 70 ? "warning" : "danger"} hint={doneTotal > 0 ? `${k.doneOnTime} de ${doneTotal} concluídas` : "nenhuma concluída ainda"} />
               <StatCard label="Tempo médio para rebater" value={k.avgLeadHours === null ? "—" : formatHours(k.avgLeadHours)} hint="da chegada à conclusão" />
-              <StatCard label="Itens feitos" value={k.totalDone} hint={`de ${k.totalExpected} que chegaram`} />
+              <StatCard label="Itens contados" value={k.totalDone} hint={`norte do conferente: ${k.totalExpected}`} />
               <StatCard label="DPVIM no painel" value={data.rows.filter((r) => r.status !== "CANCELADA").length} />
             </div>
 
@@ -239,7 +236,7 @@ export default async function DpvimPage({ searchParams }: { searchParams: Promis
                         <SituationBadge situation={r.situation} hoursLeft={r.hoursLeft} />
                       </div>
                       <p className="text-xs text-foreground-subtle">
-                        {kindName(r.kind)} · {r.origin} · chegou {formatDateTime(r.arrivedAt)}
+                        {r.lines.map((l) => `${kindName(l.kind)} ${l.expected}`).join(" + ")} · {r.origin} · chegou {formatDateTime(r.arrivedAt)}
                       </p>
                       <ProgressBar done={r.doneQty} expected={r.expectedQty} progress={r.progress} />
                     </Link>
@@ -287,9 +284,11 @@ export default async function DpvimPage({ searchParams }: { searchParams: Promis
                             {r.code}
                           </Link>
                           <p className="text-xs text-foreground-subtle">
-                            <Badge tone="info" className="mr-1">
-                              {kindName(r.kind)}
-                            </Badge>
+                            {r.lines.map((l) => (
+                              <Badge key={l.kind} tone="info" className="mr-1">
+                                {kindName(l.kind)} {l.expected}
+                              </Badge>
+                            ))}
                             {r.origin}
                           </p>
                         </td>

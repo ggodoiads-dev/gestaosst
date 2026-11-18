@@ -9,19 +9,23 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 const n = (v: number) => v.toLocaleString("pt-BR");
 const pct = (v: number) => `${v.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`;
 
-/** O que faltou ou sobrou entre a nota e a contagem final, de forma direta: o total, quem mais deixa faltar e quais DPVIM fecharam diferentes. */
+/** O que faltou ou sobrou entre a nota e a contagem dos ajudantes, produto a produto: o total, quem mais deixa faltar e quais DPVIM fecharam diferentes. */
 export function DivergenceSection({ data, kinds }: { data: DpvimDivergenceSummary; kinds: DpvimKindOption[] }) {
+  const kindName = (k: string) => dpvimKindLabel(k, kinds);
   const withIssue = data.bySupplier.filter((s) => s.missing > 0 || s.surplus > 0);
   const clean = data.bySupplier.length - withIssue.length;
   const maxMissing = Math.max(1, ...withIssue.map((s) => s.missing));
+  const kindsWithIssue = data.byKind.filter((k) => k.missing > 0 || k.surplus > 0);
 
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Scale className="size-4" /> Divergências: nota × contagem
+          <Scale className="size-4" /> Divergências: nota × contagem dos ajudantes
         </CardTitle>
-        <CardDescription>Compara a contagem de quem recebeu a carga com a quantidade da nota. Só entram as DPVIM que já têm a nota informada.</CardDescription>
+        <CardDescription>
+          Compara, produto a produto, a quantidade da nota com o que os ajudantes contaram. Só entram as DPVIM já finalizadas e com a nota informada. O norte do conferente não entra na conta.
+        </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-6">
         {data.awaitingInvoice.length > 0 && (
@@ -29,24 +33,23 @@ export function DivergenceSection({ data, kinds }: { data: DpvimDivergenceSummar
             <p className="text-sm font-semibold text-foreground">
               {data.awaitingInvoice.length === 1 ? "1 DPVIM espera a quantidade da nota" : `${data.awaitingInvoice.length} DPVIM esperam a quantidade da nota`}
             </p>
-            <p className="text-xs text-foreground-subtle">Quem recebe a carga só faz a contagem e não vê a nota. Abra a DPVIM e informe a quantidade da nota para ela ser conferida.</p>
+            <p className="text-xs text-foreground-subtle">Quem recebe e conta não vê a nota. Abra a DPVIM e informe a quantidade da nota de cada produto para ela ser conferida.</p>
             <div className="flex flex-wrap gap-2">
               {data.awaitingInvoice.slice(0, 12).map((a) => (
                 <Link key={a.id} href={`/dpvim/${a.id}`} className="rounded-md border border-border bg-surface px-2.5 py-1 text-xs hover:bg-surface-muted">
-                  <strong className="text-accent">{a.code}</strong> · {a.origin} · contagem {a.counted}
+                  <strong className="text-accent">{a.code}</strong> · {a.origin} · falta a nota de {a.kinds.map(kindName).join(", ")}
                 </Link>
               ))}
             </div>
           </div>
         )}
+
         {data.checked === 0 ? (
-          <p className="text-sm text-foreground-subtle">Ainda não há DPVIM com a quantidade da nota informada nesse filtro para conferir.</p>
+          <p className="text-sm text-foreground-subtle">Ainda não há DPVIM finalizada e com a nota informada nesse filtro para conferir.</p>
         ) : data.withDivergence === 0 ? (
           <div className="flex items-center gap-3 rounded-lg border border-success/40 bg-success-soft px-4 py-3 text-sm text-success">
             <CheckCircle2 className="size-5 shrink-0" />
-            <span>
-              Todas as {data.checked} DPVIM conferidas bateram com a nota. Nenhuma divergência.
-            </span>
+            <span>Todas as {data.checked} DPVIM conferidas bateram com a nota. Nenhuma divergência.</span>
           </div>
         ) : (
           <>
@@ -59,7 +62,7 @@ export function DivergenceSection({ data, kinds }: { data: DpvimDivergenceSummar
               <div className="rounded-lg border border-border px-4 py-3">
                 <p className="text-xs font-medium text-foreground-subtle">Sobrou no total</p>
                 <p className={data.surplus > 0 ? "text-3xl font-bold tabular-nums text-warning" : "text-3xl font-bold tabular-nums text-foreground-subtle"}>{n(data.surplus)}</p>
-                <p className="text-xs text-foreground-subtle">veio a mais do que a nota dizia</p>
+                <p className="text-xs text-foreground-subtle">os ajudantes contaram a mais do que a nota diz</p>
               </div>
               <div className="rounded-lg border border-border px-4 py-3">
                 <p className="text-xs font-medium text-foreground-subtle">DPVIM com divergência</p>
@@ -70,6 +73,25 @@ export function DivergenceSection({ data, kinds }: { data: DpvimDivergenceSummar
                 <p className="text-xs text-foreground-subtle">{data.checked - data.withDivergence} bateram certinho com a nota</p>
               </div>
             </div>
+
+            {kindsWithIssue.length > 0 && (
+              <div className="flex flex-col gap-2">
+                <h3 className="text-sm font-semibold text-foreground">Por tipo de produto</h3>
+                <div className="flex flex-wrap gap-2">
+                  {kindsWithIssue.map((k) => (
+                    <div key={k.kind} className="rounded-lg border border-border px-3 py-2 text-sm">
+                      <p className="font-medium text-foreground">{kindName(k.kind)}</p>
+                      <p className="text-xs tabular-nums text-foreground-subtle">
+                        {k.missing > 0 && <strong className="text-danger">Faltou {n(k.missing)}</strong>}
+                        {k.missing > 0 && k.surplus > 0 && " · "}
+                        {k.surplus > 0 && <strong className="text-warning">Sobrou {n(k.surplus)}</strong>}
+                        {` · nota ${n(k.invoiced)}`}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="flex flex-col gap-3">
               <h3 className="text-sm font-semibold text-foreground">Por fornecedor (de onde veio)</h3>
@@ -105,28 +127,35 @@ export function DivergenceSection({ data, kinds }: { data: DpvimDivergenceSummar
                     <tr className="bg-surface-muted text-left text-xs text-foreground-subtle">
                       <th className="px-3 py-2 font-semibold">DPVIM</th>
                       <th className="px-3 py-2 font-semibold">Fornecedor</th>
-                      <th className="px-3 py-2 text-right font-semibold">Nota</th>
-                      <th className="px-3 py-2 text-right font-semibold">Contagem</th>
-                      <th className="px-3 py-2 font-semibold">Diferença</th>
+                      <th className="px-3 py-2 font-semibold">Produto: nota → contado</th>
                     </tr>
                   </thead>
                   <tbody>
                     {data.items.slice(0, 20).map((i) => (
-                      <tr key={i.id} className="border-t border-border hover:bg-surface-muted">
+                      <tr key={i.id} className="border-t border-border align-top hover:bg-surface-muted">
                         <td className="px-3 py-2">
                           <Link href={`/dpvim/${i.id}`} className="font-semibold text-accent hover:underline">
                             {i.code}
                           </Link>
-                          <p className="text-[11px] text-foreground-subtle">
-                            {dpvimKindLabel(i.kind, kinds)}
-                            {i.finishedAt ? ` · finalizada ${formatDateTime(i.finishedAt)}` : ""}
-                          </p>
+                          {i.finishedAt && <p className="text-[11px] text-foreground-subtle">finalizada {formatDateTime(i.finishedAt)}</p>}
                         </td>
                         <td className="px-3 py-2 text-foreground">{i.origin}</td>
-                        <td className="px-3 py-2 text-right tabular-nums">{n(i.invoiced)}</td>
-                        <td className="px-3 py-2 text-right tabular-nums">{n(i.counted)}</td>
                         <td className="px-3 py-2">
-                          <Badge tone={i.balance < 0 ? "danger" : "warning"}>{i.balance < 0 ? `Faltou ${n(-i.balance)}` : `Sobrou ${n(i.balance)}`}</Badge>
+                          <div className="flex flex-col gap-1">
+                            {i.lines.map((l) => (
+                              <div key={l.kind} className="flex flex-wrap items-center gap-2">
+                                <span className="min-w-24 text-foreground">{kindName(l.kind)}</span>
+                                <span className="text-xs tabular-nums text-foreground-subtle">
+                                  {n(l.invoiced)} → {n(l.counted)}
+                                </span>
+                                {l.balance === 0 ? (
+                                  <Badge tone="success">Bateu</Badge>
+                                ) : (
+                                  <Badge tone={l.balance < 0 ? "danger" : "warning"}>{l.balance < 0 ? `Faltou ${n(-l.balance)}` : `Sobrou ${n(l.balance)}`}</Badge>
+                                )}
+                              </div>
+                            ))}
+                          </div>
                         </td>
                       </tr>
                     ))}

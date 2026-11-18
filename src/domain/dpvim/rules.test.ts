@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { dpvimBalance, dpvimKindLabel, dpvimSituation, dueAtFrom, formatHours, kindKeyFromLabel, originGroupKey, parseBrasiliaLocal, progressPercent } from "./rules";
+import { buildLines, dpvimBalance, dpvimKindLabel, dpvimSituation, dueAtFrom, formatHours, kindKeyFromLabel, originGroupKey, parseBrasiliaLocal, progressPercent } from "./rules";
 
 const arrived = new Date("2026-11-10T12:00:00Z");
 
@@ -62,5 +62,33 @@ describe("tipos de DPVIM", () => {
     expect(dpvimKindLabel("PALETE")).toBe("Palete");
     expect(dpvimKindLabel("c-barril", [{ key: "c-barril", label: "Barril" }])).toBe("Barril");
     expect(dpvimKindLabel("x")).toBe("x");
+  });
+});
+
+describe("produtos da DPVIM (linhas)", () => {
+  const items = [
+    { kind: "PALETE", expectedQty: 120 },
+    { kind: "CHAPATEX", expectedQty: 200 },
+  ];
+  it("saldo por produto: contado pelos ajudantes menos a nota, só depois de concluída", () => {
+    const args = { legacyKind: "PALETE", legacyExpected: 0, items, doneByKind: new Map([["PALETE", 110], ["CHAPATEX", 210]]), invoiceByKind: new Map([["PALETE", 120], ["CHAPATEX", 200]]) };
+    const done = buildLines({ ...args, concluded: true });
+    expect(done.map((l) => l.balance)).toEqual([-10, 10]);
+    expect(buildLines({ ...args, concluded: false }).map((l) => l.balance)).toEqual([null, null]);
+  });
+  it("o norte do conferente não limita: dá para contar mais do que ele", () => {
+    const [l] = buildLines({ legacyKind: "X", legacyExpected: 0, items: [{ kind: "PALETE", expectedQty: 100 }], doneByKind: new Map([["PALETE", 130]]), invoiceByKind: null, concluded: true });
+    expect(l).toMatchObject({ expected: 100, done: 130, invoice: null, balance: null });
+  });
+  it("sem a nota (quem não tem acesso) nunca há saldo", () => {
+    expect(buildLines({ legacyKind: "PALETE", legacyExpected: 0, items, doneByKind: new Map([["PALETE", 5]]), invoiceByKind: null, concluded: true }).every((l) => l.balance === null)).toBe(true);
+  });
+  it("DPVIM antiga, sem itens, usa o tipo e a quantidade únicos", () => {
+    const lines = buildLines({ legacyKind: "QUADRO", legacyExpected: 420, items: [], doneByKind: new Map([["QUADRO", 400]]), invoiceByKind: new Map([["QUADRO", 420]]), concluded: true });
+    expect(lines).toEqual([{ kind: "QUADRO", expected: 420, done: 400, invoice: 420, balance: -20 }]);
+  });
+  it("tipo que só aparece na contagem ou na nota entra com norte 0", () => {
+    const lines = buildLines({ legacyKind: "PALETE", legacyExpected: 0, items: [{ kind: "PALETE", expectedQty: 10 }], doneByKind: new Map([["QUADRO", 7]]), invoiceByKind: new Map([["BARRIL", 3]]), concluded: true });
+    expect(lines.map((l) => [l.kind, l.expected, l.done, l.balance])).toEqual([["PALETE", 10, 0, null], ["QUADRO", 0, 7, null], ["BARRIL", 0, 0, -3]]);
   });
 });

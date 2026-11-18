@@ -92,3 +92,48 @@ export function progressPercent(done: number, expected: number): number {
   if (expected <= 0) return 0;
   return Math.min(100, Math.round((done / expected) * 100));
 }
+
+/** Um produto dentro da DPVIM: o "norte" do conferente, o que os ajudantes contaram e, para quem vê a nota, a nota e a diferença. */
+export type DpvimLine = {
+  kind: string;
+  /** Contagem do conferente na chegada: só um norte, não é limite (os ajudantes podem contar mais ou menos). */
+  expected: number;
+  /** Soma do que os ajudantes contaram nesse produto. */
+  done: number;
+  /** Quantidade da nota (só para quem tem acesso a ela, e depois de informada). */
+  invoice: number | null;
+  /** Contado pelos ajudantes menos a nota, só depois de concluída e com a nota informada. Negativo = faltou, positivo = sobrou. */
+  balance: number | null;
+};
+
+/**
+ * Monta as linhas (um produto por linha) de uma DPVIM. Sem itens cadastrados (DPVIM antiga), vale o tipo e a quantidade únicos de antes.
+ * Entram também tipos que só apareceram na contagem dos ajudantes ou na nota (norte 0), para nada sumir da conta.
+ */
+export function buildLines(p: {
+  legacyKind: string;
+  legacyExpected: number;
+  items: { kind: string; expectedQty: number }[];
+  doneByKind: Map<string, number>;
+  invoiceByKind: Map<string, number> | null;
+  concluded: boolean;
+}): DpvimLine[] {
+  const base = p.items.length > 0 ? p.items : [{ kind: p.legacyKind, expectedQty: p.legacyExpected }];
+  const order: string[] = [];
+  const expected = new Map<string, number>();
+  for (const it of base) {
+    if (!expected.has(it.kind)) order.push(it.kind);
+    expected.set(it.kind, (expected.get(it.kind) ?? 0) + it.expectedQty);
+  }
+  for (const k of [...p.doneByKind.keys(), ...(p.invoiceByKind ? [...p.invoiceByKind.keys()] : [])]) {
+    if (!expected.has(k)) {
+      order.push(k);
+      expected.set(k, 0);
+    }
+  }
+  return order.map((kind) => {
+    const done = p.doneByKind.get(kind) ?? 0;
+    const invoice = p.invoiceByKind?.get(kind) ?? null;
+    return { kind, expected: expected.get(kind) ?? 0, done, invoice, balance: p.concluded && invoice !== null ? dpvimBalance(done, invoice) : null };
+  });
+}

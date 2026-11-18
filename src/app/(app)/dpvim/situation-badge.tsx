@@ -32,7 +32,7 @@ export function ProgressBar({ done, expected, progress }: { done: number; expect
         <div className={progress >= 100 ? "h-full rounded-full bg-success" : "h-full rounded-full bg-accent"} style={{ width: `${progress}%` }} />
       </div>
       <span className="text-[11px] tabular-nums text-foreground-subtle">
-        {done} de {expected} ({progress}%)
+        {done} contados · norte {expected}
       </span>
     </div>
   );

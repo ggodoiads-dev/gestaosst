@@ -81,9 +81,9 @@ export async function deleteDpvimAction(id: string) {
   });
 }
 
-export async function setDpvimInvoiceQtyAction(id: string, qty: number) {
+export async function setDpvimInvoiceQtyAction(id: string, items: { kind: string; qty: number | null }[]) {
   return run(async () => {
-    await setDpvimInvoiceQty(await requireUser(), id, qty);
+    await setDpvimInvoiceQty(await requireUser(), id, items);
     return {};
   });
 }

@@ -10,21 +10,27 @@ import { FormField } from "@/components/ui/label";
 import { Dialog, DialogBody, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { setDpvimInvoiceQtyAction } from "@/server/actions/dpvim.actions";
 
-/** Quem tem acesso à nota informa (ou corrige) a quantidade dela. Só aparece para quem vê a nota; com isso a divergência aparece depois que a DPVIM é finalizada. */
-export function InvoiceQtyDialog({ id, code, current, size = "sm" }: { id: string; code: string; current: number | null; size?: "sm" | "md" }) {
+export type InvoiceLine = { kind: string; label: string; invoice: number | null };
+
+/** Quem tem acesso à nota informa (ou corrige) a quantidade dela, produto a produto. Só aparece para quem vê a nota; o produto em branco fica como "nota não informada". */
+export function InvoiceQtyDialog({ id, code, lines }: { id: string; code: string; lines: InvoiceLine[] }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
-  const [qty, setQty] = useState(current ? String(current) : "");
+  const [qty, setQty] = useState<Record<string, string>>(() => Object.fromEntries(lines.map((l) => [l.kind, l.invoice === null ? "" : String(l.invoice)])));
   const [error, setError] = useState<string | null>(null);
-  const n = Number(qty);
-  const valid = qty.trim() !== "" && Number.isInteger(n) && n > 0;
+  const isOk = (v: string) => v.trim() === "" || (Number.isInteger(Number(v)) && Number(v) > 0);
+  const valid = lines.every((l) => isOk(qty[l.kind] ?? ""));
+  const anyInformed = lines.some((l) => l.invoice !== null);
 
   function save() {
     if (!valid) return;
     setError(null);
     start(async () => {
-      const res = await setDpvimInvoiceQtyAction(id, n);
+      const res = await setDpvimInvoiceQtyAction(
+        id,
+        lines.map((l) => ({ kind: l.kind, qty: (qty[l.kind] ?? "").trim() === "" ? null : Number(qty[l.kind]) })),
+      );
       if (!res.ok) {
         setError(res.error);
         return;
@@ -38,19 +44,21 @@ export function InvoiceQtyDialog({ id, code, current, size = "sm" }: { id: strin
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size={size} variant="secondary">
-          <FileText className="size-4" /> {current ? "Alterar a quantidade da nota" : "Informar a quantidade da nota"}
+        <Button size="sm" variant="secondary">
+          <FileText className="size-4" /> {anyInformed ? "Alterar a quantidade da nota" : "Informar a quantidade da nota"}
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle>Quantidade da nota · {code}</DialogTitle>
-          <DialogDescription>Quem lança e conta a DPVIM não vê esse número. Ele só é comparado com a contagem para achar divergência.</DialogDescription>
+          <DialogDescription>Quem recebe e conta a DPVIM não vê esses números. Eles são comparados com a contagem dos ajudantes para achar divergência.</DialogDescription>
         </DialogHeader>
         <DialogBody className="flex flex-col gap-3">
-          <FormField label="Quantos itens a nota diz" required>
-            <Input value={qty} onChange={(e) => setQty(e.target.value)} inputMode="numeric" className="tabular-nums" autoFocus />
-          </FormField>
+          {lines.map((l) => (
+            <FormField key={l.kind} label={`${l.label} na nota`}>
+              <Input value={qty[l.kind] ?? ""} onChange={(e) => setQty((prev) => ({ ...prev, [l.kind]: e.target.value }))} inputMode="numeric" className="tabular-nums" />
+            </FormField>
+          ))}
           {error && <p className="text-sm text-danger">{error}</p>}
         </DialogBody>
         <DialogFooter>

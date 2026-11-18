@@ -4,6 +4,7 @@ import { ChevronLeft, Camera, Users } from "lucide-react";
 import { requireUser } from "@/server/auth/current-user";
 import { getDpvimDetail } from "@/server/services/dpvim.service";
 import { dpvimKindLabel, formatHours } from "@/domain/dpvim/rules";
+import { LinesTable } from "../lines-table";
 import { attachmentUrl } from "@/lib/attachment-url";
 import { formatDateTime } from "@/lib/dates";
 import { PageHeader, PageBody } from "@/components/domain/page-header";
@@ -32,12 +33,14 @@ export default async function DpvimDetailPage({ params }: { params: Promise<{ id
   const open = row.status === "ABERTA" || row.status === "EM_ANDAMENTO";
   const canStart = open && detail.hasCollaborator && !detail.mySession;
   const left = Math.max(0, row.expectedQty - row.doneQty);
+  const over = Math.max(0, row.doneQty - row.expectedQty);
+  const stopLines = row.lines.map((l) => ({ kind: l.kind, label: dpvimKindLabel(l.kind, detail.kinds), expected: l.expected }));
 
   return (
     <>
       <PageHeader
         title={row.code}
-        description={`${dpvimKindLabel(row.kind, detail.kinds)} · de ${row.origin}`}
+        description={`${row.lines.map((l) => dpvimKindLabel(l.kind, detail.kinds)).join(" + ")} · de ${row.origin}`}
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Button asChild size="sm" variant="ghost">
@@ -45,7 +48,7 @@ export default async function DpvimDetailPage({ params }: { params: Promise<{ id
                 <ChevronLeft className="size-4" /> Todas as DPVIM
               </Link>
             </Button>
-            {detail.mySession && <StopDpvimDialog sessionId={detail.mySession.id} code={row.code} expectedLeft={left} />}
+            {detail.mySession && <StopDpvimDialog sessionId={detail.mySession.id} code={row.code} lines={stopLines} />}
             {canStart && <StartDpvimDialog dpvimId={row.id} code={row.code} collaborators={detail.collaborators} myCollaboratorId={detail.myCollaboratorId} size="md" />}
           </div>
         }
@@ -71,22 +74,12 @@ export default async function DpvimDetailPage({ params }: { params: Promise<{ id
             <div className="flex flex-col gap-2">
               <p className="text-xs text-foreground-subtle">Andamento</p>
               <ProgressBar done={row.doneQty} expected={row.expectedQty} progress={row.progress} />
-              <p className="text-sm text-foreground">{left > 0 ? `Faltam ${left} itens` : "Carga toda selecionada"}</p>
-              {detail.canSeeInvoice && row.status !== "CANCELADA" && (
-                <div className="flex flex-col items-start gap-1">
-                  <p className="text-xs text-foreground-subtle">
-                    {row.invoiceQty === null ? "A quantidade da nota ainda não foi informada." : `Nota: ${row.invoiceQty} · contagem de quem recebeu: ${row.expectedQty}`}
-                  </p>
-                  <InvoiceQtyDialog id={row.id} code={row.code} current={row.invoiceQty} />
-                </div>
-              )}
+              <p className="text-sm text-foreground">
+                {left > 0 ? `Faltam cerca de ${left} pelo norte do conferente` : over > 0 ? `Já passou ${over} do norte do conferente` : "No norte do conferente"}
+              </p>
               {row.balance !== null && (
                 <p className={row.balance === 0 ? "text-sm font-semibold text-success" : row.balance < 0 ? "text-sm font-semibold text-danger" : "text-sm font-semibold text-warning"}>
-                  {row.balance === 0
-                    ? "Conferência: a contagem bateu com a nota"
-                    : row.balance < 0
-                      ? `Divergência: faltou ${-row.balance} (nota ${row.invoiceQty}, contagem de quem recebeu ${row.expectedQty})`
-                      : `Divergência: sobrou ${row.balance} (nota ${row.invoiceQty}, contagem de quem recebeu ${row.expectedQty})`}
+                  {row.balance === 0 ? "Conferência: bateu com a nota" : row.balance < 0 ? `Divergência: faltou ${-row.balance} em relação à nota` : `Divergência: sobrou ${row.balance} em relação à nota`}
                 </p>
               )}
             </div>
@@ -105,11 +98,10 @@ export default async function DpvimDetailPage({ params }: { params: Promise<{ id
                 kinds={detail.kinds}
                 initial={{
                   id: row.id,
-                  kind: row.kind,
                   origin: row.origin,
                   reference: row.reference ?? "",
                   material: row.material ?? "",
-                  expectedQty: row.expectedQty,
+                  items: row.lines.filter((l) => l.expected > 0).map((l) => ({ kind: l.kind, qty: l.expected })),
                   arrivedLocal: toLocalInput(row.arrivedAt),
                   notes: row.notes ?? "",
                 }}
@@ -118,6 +110,23 @@ export default async function DpvimDetailPage({ params }: { params: Promise<{ id
               {detail.canManage && <DeleteDpvimButton id={row.id} code={row.code} />}
             </CardContent>
           )}
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Produtos desta DPVIM</CardTitle>
+            <CardDescription>
+              O norte é a contagem do conferente na chegada, só uma referência. O que vale é o que os ajudantes contarem{detail.canSeeInvoice ? ", comparado com a nota" : ""}.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            <LinesTable lines={row.lines} kinds={detail.kinds} canSeeInvoice={detail.canSeeInvoice} concluded={row.status === "CONCLUIDA"} />
+            {detail.canSeeInvoice && row.status !== "CANCELADA" && (
+              <div>
+                <InvoiceQtyDialog key={row.lines.map((l) => `${l.kind}:${l.invoice}`).join("|")} id={row.id} code={row.code} lines={row.lines.map((l) => ({ kind: l.kind, label: dpvimKindLabel(l.kind, detail.kinds), invoice: l.invoice }))} />
+              </div>
+            )}
+          </CardContent>
         </Card>
 
         <Card>
@@ -153,6 +162,7 @@ export default async function DpvimDetailPage({ params }: { params: Promise<{ id
                       </p>
                       <p className="text-foreground">
                         Fez <strong>{s.qtyDone ?? 0}</strong> item(ns)
+                        {s.byKind.length > 1 ? <span className="text-foreground-subtle"> ({s.byKind.map((b) => `${dpvimKindLabel(b.kind, detail.kinds)} ${b.qty}`).join(" · ")})</span> : null}
                         {s.qtyGood !== null || s.qtyTransfer !== null || s.qtyDiscard !== null ? (
                           <span className="text-foreground-subtle">
                             {" "}

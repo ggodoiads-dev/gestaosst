@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Pencil, Plus } from "lucide-react";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,18 +14,22 @@ import { DPVIM_DEADLINE_HOURS, parseBrasiliaLocal, type DpvimKindOption } from "
 
 const field = "h-9 w-full rounded-md border border-border-strong bg-surface px-2 text-sm text-foreground";
 
-export type DpvimFormInitial = { id: string; kind: string; origin: string; reference: string; material: string; expectedQty: number; arrivedLocal: string; notes: string };
+export type DpvimFormInitial = { id: string; origin: string; reference: string; material: string; items: { kind: string; qty: number }[]; arrivedLocal: string; notes: string };
 
-/** Cadastrar (ou editar) uma DPVIM: de onde veio, quando chegou, quantos itens, o que veio e o tipo (palete, chapatex ou quadro). O prazo de 48h conta da chegada. */
+type Row = { kind: string; qty: string };
+
+/**
+ * Cadastrar (ou editar) uma DPVIM: de onde veio, quando chegou e o que veio, produto a produto (ex.: 120 paletes + 200 chapatex + 400 quadros).
+ * As quantidades são a contagem do conferente, só um norte. O prazo de 48h conta da chegada.
+ */
 export function DpvimFormDialog({ initial, disabled, kinds }: { initial?: DpvimFormInitial; disabled?: boolean; kinds: DpvimKindOption[] }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
-  const [kind, setKind] = useState(initial?.kind ?? "");
+  const [rows, setRows] = useState<Row[]>(initial && initial.items.length > 0 ? initial.items.map((i) => ({ kind: i.kind, qty: String(i.qty) })) : [{ kind: "", qty: "" }]);
   const [origin, setOrigin] = useState(initial?.origin ?? "");
   const [reference, setReference] = useState(initial?.reference ?? "");
   const [material, setMaterial] = useState(initial?.material ?? "");
-  const [qty, setQty] = useState(initial ? String(initial.expectedQty) : "");
   const [arrived, setArrived] = useState(initial?.arrivedLocal ?? "");
   const [notes, setNotes] = useState(initial?.notes ?? "");
   const [error, setError] = useState<string | null>(null);
@@ -34,14 +38,23 @@ export function DpvimFormDialog({ initial, disabled, kinds }: { initial?: DpvimF
   const dueLabel = arrivedDate
     ? new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" }).format(new Date(arrivedDate.getTime() + DPVIM_DEADLINE_HOURS * 3600 * 1000))
     : null;
-  const qtyNum = Number(qty);
-  const valid = !!kind && origin.trim().length >= 2 && qty.trim() !== "" && Number.isInteger(qtyNum) && qtyNum > 0 && !!arrivedDate;
+
+  const initialKinds = initial?.items.map((i) => i.kind) ?? [];
+  const options = kinds.filter((k) => k.active || initialKinds.includes(k.key));
+  const chosen = rows.map((r) => r.kind).filter(Boolean);
+  const rowOk = (r: Row) => !!r.kind && Number.isInteger(Number(r.qty)) && Number(r.qty) > 0 && r.qty.trim() !== "";
+  const total = rows.reduce((s, r) => s + (rowOk(r) ? Number(r.qty) : 0), 0);
+  const valid = rows.length > 0 && rows.every(rowOk) && new Set(chosen).size === chosen.length && origin.trim().length >= 2 && !!arrivedDate;
+
+  function setRow(i: number, patch: Partial<Row>) {
+    setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+  }
 
   function save() {
     if (!arrivedDate) return;
     setError(null);
     start(async () => {
-      const input = { kind, origin, reference, material, expectedQty: qtyNum, arrivedAtIso: arrivedDate.toISOString(), notes };
+      const input = { origin, reference, material, items: rows.map((r) => ({ kind: r.kind, qty: Number(r.qty) })), arrivedAtIso: arrivedDate.toISOString(), notes };
       const res = initial ? await updateDpvimAction(initial.id, input) : await createDpvimAction(input);
       if (!res.ok) {
         setError(res.error);
@@ -66,29 +79,38 @@ export function DpvimFormDialog({ initial, disabled, kinds }: { initial?: DpvimF
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-xl">
         <DialogHeader>
           <DialogTitle>{initial ? "Editar DPVIM" : "Nova DPVIM"}</DialogTitle>
           <DialogDescription>O prazo para rebater é de {DPVIM_DEADLINE_HOURS}h a partir da chegada. A quantidade da nota é lançada à parte, por quem tem acesso a ela.</DialogDescription>
         </DialogHeader>
         <DialogBody className="flex flex-col gap-4">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <FormField label="Tipo" required>
-              <select value={kind} onChange={(e) => setKind(e.target.value)} className={field}>
-                <option value="">Escolher…</option>
-                {kinds
-                  .filter((k) => k.active || k.key === initial?.kind)
-                  .map((k) => (
-                    <option key={k.key} value={k.key}>
-                      {k.label}
-                    </option>
-                  ))}
-              </select>
-            </FormField>
-            <FormField label="Quantos itens chegaram" required hint="A sua contagem na chegada">
-              <Input value={qty} onChange={(e) => setQty(e.target.value)} inputMode="numeric" className="tabular-nums" />
-            </FormField>
-          </div>
+          <FormField label="O que veio" required hint="Um produto por linha. A sua contagem é só um norte: quem confere o total são os ajudantes, contra a nota.">
+            <div className="flex flex-col gap-2">
+              {rows.map((r, i) => (
+                <div key={i} className="grid grid-cols-[1fr_7rem_2.25rem] items-center gap-2">
+                  <select value={r.kind} onChange={(e) => setRow(i, { kind: e.target.value })} className={field} aria-label={`Tipo do produto ${i + 1}`}>
+                    <option value="">Escolher o tipo…</option>
+                    {options.map((k) => (
+                      <option key={k.key} value={k.key} disabled={chosen.includes(k.key) && r.kind !== k.key}>
+                        {k.label}
+                      </option>
+                    ))}
+                  </select>
+                  <Input value={r.qty} onChange={(e) => setRow(i, { qty: e.target.value })} inputMode="numeric" placeholder="Qtd." className="tabular-nums" aria-label={`Quantidade do produto ${i + 1}`} />
+                  <Button type="button" size="icon" variant="ghost" disabled={rows.length === 1} onClick={() => setRows((prev) => prev.filter((_, idx) => idx !== i))} aria-label="Tirar este produto">
+                    <Trash2 className="size-4" />
+                  </Button>
+                </div>
+              ))}
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <Button type="button" size="sm" variant="secondary" disabled={rows.length >= options.length} onClick={() => setRows((prev) => [...prev, { kind: "", qty: "" }])}>
+                  <Plus className="size-4" /> Adicionar outro produto
+                </Button>
+                <span className="text-xs tabular-nums text-foreground-subtle">Total do norte: {total}</span>
+              </div>
+            </div>
+          </FormField>
           <FormField label="De onde veio" required hint="Ex.: cervejaria, fábrica">
             <Input value={origin} onChange={(e) => setOrigin(e.target.value)} maxLength={120} />
           </FormField>

@@ -1962,7 +1962,7 @@ model Dpvim {
   origin        String // de onde veio
   reference     String? // número da carga / nota / placa
   material      String? // materiais, o que veio
-  expectedQty   Int // quantos produtos vieram
+  expectedQty   Int // soma do norte do conferente (contagem na chegada) de todos os produtos
   arrivedAt     DateTime // quando chegou
   dueAt         DateTime // chegada + 48h
   status        String    @default("ABERTA") // ABERTA | EM_ANDAMENTO | CONCLUIDA | CANCELADA
@@ -2000,14 +2000,40 @@ model DpvimInvoiceAccess {
   createdAt DateTime @default(now())
 }
 
-/// Quantidade da NOTA de cada DPVIM, lançada por quem tem acesso à nota. Fica fora da tabela Dpvim de propósito: quem recebe e conta não pode ver esse número.
-/// Tabela isolada, sem chaves estrangeiras.
-model DpvimInvoiceQty {
-  dpvimId       String   @id
+/// Produtos de uma DPVIM (ex.: 120 paletes + 200 chapatex + 400 quadros). `expectedQty` é a contagem do conferente na chegada: só um "norte", não um limite.
+/// DPVIM antiga, sem linhas aqui, vale pelo `kind` e `expectedQty` dela. Tabela isolada, sem chaves estrangeiras.
+model DpvimItem {
+  id          String @id @default(uuid())
+  dpvimId     String
+  kind        String
+  expectedQty Int
+  sort        Int    @default(0)
+
+  @@unique([dpvimId, kind])
+  @@index([dpvimId])
+}
+
+/// Quanto os ajudantes contaram de cada produto numa atividade (a soma por produto é o que vale contra a nota). Sem chaves estrangeiras.
+model DpvimSessionItem {
+  sessionId String
+  kind      String
+  qty       Int
+  dpvimId   String
+
+  @@id([sessionId, kind])
+  @@index([dpvimId])
+}
+
+/// Quantidade da NOTA por produto de cada DPVIM, lançada por quem tem acesso à nota. Fica fora das outras tabelas de propósito: quem recebe e conta não pode ver esse número.
+model DpvimItemInvoice {
+  dpvimId       String
+  kind          String
   qty           Int
   updatedById   String
   updatedByName String
   updatedAt     DateTime @default(now())
+
+  @@id([dpvimId, kind])
 }
 
 /// Uma vez que alguém abre a DPVIM e trabalha nela: quem, quando começou (com a foto), quando parou e quanto fez.
