@@ -90,7 +90,7 @@ export default async function DpvimDetailPage({ params }: { params: Promise<{ id
               {row.status === "CANCELADA" && <Badge tone="neutral">Cancelada</Badge>}
             </div>
           </CardContent>
-          {detail.canManage && (
+          {detail.canLaunch && (
             <CardContent className="flex flex-wrap gap-2 border-t border-border pt-4">
               <DpvimFormDialog
                 kinds={detail.kinds}
@@ -106,7 +106,7 @@ export default async function DpvimDetailPage({ params }: { params: Promise<{ id
                 }}
               />
               {row.status !== "CONCLUIDA" && <CancelDpvimButton id={row.id} cancelled={row.status === "CANCELADA"} />}
-              <DeleteDpvimButton id={row.id} code={row.code} />
+              {detail.canManage && <DeleteDpvimButton id={row.id} code={row.code} />}
             </CardContent>
           )}
         </Card>

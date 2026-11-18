@@ -6,6 +6,7 @@ import { listUnits, listAreas, listActiveJobFunctions } from "@/server/services/
 import { listCollaboratorsForUser } from "@/server/services/collaborator.service";
 import { listTurnosForSelect } from "@/server/services/schedule.service";
 import { listNavWhitelists, listSelectableNavGroups } from "@/server/services/nav-access.service";
+import { listDpvimLaunchGrants } from "@/server/services/dpvim.service";
 import { PageHeader, PageBody } from "@/components/domain/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -30,7 +31,7 @@ export default async function UsuariosPage({ searchParams }: { searchParams: Pro
   const user = await requireUser();
   requirePermission(user, PERMISSIONS.USER_MANAGE);
 
-  const [allUsers, roles, units, areas, functions, turnos, activeCollaborators, auditorGroups, navWhitelists] = await Promise.all([
+  const [allUsers, roles, units, areas, functions, turnos, activeCollaborators, auditorGroups, navWhitelists, dpvimGrants] = await Promise.all([
     listUsers(),
     listRoles(),
     listUnits(),
@@ -40,6 +41,7 @@ export default async function UsuariosPage({ searchParams }: { searchParams: Pro
     listCollaboratorsForUser(user, { onlyActive: true }),
     listSelectableNavGroups("AUDITOR"),
     listNavWhitelists(),
+    listDpvimLaunchGrants(),
   ]);
   const auditorNav = { roleId: roles.find((r) => r.key === "AUDITOR")?.id ?? "", groups: auditorGroups };
   const collaboratorOptions = activeCollaborators.map((c) => ({ id: c.id, name: c.name, areaName: c.area?.name ?? null }));
@@ -90,13 +92,14 @@ export default async function UsuariosPage({ searchParams }: { searchParams: Pro
                   <TableHead>Áreas</TableHead>
                   <TableHead>Funções (líder)</TableHead>
                   <TableHead>Chamada</TableHead>
+                  <TableHead>Lança DPVIM</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Último acesso</TableHead>
                   <TableHead className="w-20" />
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {users.length === 0 && <TableEmpty colSpan={9} />}
+                {users.length === 0 && <TableEmpty colSpan={10} />}
                 {users.map((u) => (
                   <TableRow key={u.id} className={!u.active ? "opacity-60" : undefined}>
                     <TableCell>{u.name}</TableCell>
@@ -124,13 +127,14 @@ export default async function UsuariosPage({ searchParams }: { searchParams: Pro
                             .join(" + ") || "Sim (sem área)"
                         : "—"}
                     </TableCell>
+                    <TableCell className="text-foreground-subtle">{dpvimGrants.has(u.id) ? "Sim" : "—"}</TableCell>
                     <TableCell>
                       <Badge tone={u.active ? "success" : "neutral"}>{u.active ? "Ativo" : "Excluído"}</Badge>
                     </TableCell>
                     <TableCell className="text-foreground-subtle">{formatDateTime(u.lastLoginAt)}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
-                        <EditUserDialog user={u} roles={roles} units={units} areas={areas} functions={functions} turnos={turnos} collaborators={collaboratorOptions} auditorNav={auditorNav} navWhitelist={navWhitelists[u.id] ?? null} />
+                        <EditUserDialog user={u} roles={roles} units={units} areas={areas} functions={functions} turnos={turnos} collaborators={collaboratorOptions} auditorNav={auditorNav} navWhitelist={navWhitelists[u.id] ?? null} canLaunchDpvim={dpvimGrants.has(u.id)} />
                         <ResetPasswordDialog userId={u.id} userName={u.name} />
                         {u.active ? (
                           <SoftDeleteButton

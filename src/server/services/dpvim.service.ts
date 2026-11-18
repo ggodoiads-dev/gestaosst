@@ -5,7 +5,7 @@ import { recordAudit } from "@/server/services/audit";
 import { nextFriendlyCode } from "@/server/services/sequence";
 import { deleteStoredFile } from "@/server/services/storage";
 import type { CurrentUser } from "@/server/auth/current-user";
-import { ForbiddenError, hasPermission } from "@/server/auth/current-user";
+import { ForbiddenError, hasPermission, requirePermission } from "@/server/auth/current-user";
 import { PERMISSIONS } from "@/domain/shared/permissions";
 import { APP_TIMEZONE } from "@/lib/dates";
 import { DPVIM_KINDS, dpvimBalance, dpvimSituation, dueAtFrom, kindKeyFromLabel, originGroupKey, progressPercent, type DpvimKind, type DpvimKindOption, type DpvimSituation, type DpvimStatus } from "@/domain/dpvim/rules";
@@ -20,13 +20,47 @@ export function canViewDpvimDashboard(user: CurrentUser): boolean {
   return canManageDpvim(user) || hasPermission(user, PERMISSIONS.PRODUCTIVITY_VIEW) || hasPermission(user, PERMISSIONS.INDICATORS_VIEW_CONSOLIDATED);
 }
 
+/** Liberado pelo administrador (Usuários e Permissões) para lançar DPVIM. Leitura tolerante: se a tabela ainda não existe, ninguém é liberado por ela. */
+export async function hasDpvimLaunchGrant(userId: string): Promise<boolean> {
+  try {
+    return !!(await db.dpvimLaunchAccess.findUnique({ where: { userId } }));
+  } catch (error) {
+    console.error("[dpvim] tabela de liberação indisponível:", error);
+    return false;
+  }
+}
+
+/** Quem pode cadastrar, editar e cancelar DPVIM: a gestão/líderes, ou quem o administrador liberou. (Excluir e cadastrar tipos continuam só com a gestão.) */
+export async function canLaunchDpvim(user: CurrentUser): Promise<boolean> {
+  return canManageDpvim(user) || (await hasDpvimLaunchGrant(user.id));
+}
+
+/** Os usuários liberados (para abrir a edição de usuário já marcada). */
+export async function listDpvimLaunchGrants(): Promise<Set<string>> {
+  try {
+    return new Set((await db.dpvimLaunchAccess.findMany({ select: { userId: true } })).map((r) => r.userId));
+  } catch (error) {
+    console.error("[dpvim] tabela de liberação indisponível:", error);
+    return new Set();
+  }
+}
+
+export async function setDpvimLaunchGrant(admin: CurrentUser, userId: string, granted: boolean) {
+  requirePermission(admin, PERMISSIONS.USER_MANAGE);
+  const has = await hasDpvimLaunchGrant(userId);
+  if (granted === has) return;
+  if (granted) await db.dpvimLaunchAccess.create({ data: { userId } });
+  else await db.dpvimLaunchAccess.deleteMany({ where: { userId } });
+  await recordAudit({ userId: admin.id, action: "UPDATE", entityType: "DpvimLaunchAccess", entityId: userId, previousValue: { granted: has }, newValue: { granted } });
+}
+
 async function myCollaborator(user: CurrentUser) {
   return db.collaborator.findUnique({ where: { userId: user.id }, select: { id: true, name: true } });
 }
 
 /** Acesso à tela: gestão, quem acompanha, ou qualquer colaborador com login (o ajudante que executa). */
 async function requireDpvimAccess(user: CurrentUser) {
-  if (canManageDpvim(user) || canViewDpvimDashboard(user)) return null;
+  if (canManageDpvim(user) || canViewDpvimDashboard(user) || (await hasDpvimLaunchGrant(user.id))) return null;
   const me = await myCollaborator(user);
   if (!me) throw new ForbiddenError();
   return me;
@@ -180,6 +214,8 @@ export type DpvimDivergenceSummary = {
 export type DpvimDashboard = {
   ready: boolean;
   canManage: boolean;
+  /** Pode cadastrar/editar/cancelar (gestão, líderes ou liberado pelo administrador). */
+  canLaunch: boolean;
   canSeeDashboard: boolean;
   /** A sessão que o usuário logado deixou aberta (para parar). */
   mySession: { id: string; dpvimId: string; dpvimCode: string; startedAt: Date; partnerName: string | null } | null;
@@ -212,11 +248,13 @@ export type DpvimDashboard = {
 export async function getDpvimDashboard(user: CurrentUser, filters: DpvimFilters = {}): Promise<DpvimDashboard> {
   const me = await requireDpvimAccess(user);
   const manage = canManageDpvim(user);
-  const seeDash = canViewDpvimDashboard(user);
+  const launch = await canLaunchDpvim(user);
+  const seeDash = canViewDpvimDashboard(user) || launch;
   const now = new Date();
   const base: DpvimDashboard = {
     ready: true,
     canManage: manage,
+    canLaunch: launch,
     canSeeDashboard: seeDash,
     mySession: null,
     hasCollaborator: !!(me ?? (await myCollaborator(user))),
@@ -368,6 +406,7 @@ export type DpvimDetail = {
   row: DpvimRow;
   sessions: DpvimSessionRow[];
   canManage: boolean;
+  canLaunch: boolean;
   mySession: { id: string; startedAt: Date } | null;
   hasCollaborator: boolean;
   collaborators: { id: string; name: string }[];
@@ -386,6 +425,7 @@ export async function getDpvimDetail(user: CurrentUser, id: string): Promise<Dpv
     row: toRow(d, sessions, new Date()),
     sessions: sessions.map((s) => toSessionRow(s, d.code)),
     canManage: canManageDpvim(user),
+    canLaunch: await canLaunchDpvim(user),
     mySession: openMine && openMine.dpvimId === id ? { id: openMine.id, startedAt: openMine.startedAt } : null,
     hasCollaborator: !!collab,
     collaborators: await db.collaborator.findMany({ where: { active: true }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
@@ -410,7 +450,7 @@ async function validate(input: DpvimInput, currentKind?: string) {
 }
 
 export async function createDpvim(user: CurrentUser, input: DpvimInput) {
-  if (!canManageDpvim(user)) throw new ForbiddenError();
+  if (!(await canLaunchDpvim(user))) throw new ForbiddenError();
   const arrivedAt = await validate(input);
   const code = await nextFriendlyCode("dpvim", "DPVIM", 4);
   const created = await db.dpvim.create({
@@ -433,7 +473,7 @@ export async function createDpvim(user: CurrentUser, input: DpvimInput) {
 }
 
 export async function updateDpvim(user: CurrentUser, id: string, input: DpvimInput) {
-  if (!canManageDpvim(user)) throw new ForbiddenError();
+  if (!(await canLaunchDpvim(user))) throw new ForbiddenError();
   const before = await db.dpvim.findUniqueOrThrow({ where: { id } });
   const arrivedAt = await validate(input, before.kind);
   const updated = await db.dpvim.update({
@@ -454,7 +494,7 @@ export async function updateDpvim(user: CurrentUser, id: string, input: DpvimInp
 }
 
 export async function setDpvimCancelled(user: CurrentUser, id: string, cancelled: boolean) {
-  if (!canManageDpvim(user)) throw new ForbiddenError();
+  if (!(await canLaunchDpvim(user))) throw new ForbiddenError();
   const d = await db.dpvim.findUniqueOrThrow({ where: { id } });
   if (cancelled) {
     const open = await db.dpvimSession.count({ where: { dpvimId: id, stoppedAt: null } });

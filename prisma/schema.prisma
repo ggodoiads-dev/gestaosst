@@ -1986,6 +1986,13 @@ model DpvimKindDef {
   createdAt DateTime @default(now())
 }
 
+/// Usuários liberados para lançar DPVIM (cadastrar, editar e cancelar) além de quem já pode pelo perfil. O administrador marca em Usuários e Permissões.
+/// Tabela isolada, sem chaves estrangeiras (não mexe na tabela de usuários).
+model DpvimLaunchAccess {
+  userId    String   @id
+  createdAt DateTime @default(now())
+}
+
 /// Uma vez que alguém abre a DPVIM e trabalha nela: quem, quando começou (com a foto), quando parou e quanto fez.
 model DpvimSession {
   id             String    @id @default(uuid())

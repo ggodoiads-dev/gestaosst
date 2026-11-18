@@ -63,9 +63,9 @@ export default async function DpvimPage({ searchParams }: { searchParams: Promis
         title="DPVIM"
         description="Cargas de retorno (paletes, chapatex e quadros) para selecionar e separar. O prazo para rebater é de 48h a partir da chegada."
         actions={
-          data.canManage ? (
+          data.canLaunch ? (
             <div className="flex flex-wrap items-center gap-2">
-              <DpvimKindsDialog kinds={data.kinds} disabled={!data.kindsReady} />
+              {data.canManage && <DpvimKindsDialog kinds={data.kinds} disabled={!data.kindsReady} />}
               <DpvimFormDialog disabled={!data.ready} kinds={data.kinds} />
             </div>
           ) : undefined
