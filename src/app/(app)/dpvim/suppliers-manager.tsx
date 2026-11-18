@@ -2,23 +2,24 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Building2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogBody, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatDateTime } from "@/lib/dates";
 import {
   createDpvimSupplierAction,
   mergeDpvimSupplierAction,
   setDpvimSupplierActiveAction,
   updateDpvimSupplierAction,
 } from "@/server/actions/dpvim.actions";
-import { similarSuppliers, type DpvimSupplierOption } from "@/domain/dpvim/rules";
+import { similarSuppliers } from "@/domain/dpvim/rules";
+import type { DpvimSupplierOverview } from "@/server/services/dpvim.service";
 
 const field = "h-9 rounded-md border border-border-strong bg-surface px-2 text-sm text-foreground";
 
-function SupplierRow({ s, all, busy, run }: { s: DpvimSupplierOption; all: DpvimSupplierOption[]; busy: boolean; run: (fn: () => Promise<{ ok: boolean; error?: string }>, okMsg?: string) => void }) {
+function SupplierRow({ s, all, busy, run }: { s: DpvimSupplierOverview; all: DpvimSupplierOverview[]; busy: boolean; run: (fn: () => Promise<{ ok: boolean; error?: string }>, okMsg?: string) => void }) {
   const [mode, setMode] = useState<"view" | "edit" | "merge">("view");
   const [name, setName] = useState(s.name);
   const [unit, setUnit] = useState(s.unit ?? "");
@@ -90,8 +91,16 @@ function SupplierRow({ s, all, busy, run }: { s: DpvimSupplierOption; all: Dpvim
 
   return (
     <li className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm">
-      <span className={s.active ? "text-foreground" : "text-foreground-subtle line-through"}>{s.label}</span>
-      <span className="flex items-center gap-1">
+      <span className="flex min-w-0 flex-col">
+        <span className={s.active ? "font-medium text-foreground" : "font-medium text-foreground-subtle line-through"}>{s.label}</span>
+        <span className="text-xs text-foreground-subtle">
+          {s.total === 0 ? "Nenhuma DPVIM ainda" : `${s.total} DPVIM`}
+          {s.open > 0 ? ` · ${s.open} em aberto` : ""}
+          {s.late > 0 ? <strong className="text-danger"> · {s.late} atrasada(s)</strong> : null}
+          {s.lastArrivedAt ? ` · última chegada ${formatDateTime(s.lastArrivedAt)}` : ""}
+        </span>
+      </span>
+      <span className="flex shrink-0 items-center gap-1">
         <Button size="sm" variant="ghost" disabled={busy} onClick={() => setMode("edit")}>
           Editar
         </Button>
@@ -108,10 +117,9 @@ function SupplierRow({ s, all, busy, run }: { s: DpvimSupplierOption; all: Dpvim
   );
 }
 
-/** Cadastro dos fornecedores da DPVIM (nome e unidade): a lista que aparece em "De onde veio". Gestão: cadastra, edita, une, desativa e cadastra de uma vez os nomes já usados. */
-export function DpvimSuppliersDialog({ suppliers, unregistered, disabled }: { suppliers: DpvimSupplierOption[]; unregistered: { origin: string; count: number }[]; disabled?: boolean }) {
+/** A aba de fornecedores da DPVIM (nome e unidade): cadastra, edita, une, desativa e cadastra de uma vez os nomes já usados em DPVIM. */
+export function SuppliersManager({ suppliers, unregistered }: { suppliers: DpvimSupplierOverview[]; unregistered: { origin: string; count: number }[] }) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
   const [name, setName] = useState("");
   const [unit, setUnit] = useState("");
@@ -132,69 +140,63 @@ export function DpvimSuppliersDialog({ suppliers, unregistered, disabled }: { su
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button variant="secondary" disabled={disabled}>
-          <Building2 className="size-4" /> Fornecedores
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Fornecedores da DPVIM</DialogTitle>
-          <DialogDescription>Cadastre pelo nome e pela unidade (ex.: Ambev · Jaguariúna). A lista aparece em &ldquo;De onde veio&rdquo; ao cadastrar uma DPVIM, e o painel de divergências agrupa por ela.</DialogDescription>
-        </DialogHeader>
-        <DialogBody className="flex flex-col gap-4">
-          <div className="flex flex-col gap-2">
-            <div className="grid grid-cols-2 gap-2">
-              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome (ex.: Ambev)" maxLength={80} aria-label="Nome do novo fornecedor" />
-              <Input value={unit} onChange={(e) => setUnit(e.target.value)} placeholder="Unidade (opcional)" maxLength={60} aria-label="Unidade do novo fornecedor" />
-            </div>
-            {similar.length > 0 && <p className="text-xs text-warning">Parecido com já cadastrado: {similar.join(", ")}. Confira para não duplicar.</p>}
-            <div className="flex justify-end">
-              <Button
-                loading={pending}
-                disabled={name.trim().length < 2}
-                onClick={() => {
-                  run(() => createDpvimSupplierAction(name, unit.trim() ? unit : null), "Fornecedor cadastrado.");
-                  setName("");
-                  setUnit("");
-                }}
-              >
-                Cadastrar
-              </Button>
-            </div>
+    <div className="flex flex-col gap-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>Novo fornecedor</CardTitle>
+          <CardDescription>Cadastre pelo nome e pela unidade (ex.: Ambev · Jaguariúna). A lista aparece em &ldquo;De onde veio&rdquo; ao cadastrar uma DPVIM, e o painel de divergências agrupa por ela.</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr_auto]">
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome (ex.: Ambev)" maxLength={80} aria-label="Nome do novo fornecedor" />
+            <Input value={unit} onChange={(e) => setUnit(e.target.value)} placeholder="Unidade (opcional)" maxLength={60} aria-label="Unidade do novo fornecedor" />
+            <Button
+              loading={pending}
+              disabled={name.trim().length < 2}
+              onClick={() => {
+                run(() => createDpvimSupplierAction(name, unit.trim() ? unit : null), "Fornecedor cadastrado.");
+                setName("");
+                setUnit("");
+              }}
+            >
+              Cadastrar
+            </Button>
           </div>
+          {similar.length > 0 && <p className="text-xs text-warning">Parecido com já cadastrado: {similar.join(", ")}. Confira para não duplicar.</p>}
           {error && <p className="text-sm text-danger">{error}</p>}
+        </CardContent>
+      </Card>
 
-          {unregistered.length > 0 && (
-            <div className="flex flex-col gap-2 rounded-lg border border-warning/40 bg-warning-soft/40 px-3 py-2">
-              <p className="text-sm font-semibold text-foreground">Já usados em DPVIM e ainda não cadastrados</p>
-              <div className="flex flex-wrap gap-2">
-                {unregistered.map((u) => (
-                  <Button key={u.origin} size="sm" variant="secondary" disabled={pending} onClick={() => run(() => createDpvimSupplierAction(u.origin, null), "Fornecedor cadastrado.")}>
-                    {u.origin} <Badge tone="neutral">{u.count}</Badge>
-                  </Button>
-                ))}
-              </div>
-              <p className="text-xs text-foreground-subtle">Toque para cadastrar com o nome como está (depois dá para editar e separar a unidade).</p>
-            </div>
-          )}
+      {unregistered.length > 0 && (
+        <Card className="border-warning/40">
+          <CardHeader>
+            <CardTitle>Já usados em DPVIM e ainda não cadastrados</CardTitle>
+            <CardDescription>Toque para cadastrar com o nome como está. Depois dá para editar e separar a unidade.</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-2">
+            {unregistered.map((u) => (
+              <Button key={u.origin} size="sm" variant="secondary" disabled={pending} onClick={() => run(() => createDpvimSupplierAction(u.origin, null), "Fornecedor cadastrado.")}>
+                {u.origin} <Badge tone="neutral">{u.count}</Badge>
+              </Button>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
-          <ul className="flex max-h-72 flex-col divide-y divide-border overflow-y-auto rounded-lg border border-border">
-            {suppliers.length === 0 && <li className="px-3 py-4 text-sm text-foreground-subtle">Nenhum fornecedor cadastrado ainda.</li>}
+      <Card>
+        <CardHeader>
+          <CardTitle>Fornecedores cadastrados ({suppliers.length})</CardTitle>
+          <CardDescription>Editar muda o nome nas DPVIM dele. Unir passa as DPVIM de um fornecedor para outro. Desativar tira da lista de novo cadastro, mas o histórico continua.</CardDescription>
+        </CardHeader>
+        <CardContent className="p-0">
+          <ul className="flex flex-col divide-y divide-border border-t border-border">
+            {suppliers.length === 0 && <li className="px-4 py-6 text-sm text-foreground-subtle">Nenhum fornecedor cadastrado ainda.</li>}
             {suppliers.map((s) => (
               <SupplierRow key={`${s.id}:${s.label}:${s.active}`} s={s} all={suppliers} busy={pending} run={run} />
             ))}
           </ul>
-        </DialogBody>
-        <DialogFooter>
-          <DialogClose asChild>
-            <Button type="button" variant="secondary">
-              Fechar
-            </Button>
-          </DialogClose>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </CardContent>
+      </Card>
+    </div>
   );
 }

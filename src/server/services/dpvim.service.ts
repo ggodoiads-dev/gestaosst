@@ -203,6 +203,37 @@ export async function mergeDpvimSupplier(user: CurrentUser, fromId: string, into
   return { moved };
 }
 
+export type DpvimSupplierOverview = DpvimSupplierOption & { total: number; open: number; late: number; lastArrivedAt: Date | null };
+
+/** Para a aba de fornecedores: cada fornecedor com quantas DPVIM tem (e quantas em aberto/atrasadas), e os nomes já usados que ainda não foram cadastrados. Só gestão. */
+export async function getDpvimSuppliersOverview(user: CurrentUser) {
+  if (!canManageDpvim(user)) throw new ForbiddenError();
+  const { suppliers, ready } = await listDpvimSuppliers();
+  const dpvims = await db.dpvim.findMany({ select: { origin: true, status: true, dueAt: true, arrivedAt: true } }).catch(() => []);
+  const now = Date.now();
+  const stats = new Map<string, { total: number; open: number; late: number; last: Date | null; origin: string }>();
+  for (const d of dpvims) {
+    if (d.status === "CANCELADA") continue;
+    const k = originGroupKey(d.origin);
+    const e = stats.get(k) ?? { total: 0, open: 0, late: 0, last: null, origin: d.origin };
+    e.total += 1;
+    const open = d.status === "ABERTA" || d.status === "EM_ANDAMENTO";
+    if (open) e.open += 1;
+    if (open && d.dueAt.getTime() < now) e.late += 1;
+    if (!e.last || d.arrivedAt > e.last) e.last = d.arrivedAt;
+    stats.set(k, e);
+  }
+  const registered = new Set(suppliers.map((s) => originGroupKey(s.label)));
+  return {
+    ready,
+    suppliers: suppliers.map((s): DpvimSupplierOverview => {
+      const e = stats.get(originGroupKey(s.label));
+      return { ...s, total: e?.total ?? 0, open: e?.open ?? 0, late: e?.late ?? 0, lastArrivedAt: e?.last ?? null };
+    }),
+    unregistered: [...stats.entries()].filter(([k]) => !registered.has(k)).map(([, e]) => ({ origin: e.origin, count: e.total })).sort((a, b) => b.count - a.count),
+  };
+}
+
 export type DpvimRow = {
   id: string;
   code: string;

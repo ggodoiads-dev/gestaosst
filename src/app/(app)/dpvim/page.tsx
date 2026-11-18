@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CalendarRange, Clock, Truck } from "lucide-react";
+import { Building2, CalendarRange, Clock, Truck } from "lucide-react";
 import { requireUser } from "@/server/auth/current-user";
 import { currentDayKey } from "@/server/services/guardian.service";
 import { getDpvimDashboard } from "@/server/services/dpvim.service";
@@ -16,7 +16,6 @@ import { DonutStat } from "@/components/domain/charts/donut-stat";
 import { HorizontalBarChart } from "@/components/domain/charts/horizontal-bar-chart";
 import { DpvimFormDialog } from "./dpvim-form-dialog";
 import { DpvimKindsDialog } from "./kinds-dialog";
-import { DpvimSuppliersDialog } from "./suppliers-dialog";
 import { DivergenceSection } from "./divergence-section";
 import { StartDpvimDialog } from "./start-dialog";
 import { StopDpvimDialog } from "./stop-dialog";
@@ -68,7 +67,13 @@ export default async function DpvimPage({ searchParams }: { searchParams: Promis
           data.canLaunch ? (
             <div className="flex flex-wrap items-center gap-2">
               {data.canManage && <DpvimKindsDialog kinds={data.kinds} disabled={!data.kindsReady} />}
-              {data.canManage && <DpvimSuppliersDialog suppliers={data.suppliers} unregistered={data.unregisteredOrigins} disabled={!data.suppliersReady} />}
+              {data.canManage && (
+                <Button asChild variant="secondary" disabled={!data.suppliersReady}>
+                  <Link href="/dpvim/fornecedores">
+                    <Building2 className="size-4" /> Fornecedores
+                  </Link>
+                </Button>
+              )}
               <DpvimFormDialog disabled={!data.ready} kinds={data.kinds} suppliers={data.suppliers} suppliersReady={data.suppliersReady} />
             </div>
           ) : undefined

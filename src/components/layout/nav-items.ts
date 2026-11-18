@@ -255,6 +255,10 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
   ) {
     rh.push({ href: "/dpvim", label: "DPVIM", icon: "productivity" });
   }
+  // Fornecedores da DPVIM (nome e unidade): quem gerencia a DPVIM (gestão de produtividade e líderes que fazem chamada).
+  if (p.has(PERMISSIONS.PRODUCTIVITY_MANAGE) || p.has(PERMISSIONS.PRODUCTIVITY_MANAGE_TEAM) || user.canRollCall) {
+    rh.push({ href: "/dpvim/fornecedores", label: "Fornecedores (DPVIM)", icon: "building" });
+  }
   if (rh.length > 0) groups.push({ key: "rh", title: "RH", items: rh });
 
   const indicadores: NavItem[] = [];
