@@ -17,6 +17,7 @@ export function RiskActGoalCard({
 }) {
   const p = goalProgress(goal.people, goal.target);
   const pending = goal.people.filter((x) => x.count < goal.target).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "pt-BR"));
+  const done = goal.people.filter((x) => x.count >= goal.target).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "pt-BR"));
   const tone = p.coveragePct >= 100 ? "text-success" : p.coveragePct >= 50 ? "text-warning" : "text-danger";
 
   return (
@@ -58,6 +59,33 @@ export function RiskActGoalCard({
       <div className="h-2 w-full overflow-hidden rounded-full bg-surface-muted">
         <div className={cn("h-full rounded-full", p.coveragePct >= 100 ? "bg-success" : p.coveragePct >= 50 ? "bg-warning" : "bg-danger")} style={{ width: `${Math.min(100, p.coveragePct)}%` }} />
       </div>
+
+      {done.length > 0 ? (
+        <details open className="rounded-md border border-success/40 bg-success-soft/30 px-3 py-2 text-sm">
+          <summary className="cursor-pointer text-xs font-medium text-success">Quem já bateu a meta ({done.length})</summary>
+          <ul className="mt-2 grid grid-cols-1 gap-x-6 gap-y-1 sm:grid-cols-2">
+            {done.map((x) => (
+              <li key={x.collaboratorId} className="flex items-center justify-between gap-2">
+                <span className="flex min-w-0 flex-col">
+                  {canOpenProfiles ? (
+                    <Link href={`/colaboradores/${x.collaboratorId}`} className="truncate text-accent hover:underline">
+                      {formatPersonName(x.name)}
+                    </Link>
+                  ) : (
+                    <span className="truncate">{formatPersonName(x.name)}</span>
+                  )}
+                  {x.turnoName && <span className="text-[11px] text-foreground-subtle">Turno {x.turnoName}</span>}
+                </span>
+                <Badge tone="success">
+                  {x.count} {x.count === 1 ? "relato" : "relatos"}
+                </Badge>
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : (
+        p.people > 0 && <p className="text-xs font-medium text-foreground-subtle">Ninguém bateu a meta ainda.</p>
+      )}
 
       {pending.length > 0 ? (
         <details className="rounded-md border border-border px-3 py-2 text-sm">
