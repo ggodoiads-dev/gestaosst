@@ -75,7 +75,7 @@ export default async function DpvimDetailPage({ params }: { params: Promise<{ id
               <p className="text-xs text-foreground-subtle">Andamento</p>
               <ProgressBar done={row.doneQty} expected={row.expectedQty} progress={row.progress} />
               <p className="text-sm text-foreground">
-                {left > 0 ? `Faltam cerca de ${left} pelo norte do conferente` : over > 0 ? `Já passou ${over} do norte do conferente` : "No norte do conferente"}
+                {row.expectedQty === 0 ? "O conferente ainda não contou esta carga (sem norte)" : left > 0 ? `Faltam cerca de ${left} pelo norte do conferente` : over > 0 ? `Já passou ${over} do norte do conferente` : "No norte do conferente"}
               </p>
               {row.balance !== null && (
                 <p className={row.balance === 0 ? "text-sm font-semibold text-success" : row.balance < 0 ? "text-sm font-semibold text-danger" : "text-sm font-semibold text-warning"}>
@@ -103,7 +103,7 @@ export default async function DpvimDetailPage({ params }: { params: Promise<{ id
                   origin: row.origin,
                   reference: row.reference ?? "",
                   material: row.material ?? "",
-                  items: row.lines.filter((l) => l.expected > 0).map((l) => ({ kind: l.kind, qty: l.expected })),
+                  items: row.lines.map((l) => ({ kind: l.kind, qty: l.expected })),
                   arrivedLocal: toLocalInput(row.arrivedAt),
                   notes: row.notes ?? "",
                 }}

@@ -20,7 +20,7 @@ export function LinesTable({ lines, kinds, canSeeInvoice, concluded }: { lines: 
           {lines.map((l) => (
             <tr key={l.kind} className="border-t border-border">
               <td className="px-3 py-2 font-medium text-foreground">{dpvimKindLabel(l.kind, kinds)}</td>
-              <td className="px-3 py-2 text-right tabular-nums text-foreground-subtle">{l.expected}</td>
+              <td className="px-3 py-2 text-right tabular-nums text-foreground-subtle">{l.expected > 0 ? l.expected : "—"}</td>
               <td className="px-3 py-2 text-right font-semibold tabular-nums">{l.done}</td>
               <td className="px-3 py-2 text-xs tabular-nums text-foreground-subtle">
                 {l.good + l.transfer + l.discard > 0 ? `${l.good} · ${l.transfer} · ${l.discard}` : "—"}

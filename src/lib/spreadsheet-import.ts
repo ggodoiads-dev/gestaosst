@@ -27,9 +27,9 @@ function cellToString(v: ExcelJS.CellValue, numFmt?: string): string {
       const min = String(v.getUTCMinutes()).padStart(2, "0");
       return `${hh}:${min}`;
     }
-    const yyyy = v.getFullYear();
-    const mm = String(v.getMonth() + 1).padStart(2, "0");
-    const dd = String(v.getDate()).padStart(2, "0");
+    const yyyy = v.getUTCFullYear();
+    const mm = String(v.getUTCMonth() + 1).padStart(2, "0");
+    const dd = String(v.getUTCDate()).padStart(2, "0");
     return `${dd}/${mm}/${yyyy}`;
   }
   if (typeof v === "object") {

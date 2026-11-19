@@ -26,7 +26,7 @@ export function DpvimFormDialog({ initial, disabled, kinds, suppliers, suppliers
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
-  const [rows, setRows] = useState<Row[]>(initial && initial.items.length > 0 ? initial.items.map((i) => ({ kind: i.kind, qty: String(i.qty) })) : [{ kind: "", qty: "" }]);
+  const [rows, setRows] = useState<Row[]>(initial && initial.items.length > 0 ? initial.items.map((i) => ({ kind: i.kind, qty: i.qty > 0 ? String(i.qty) : "" })) : [{ kind: "", qty: "" }]);
   const [origin, setOrigin] = useState(initial?.origin ?? "");
   const [reference, setReference] = useState(initial?.reference ?? "");
   const [material, setMaterial] = useState(initial?.material ?? "");
@@ -71,8 +71,9 @@ export function DpvimFormDialog({ initial, disabled, kinds, suppliers, suppliers
   const initialKinds = initial?.items.map((i) => i.kind) ?? [];
   const options = kinds.filter((k) => k.active || initialKinds.includes(k.key));
   const chosen = rows.map((r) => r.kind).filter(Boolean);
-  const rowOk = (r: Row) => !!r.kind && Number.isInteger(Number(r.qty)) && Number(r.qty) > 0 && r.qty.trim() !== "";
-  const total = rows.reduce((s, r) => s + (rowOk(r) ? Number(r.qty) : 0), 0);
+  // Ao editar, a quantidade pode ficar em branco (= o conferente ainda não contou, como nas DPVIM importadas da planilha); ao cadastrar, é obrigatória.
+  const rowOk = (r: Row) => !!r.kind && (r.qty.trim() === "" ? !!initial : Number.isInteger(Number(r.qty)) && Number(r.qty) > 0);
+  const total = rows.reduce((s, r) => s + (rowOk(r) && r.qty.trim() !== "" ? Number(r.qty) : 0), 0);
   const valid = rows.length > 0 && rows.every(rowOk) && new Set(chosen).size === chosen.length && origin.trim().length >= 2 && !newSupplier && !!arrivedDate;
 
   function setRow(i: number, patch: Partial<Row>) {
@@ -83,7 +84,7 @@ export function DpvimFormDialog({ initial, disabled, kinds, suppliers, suppliers
     if (!arrivedDate) return;
     setError(null);
     start(async () => {
-      const input = { origin, reference, material, items: rows.map((r) => ({ kind: r.kind, qty: Number(r.qty) })), arrivedAtIso: arrivedDate.toISOString(), notes };
+      const input = { origin, reference, material, items: rows.map((r) => ({ kind: r.kind, qty: r.qty.trim() === "" ? 0 : Number(r.qty) })), arrivedAtIso: arrivedDate.toISOString(), notes };
       const res = initial ? await updateDpvimAction(initial.id, input) : await createDpvimAction(input);
       if (!res.ok) {
         setError(res.error);

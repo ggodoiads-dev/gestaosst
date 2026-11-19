@@ -110,7 +110,7 @@ export default async function DpvimSupplierPage({ params }: { params: Promise<{ 
                           <Link href={`/dpvim/${r.id}`} className="font-semibold text-accent hover:underline">
                             {r.code}
                           </Link>
-                          <p className="text-xs text-foreground-subtle">{r.lines.map((l) => `${dpvimKindLabel(l.kind, d.kinds)} ${l.expected}`).join(" + ")}</p>
+                          <p className="text-xs text-foreground-subtle">{r.lines.map((l) => (l.expected > 0 ? `${dpvimKindLabel(l.kind, d.kinds)} ${l.expected}` : dpvimKindLabel(l.kind, d.kinds))).join(" + ")}</p>
                           <p className="text-[11px] text-foreground-subtle">cadastrada por {r.createdByName}</p>
                         </td>
                         <td className="px-3 py-2.5 text-foreground-subtle">{formatDateTime(r.arrivedAt)}</td>

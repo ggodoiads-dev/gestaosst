@@ -95,7 +95,7 @@ export function StopDpvimDialog({ sessionId, code, lines }: { sessionId: string;
             const f = get(p.line.kind);
             return (
               <div key={p.line.kind} className="flex flex-col gap-2 rounded-lg border border-border p-3">
-                <FormField label={`Quantos de ${p.line.label} foram contados`} required={lines.length === 1} hint={`Norte do conferente: ${p.line.expected}`}>
+                <FormField label={`Quantos de ${p.line.label} foram contados`} required={lines.length === 1} hint={p.line.expected > 0 ? `Norte do conferente: ${p.line.expected}` : "O conferente ainda não contou esta carga"}>
                   <Input value={f.qty} onChange={(e) => set(p.line.kind, { qty: e.target.value })} inputMode="numeric" placeholder="0" className="tabular-nums" />
                 </FormField>
                 <div className="grid grid-cols-3 gap-2">

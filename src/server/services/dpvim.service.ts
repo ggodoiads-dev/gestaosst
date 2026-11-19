@@ -803,7 +803,8 @@ async function validate(input: DpvimInput, currentKinds: string[] = [], currentO
     if (!kind || (!kind.active && !currentKinds.includes(it.kind))) throw new Error("Escolha o tipo de cada produto.");
     if (seen.has(it.kind)) throw new Error("Escolha cada tipo uma vez só (some as quantidades do mesmo tipo).");
     seen.add(it.kind);
-    if (!Number.isInteger(it.qty) || it.qty <= 0 || it.qty > 100000) throw new Error("Informe a quantidade de cada produto com um número inteiro.");
+    // 0 = o conferente ainda não contou (DPVIM importada da planilha, que só traz a nota); o formulário de cadastro continua exigindo a contagem.
+    if (!Number.isInteger(it.qty) || it.qty < 0 || it.qty > 100000) throw new Error("Informe a quantidade de cada produto com um número inteiro.");
   }
   // Com a lista de fornecedores no ar, "De onde veio" tem que ser um fornecedor ativo (ou o que a DPVIM já tinha). Sem a lista, vale o texto livre de antes.
   const { suppliers, ready } = await listDpvimSuppliers();
@@ -1129,7 +1130,7 @@ export async function getDpvimSupplierDetail(user: CurrentUser, id: string): Pro
   for (const d of mine) {
     const r = rows.find((x) => x.id === d.id)!;
     const href = `/dpvim/${d.id}`;
-    timeline.push({ at: d.createdAt, text: `${d.code} cadastrada (${r.lines.map((l) => `${kindName(l.kind)} ${l.expected}`).join(" + ")})`, by: d.createdByName, href, tone: "neutral" });
+    timeline.push({ at: d.createdAt, text: `${d.code} cadastrada (${r.lines.map((l) => (l.expected > 0 ? `${kindName(l.kind)} ${l.expected}` : kindName(l.kind))).join(" + ")})`, by: d.createdByName, href, tone: "neutral" });
     for (const s of sessions.filter((x) => x.dpvimId === d.id)) {
       timeline.push({ at: s.startedAt, text: `${d.code} aberta${s.partnerName ? ` (dupla: ${s.partnerName})` : ""}`, by: s.workerName, href, tone: "accent" });
     }

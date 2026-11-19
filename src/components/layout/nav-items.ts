@@ -317,6 +317,10 @@ export function getNavGroups(user: CurrentUser): NavGroup[] {
   if (p.has(PERMISSIONS.DTO_MANAGE)) {
     importacoes.push({ href: "/dto/importar", label: "Importar DTO", icon: "checklistCompliance" });
   }
+  // Importar DPVIM: quem gerencia a DPVIM (a tela ainda confere se a pessoa também vê a nota, porque a planilha traz a quantidade da nota).
+  if (p.has(PERMISSIONS.PRODUCTIVITY_MANAGE) || p.has(PERMISSIONS.PRODUCTIVITY_MANAGE_TEAM) || user.canRollCall) {
+    importacoes.push({ href: "/dpvim/importar", label: "Importar DPVIM", icon: "productivity" });
+  }
   if (p.has(PERMISSIONS.MASTERDATA_MANAGE) && p.has(PERMISSIONS.USER_MANAGE)) {
     importacoes.push({ href: "/cadastros/equipamentos/importar", label: "Importar Equipamentos", icon: "equipmentImport" });
   }

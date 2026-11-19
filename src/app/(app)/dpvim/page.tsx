@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Building2, CalendarRange, Clock, Truck } from "lucide-react";
+import { Building2, CalendarRange, Clock, Truck, Upload } from "lucide-react";
 import { requireUser } from "@/server/auth/current-user";
 import { currentDayKey } from "@/server/services/guardian.service";
 import { getDpvimDashboard } from "@/server/services/dpvim.service";
@@ -71,6 +71,13 @@ export default async function DpvimPage({ searchParams }: { searchParams: Promis
                 <Button asChild variant="secondary" disabled={!data.suppliersReady}>
                   <Link href="/dpvim/fornecedores">
                     <Building2 className="size-4" /> Fornecedores
+                  </Link>
+                </Button>
+              )}
+              {data.canSeeInvoice && (
+                <Button asChild variant="secondary">
+                  <Link href="/dpvim/importar">
+                    <Upload className="size-4" /> Importar planilha
                   </Link>
                 </Button>
               )}
@@ -200,7 +207,7 @@ export default async function DpvimPage({ searchParams }: { searchParams: Promis
               <StatCard label="Em andamento" value={k.inProgress} tone="accent" />
               <StatCard label="Rebatidas no prazo" value={k.onTimeRate === null ? "—" : `${k.onTimeRate}%`} tone={k.onTimeRate === null ? "neutral" : k.onTimeRate >= 90 ? "success" : k.onTimeRate >= 70 ? "warning" : "danger"} hint={doneTotal > 0 ? `${k.doneOnTime} de ${doneTotal} concluídas` : "nenhuma concluída ainda"} />
               <StatCard label="Tempo médio para rebater" value={k.avgLeadHours === null ? "—" : formatHours(k.avgLeadHours)} hint="da chegada à conclusão" />
-              <StatCard label="Itens contados" value={k.totalDone} hint={`norte do conferente: ${k.totalExpected}`} />
+              <StatCard label="Itens contados" value={k.totalDone} hint={k.totalExpected > 0 ? `norte do conferente: ${k.totalExpected}` : undefined} />
               {data.canSeeInvoice && (
                 <StatCard label="Esperando a nota" value={dv.awaitingInvoice.length} tone={dv.awaitingInvoice.length > 0 ? "warning" : "success"} hint="falta lançar a quantidade da nota" />
               )}
@@ -268,7 +275,7 @@ export default async function DpvimPage({ searchParams }: { searchParams: Promis
                         <SituationBadge situation={r.situation} hoursLeft={r.hoursLeft} />
                       </div>
                       <p className="text-xs text-foreground-subtle">
-                        {r.lines.map((l) => `${kindName(l.kind)} ${l.expected}`).join(" + ")}{r.origin ? ` · ${r.origin}` : ""} · chegou {formatDateTime(r.arrivedAt)}
+                        {r.lines.map((l) => (l.expected > 0 ? `${kindName(l.kind)} ${l.expected}` : kindName(l.kind))).join(" + ")}{r.origin ? ` · ${r.origin}` : ""} · chegou {formatDateTime(r.arrivedAt)}
                       </p>
                       <ProgressBar done={r.doneQty} expected={r.expectedQty} progress={r.progress} />
                     </Link>
@@ -318,7 +325,8 @@ export default async function DpvimPage({ searchParams }: { searchParams: Promis
                           <p className="text-xs text-foreground-subtle">
                             {r.lines.map((l) => (
                               <Badge key={l.kind} tone="info" className="mr-1">
-                                {kindName(l.kind)} {l.expected}
+                                {kindName(l.kind)}
+                                {l.expected > 0 ? ` ${l.expected}` : ""}
                               </Badge>
                             ))}
                             {r.origin}
